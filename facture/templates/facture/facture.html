@@ -1,0 +1,552 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block body %}
+
+<!-- Bouton pour déclencher la modale -->
+<button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#exampleModal">
+  Créer une compagnie
+</button>
+
+<!-- Fenêtre Modale -->
+<div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="exampleModalLabel">Ajouter une compagnie</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+                {{ company_form.as_p }}
+            <div class="mt-3">
+                <button type="submit" class="btn btn-success" name="action" value="add_company">Ajouter une compagnie</button>
+            </div>
+        </form>
+        
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h1 class="mt-4"> {{ title }} </h1>
+
+<div class="mb-4">
+    <h3>Compagnies enregistrées</h3>
+    <div class="row g-3">
+        {% for compagnie in compagnies %}
+            <div class="col-md-4">
+                <div class="card company-card h-100" role="button" data-bs-toggle="modal" data-bs-target="#invoiceModal" data-company-id="{{ compagnie.id }}" data-company-name="{{ compagnie.nom|escape }}" data-company-logo="{% if compagnie.logo %}{% static compagnie.logo %}{% endif %}">
+                    {% if compagnie.logo %}
+                        <img src="{% static compagnie.logo %}" class="company-logo" alt="Logo de {{ compagnie.nom }}" style="width:100px;height:100px;object-fit:contain;display:block;margin:0 auto 1rem;">
+                    {% endif %}
+                    <div class="card-body">
+                        <h5 class="card-title">{{ compagnie.nom }}</h5>
+                    </div>
+                </div>
+            </div>
+        {% empty %}
+            <div class="col-12">
+                <p>Aucune compagnie enregistrée.</p>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Modal facture -->
+<div class="modal fade" id="invoiceModal" tabindex="-1" aria-labelledby="invoiceModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="invoiceModalLabel">Créer une facture</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+            <div class="modal-body">
+                <div id="company-header" class="d-flex align-items-center mb-3" style="display:none;">
+                    <img id="company-logo" src="" alt="" style="max-width:150px;max-height:100px;object-fit:contain;">
+                    <div id="company-name" class="ms-3 h5 mb-0"></div>
+                </div>
+                
+                <div class="row g-4">
+                    <!-- Colonne gauche: Formulaire -->
+                    <div class="col-md-6">
+                        <form method="post" id="invoice-form">
+            {% csrf_token %}
+            {{ facture_form.non_field_errors }}
+            {{ detail_formset.non_form_errors }}
+
+            <div class="mb-3">
+                {{ facture_form.numero.label_tag }}
+                {{ facture_form.numero }}
+            </div>
+            <div class="mb-3">
+                {{ facture_form.date.label_tag }}
+                {{ facture_form.date }}
+            </div>
+            {{ facture_form.compagnie.as_hidden }}
+            <div class="mb-3">
+                {{ facture_form.total.label_tag }}
+                {{ facture_form.total }}
+            </div>
+
+            {{ detail_formset.management_form }}
+            <div class="mb-3">
+                <h3>Détails de la facture</h3>
+                    {% for detail_form in detail_formset %}
+                    <div class="row g-3 mb-2 invoice-detail-row">
+                        <div class="col-md-6">
+                            {{ detail_form.compte.as_hidden }}
+                            <div class="compte-display" data-index="{{ forloop.counter0 }}">&nbsp;</div>
+                            <select class="form-select form-select-sm compte-select" data-index="{{ forloop.counter0 }}" style="display:none;">
+                                <option value="">Choisir un compte</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            {{ detail_form.montant.label_tag }}
+                            {{ detail_form.montant }}
+                        </div>
+                    </div>
+                {% endfor %}
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="add-detail-row">+ ligne</button>
+            </div>
+
+            <button type="submit" class="btn btn-primary" name="action" value="add_facture">Enregistrer la facture</button>
+        </form>
+                    </div>
+                    
+                    <!-- Colonne droite: Factures existantes -->
+                    <div class="col-md-6">
+                        <div id="company-factures" style="display:none;">
+                            <h5>Factures existantes</h5>
+                            <div id="factures-list" class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Numéro</th>
+                                            <th>Date</th>
+                                            <th>Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="factures-tbody">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
+
+
+
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var invoiceModal = document.getElementById('invoiceModal');
+            var invoiceForm = document.getElementById('invoice-form');
+            var invoiceModalObj = new bootstrap.Modal(invoiceModal, {backdrop: 'static', keyboard: false});
+
+            // Vérifier s'il y a des erreurs et rouvrir le modal si nécessaire
+            var hasErrors = invoiceForm && (
+                invoiceForm.querySelector('[class*="errorlist"]') ||
+                invoiceForm.querySelectorAll('[class*="invalid"]').length > 0 ||
+                document.querySelectorAll('#invoiceModal [class*="errorlist"]').length > 0
+            );
+            if (hasErrors && invoiceModal) {
+                var bsModal = bootstrap.Modal.getInstance(invoiceModal) || new bootstrap.Modal(invoiceModal);
+                bsModal.show();
+            }
+            var compagnieSelect = document.getElementById('id_compagnie') || document.getElementById('id_facture-compagnie');
+            var invoiceModalLabel = document.getElementById('invoiceModalLabel');
+            var addDetailRowBtn = document.getElementById('add-detail-row');
+            var totalInput = document.getElementById('id_facture-total') || document.getElementById('id_total');
+            var allComptesRaw = '{{ all_comptes_json|escapejs }}';
+            var allComptes = allComptesRaw ? JSON.parse(allComptesRaw) : [];
+            var compteTpsId = Number('{{ request.session.compte_tps|default:"0" }}');
+            var compteTvqId = Number('{{ request.session.compte_tvq|default:"0" }}');
+            var compteFrRetardId = Number('{{ request.session.compte_fr_retard|default:"0" }}');
+            var TPS_RATE = 0.05;
+            var TVQ_RATE = 0.09975;
+
+            function parseAmount(value) {
+                if (value === null || value === undefined) {
+                    return 0;
+                }
+
+                var normalized = String(value).replace(/\s/g, '').replace(',', '.');
+                var amount = parseFloat(normalized);
+                return isNaN(amount) ? 0 : amount;
+            }
+
+            function findMontantInputByCompteId(compteId) {
+                if (!compteId || !invoiceModal) {
+                    return null;
+                }
+
+                var rows = invoiceModal.querySelectorAll('.invoice-detail-row');
+                for (var i = 0; i < rows.length; i++) {
+                    if (rows[i].style.display === 'none') {
+                        continue;
+                    }
+
+                    var hiddenCompte = rows[i].querySelector('input[type="hidden"][name$="-compte"]');
+                    if (!hiddenCompte) {
+                        continue;
+                    }
+
+                    if (Number(hiddenCompte.value) === Number(compteId)) {
+                        return rows[i].querySelector('input[name$="-montant"]');
+                    }
+                }
+
+                return null;
+            }
+
+            function recalculateInvertedTaxes() {
+                if (!totalInput || !compteTpsId || !compteTvqId) {
+                    return;
+                }
+
+                var tpsInput = findMontantInputByCompteId(compteTpsId);
+                var tvqInput = findMontantInputByCompteId(compteTvqId);
+                if (!tpsInput || !tvqInput) {
+                    return;
+                }
+
+                var total = parseAmount(totalInput.value);
+                if (total <= 0) {
+                    tpsInput.value = '';
+                    tvqInput.value = '';
+                    return;
+                }
+
+                var frRetardInput = findMontantInputByCompteId(compteFrRetardId);
+                var frRetardAmount = frRetardInput ? parseAmount(frRetardInput.value) : 0;
+                var taxableTotal = total - frRetardAmount;
+
+                if (taxableTotal < 0) {
+                    taxableTotal = 0;
+                }
+
+                var taxableSubtotal = taxableTotal / (1 + TPS_RATE + TVQ_RATE);
+                var tpsAmount = taxableSubtotal * TPS_RATE;
+                var tvqAmount = taxableTotal - taxableSubtotal - tpsAmount;
+
+                tpsInput.value = tpsAmount.toFixed(2);
+                tvqInput.value = tvqAmount.toFixed(2);
+            }
+
+            function bindFrRetardListener() {
+                var frRetardInput = findMontantInputByCompteId(compteFrRetardId);
+                if (!frRetardInput || frRetardInput.dataset.taxListenerBound === '1') {
+                    return;
+                }
+
+                frRetardInput.addEventListener('input', recalculateInvertedTaxes);
+                frRetardInput.addEventListener('change', recalculateInvertedTaxes);
+                frRetardInput.dataset.taxListenerBound = '1';
+            }
+
+            function fillCompteSelect(select, comptes) {
+                if (!select) {
+                    return;
+                }
+
+                select.innerHTML = '<option value="">Choisir un compte</option>';
+                for (var i = 0; i < comptes.length; i++) {
+                    var option = document.createElement('option');
+                    option.value = comptes[i].id;
+                    option.textContent = comptes[i].label;
+                    select.appendChild(option);
+                }
+            }
+
+            function resetInvoiceModalFields() {
+                if (!invoiceModal) {
+                    return;
+                }
+
+                if (invoiceForm) {
+                    invoiceForm.reset();
+                }
+
+                var allMontantInputs = invoiceForm.querySelectorAll('input[name$="-montant"]');
+                for (var i = 0; i < allMontantInputs.length; i++) {
+                    allMontantInputs[i].value = '';
+                }
+
+                if (totalInput) {
+                    totalInput.value = '';
+                }
+
+                if (compagnieSelect) {
+                    compagnieSelect.value = '';
+                }
+
+                if (invoiceModalLabel) {
+                    invoiceModalLabel.textContent = 'Créer une facture';
+                }
+
+                var companyLogoImg = document.getElementById('company-logo');
+                var companyHeader = document.getElementById('company-header');
+                var companyNameElem = document.getElementById('company-name');
+
+                if (companyLogoImg) {
+                    companyLogoImg.src = '';
+                    companyLogoImg.alt = '';
+                }
+
+                if (companyNameElem) {
+                    companyNameElem.textContent = '';
+                }
+
+                if (companyHeader) {
+                    companyHeader.style.display = 'none';
+                }
+
+                var rows = invoiceModal.querySelectorAll('.invoice-detail-row');
+                for (var i = 0; i < rows.length; i++) {
+                    var row = rows[i];
+                    row.style.display = 'none';
+
+                    var hiddenCompte = row.querySelector('input[type="hidden"][name$="-compte"]');
+                    if (hiddenCompte) {
+                        hiddenCompte.value = '';
+                    }
+
+                    var display = row.querySelector('.compte-display');
+                    if (display) {
+                        display.style.display = '';
+                        display.innerHTML = '&nbsp;';
+                    }
+
+                    var select = row.querySelector('.compte-select');
+                    if (select) {
+                        select.style.display = 'none';
+                        select.value = '';
+                    }
+
+                    var montant = row.querySelector('input[name$="-montant"]');
+                    if (montant) {
+                        montant.value = '';
+                    }
+                }
+            }
+
+            if (invoiceModal) {
+                invoiceModal.addEventListener('show.bs.modal', function (event) {
+                    var button = event.relatedTarget;
+                    if (!button) {
+                        return;
+                    }
+
+                    var companyId = button.getAttribute('data-company-id');
+                    var companyName = button.getAttribute('data-company-name');
+                    var companyLogo = button.getAttribute('data-company-logo');
+
+                    var companyLogoImg = document.getElementById('company-logo');
+                    var companyHeader = document.getElementById('company-header');
+                    var companyNameElem = document.getElementById('company-name');
+                    var companyFacturesDiv = document.getElementById('company-factures');
+                    var facturesTableBody = document.getElementById('factures-tbody');
+
+                    if (compagnieSelect && companyId) {
+                        compagnieSelect.value = companyId;
+                    }
+
+                    if (invoiceModalLabel) {
+                        invoiceModalLabel.textContent = 'Créer une facture';
+                    }
+
+                    if (companyLogo && companyLogoImg && companyHeader) {
+                        companyLogoImg.src = companyLogo;
+                        companyLogoImg.alt = 'Logo de ' + (companyName || '');
+                        if (companyNameElem) companyNameElem.textContent = companyName || '';
+                        companyHeader.style.display = 'flex';
+                    } else if (companyLogoImg && companyHeader) {
+                        companyLogoImg.src = '';
+                        if (companyNameElem) companyNameElem.textContent = '';
+                        companyHeader.style.display = 'none';
+                    }
+
+                    // Afficher les factures existantes
+                    var companiesFacturesRaw = '{{ companies_factures_json|escapejs }}';
+                    var companiesFactures = companiesFacturesRaw ? JSON.parse(companiesFacturesRaw) : {};
+                    var factures = companiesFactures[companyId] || [];
+
+                    if (factures.length > 0) {
+                        facturesTableBody.innerHTML = '';
+                        for (var i = 0; i < factures.length; i++) {
+                            var f = factures[i];
+                            var row = document.createElement('tr');
+                            row.innerHTML = '<td>' + f.numero + '</td><td>' + f.date + '</td><td>' + f.total.toFixed(2) + '</td>';
+                            facturesTableBody.appendChild(row);
+                        }
+                        companyFacturesDiv.style.display = '';
+                    } else {
+                        companyFacturesDiv.style.display = 'none';
+                    }
+
+                    // Préremplir les hidden inputs 'compte' et afficher les libellés par ligne
+                    var companiesComptesRaw = '{{ companies_comptes_json|escapejs }}';
+                    var companiesComptes = companiesComptesRaw ? JSON.parse(companiesComptesRaw) : {};
+
+                    var comptes = companiesComptes[companyId] || [];
+                    var compteHiddenInputs = document.querySelectorAll('input[type="hidden"][name$="-compte"]');
+                    var compteDisplays = document.querySelectorAll('.compte-display');
+                    var compteSelects = document.querySelectorAll('.compte-select');
+
+                    // Pour chaque ligne du formset, remplir l'input hidden avec l'id du compte correspondant (si existant)
+                    for (var i = 0; i < compteHiddenInputs.length; i++) {
+                        var input = compteHiddenInputs[i];
+                        var display = compteDisplays[i];
+                        var select = compteSelects[i];
+
+                        if (select) {
+                            select.style.display = 'none';
+                            select.value = '';
+                        }
+
+                        if (display) {
+                            display.style.display = '';
+                        }
+
+                        if (comptes[i]) {
+                            input.value = comptes[i].id;
+                            if (display) display.textContent = comptes[i].label;
+                        } else {
+                            input.value = '';
+                            if (display) display.innerHTML = '&nbsp;';
+                        }
+                    }
+
+                    // Masquer les lignes du formset au-delà du nombre de comptes
+                    var rows = invoiceModal.querySelectorAll('.invoice-detail-row');
+                    for (var j = 0; j < rows.length; j++) {
+                        var row = rows[j];
+                        if (j < comptes.length) {
+                            row.style.display = '';
+                        } else {
+                            // masque et nettoie les valeurs
+                            row.style.display = 'none';
+                            var hid = row.querySelector('input[type="hidden"][name$="-compte"]');
+                            if (hid) hid.value = '';
+                            var disp = row.querySelector('.compte-display');
+                            if (disp) disp.innerHTML = '&nbsp;';
+                            var sel = row.querySelector('.compte-select');
+                            if (sel) {
+                                sel.style.display = 'none';
+                                sel.value = '';
+                            }
+                            var montant = row.querySelector('input[name$="-montant"]');
+                            if (montant) montant.value = '';
+                        }
+                    }
+
+                    bindFrRetardListener();
+                    recalculateInvertedTaxes();
+                });
+
+                invoiceModal.addEventListener('hidden.bs.modal', function () {
+                    resetInvoiceModalFields();
+                });
+            }
+
+            if (addDetailRowBtn && invoiceModal) {
+                addDetailRowBtn.addEventListener('click', function () {
+                    var rows = invoiceModal.querySelectorAll('.invoice-detail-row');
+                    var rowToShow = null;
+
+                    for (var i = 0; i < rows.length; i++) {
+                        if (rows[i].style.display === 'none') {
+                            rowToShow = rows[i];
+                            break;
+                        }
+                    }
+
+                    if (!rowToShow) {
+                        return;
+                    }
+
+                    var hiddenInput = rowToShow.querySelector('input[type="hidden"][name$="-compte"]');
+                    var display = rowToShow.querySelector('.compte-display');
+                    var select = rowToShow.querySelector('.compte-select');
+                    var montant = rowToShow.querySelector('input[name$="-montant"]');
+
+                    rowToShow.style.display = '';
+
+                    if (hiddenInput) {
+                        hiddenInput.value = '';
+                    }
+
+                    if (display) {
+                        display.style.display = 'none';
+                        display.innerHTML = '&nbsp;';
+                    }
+
+                    if (select) {
+                        fillCompteSelect(select, allComptes);
+                        select.style.display = '';
+                        select.value = '';
+                        select.onchange = function () {
+                            if (hiddenInput) {
+                                hiddenInput.value = this.value;
+                            }
+                            bindFrRetardListener();
+                            recalculateInvertedTaxes();
+                        };
+                    }
+
+                    if (montant) {
+                        montant.value = '';
+                    }
+
+                    bindFrRetardListener();
+                    recalculateInvertedTaxes();
+                });
+            }
+
+            if (totalInput) {
+                totalInput.addEventListener('input', recalculateInvertedTaxes);
+                totalInput.addEventListener('change', recalculateInvertedTaxes);
+            }
+
+            // Nettoyer les lignes non-remplies avant soumission
+            if (invoiceForm) {
+                invoiceForm.addEventListener('submit', function (e) {
+                    var rows = invoiceForm.querySelectorAll('.invoice-detail-row');
+                    for (var i = 0; i < rows.length; i++) {
+                        var row = rows[i];
+                        var montantInput = row.querySelector('input[name$="-montant"]');
+                        var compteInput = row.querySelector('input[type="hidden"][name$="-compte"]');
+                        
+                        // Si montant est vide mais compte est pré-rempli, vider le compte aussi
+                        var montantValue = montantInput ? montantInput.value.trim() : '';
+                        if (!montantValue && compteInput && compteInput.value) {
+                            compteInput.value = '';
+                        }
+                    }
+                });
+            }
+        });
+
+        
+    </script>
+{% endblock %}

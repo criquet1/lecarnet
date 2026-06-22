@@ -1,0 +1,33 @@
+{% load static %}
+<nav class="navbar navbar-expand-lg sticky-top bg-primary" data-bs-theme="dark">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="{% url 'accueil' %}">
+      {% if request.session.logo %}
+        <img src="{% static request.session.logo %}" alt="Le Carnet" style="max-height: 40px;">
+      {% elif site_settings and site_settings.logo %}
+        <img src="{% static site_settings.logo %}" alt="Le Carnet" style="max-height: 40px;">
+      {% else %}
+        <img src="{% static 'images/logos/images.png' %}" alt="Le Carnet" style="max-height: 40px;">
+      {% endif %}
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav">
+        <li class="nav-item">
+          <a class="nav-link active" aria-current="page" href="{% url 'accueil' %}">Accueil</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'facture' %}">Facture</a>
+        </li>
+        <li class="nav-item">
+        <a class="nav-link" href="/">{{ request.session.nom|default:'Le Carnet' }}</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link disabled" aria-disabled="true">Disabled</a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
