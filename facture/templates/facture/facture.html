@@ -5,6 +5,12 @@
 
 {% block body %}
 
+<!-- Filtre par période -->
+<div class="d-flex align-items-center gap-3 mb-4">
+    <label for="filter-period" class="form-label mb-0 fw-semibold">Période :</label>
+    <select id="filter-period" class="form-select form-select-sm w-auto"></select>
+</div>
+
 <!-- Bouton pour déclencher la modale -->
 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#exampleModal">
   Créer une compagnie
@@ -48,7 +54,9 @@
                         <img src="{% static compagnie.logo %}" class="company-logo" alt="Logo de {{ compagnie.nom }}" style="width:100px;height:100px;object-fit:contain;display:block;margin:0 auto 1rem;">
                     {% endif %}
                     <div class="card-body">
-                        <h5 class="card-title">{{ compagnie.nom }}</h5>
+                        <h5 class="card-title">
+                            <span class="company-check text-success me-2" data-company-id="{{ compagnie.id }}" style="display:none;"><i class="bi bi-check-circle-fill fs-4"></i></span>{{ compagnie.nom }}
+                        </h5>
                     </div>
                 </div>
             </div>
@@ -158,6 +166,51 @@
 
 {% block scripts %}
     <script>
+        // --- Filtre par période (15 derniers mois) ---
+        document.addEventListener('DOMContentLoaded', function () {
+            var filterPeriod = document.getElementById('filter-period');
+            var monthNames = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+            var today = new Date();
+
+            for (var i = 0; i < 15; i++) {
+                var d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+                var m = d.getMonth() + 1;
+                var y = d.getFullYear();
+                var opt = document.createElement('option');
+                opt.value = y + '-' + String(m).padStart(2, '0');
+                opt.textContent = monthNames[m - 1] + ' ' + y;
+                filterPeriod.appendChild(opt);
+            }
+
+            var companiesFacturesRaw = '{{ companies_factures_json|escapejs }}';
+            var companiesFactures = companiesFacturesRaw ? JSON.parse(companiesFacturesRaw) : {};
+
+            function updateChecks() {
+                var period = filterPeriod.value; // "YYYY-MM"
+                var checks = document.querySelectorAll('.company-check');
+                for (var i = 0; i < checks.length; i++) {
+                    var companyId = checks[i].getAttribute('data-company-id');
+                    var factures = companiesFactures[companyId] || [];
+                    var hasFacture = factures.some(function (f) {
+                        return f.date.substring(0, 7) === period;
+                    });
+                    checks[i].style.display = hasFacture ? '' : 'none';
+                }
+            }
+
+            filterPeriod.addEventListener('change', function () {
+                document.cookie = 'filter_period=' + filterPeriod.value + '; path=/; max-age=' + (365 * 24 * 3600);
+                updateChecks();
+            });
+
+            // Restaurer la valeur depuis le cookie
+            var cookieMatch = document.cookie.match(/(?:^|;\s*)filter_period=([^;]+)/);
+            if (cookieMatch) {
+                filterPeriod.value = cookieMatch[1];
+            }
+
+            updateChecks();
+        });
         document.addEventListener('DOMContentLoaded', function () {
             var invoiceModal = document.getElementById('invoiceModal');
             var invoiceForm = document.getElementById('invoice-form');
