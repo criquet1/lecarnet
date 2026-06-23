@@ -7,8 +7,8 @@
 
 <!-- Filtre par période -->
 <div class="d-flex align-items-center gap-3 mb-4">
-    <label for="filter-period" class="form-label mb-0 fw-semibold">Période :</label>
-    <select id="filter-period" class="form-select form-select-sm w-auto"></select>
+        <label for="filter-period" class="form-label mb-0 fw-semibold">Période :</label>
+        <select id="filter-period" class="form-select form-select-sm w-auto"></select>
 </div>
 
 <!-- Bouton pour déclencher la modale -->
@@ -166,7 +166,6 @@
 
 {% block scripts %}
     <script>
-        // --- Filtre par période (15 derniers mois) ---
         document.addEventListener('DOMContentLoaded', function () {
             var filterPeriod = document.getElementById('filter-period');
             var monthNames = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -182,36 +181,38 @@
                 filterPeriod.appendChild(opt);
             }
 
+            var cookieMatch = document.cookie.match(/(?:^|;\s*)filter_period=([^;]+)/);
+            if (cookieMatch) {
+                filterPeriod.value = decodeURIComponent(cookieMatch[1]);
+            }
+
             var companiesFacturesRaw = '{{ companies_factures_json|escapejs }}';
             var companiesFactures = companiesFacturesRaw ? JSON.parse(companiesFacturesRaw) : {};
 
             function updateChecks() {
-                var period = filterPeriod.value; // "YYYY-MM"
+                var period = filterPeriod.value;
                 var checks = document.querySelectorAll('.company-check');
+
                 for (var i = 0; i < checks.length; i++) {
                     var companyId = checks[i].getAttribute('data-company-id');
                     var factures = companiesFactures[companyId] || [];
                     var hasFacture = factures.some(function (f) {
                         return f.date.substring(0, 7) === period;
                     });
+
                     checks[i].style.display = hasFacture ? '' : 'none';
                 }
             }
 
-            filterPeriod.addEventListener('change', function () {
-                document.cookie = 'filter_period=' + filterPeriod.value + '; path=/; max-age=' + (365 * 24 * 3600);
-                updateChecks();
-            });
+            if (filterPeriod) {
+                filterPeriod.addEventListener('change', function () {
+                    document.cookie = 'filter_period=' + encodeURIComponent(filterPeriod.value) + '; path=/; max-age=' + (365 * 24 * 3600);
+                    updateChecks();
+                });
 
-            // Restaurer la valeur depuis le cookie
-            var cookieMatch = document.cookie.match(/(?:^|;\s*)filter_period=([^;]+)/);
-            if (cookieMatch) {
-                filterPeriod.value = cookieMatch[1];
+                updateChecks();
             }
 
-            updateChecks();
-        });
-        document.addEventListener('DOMContentLoaded', function () {
             var invoiceModal = document.getElementById('invoiceModal');
             var invoiceForm = document.getElementById('invoice-form');
             var invoiceModalObj = new bootstrap.Modal(invoiceModal, {backdrop: 'static', keyboard: false});
