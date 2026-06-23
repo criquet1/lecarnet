@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block body %}
+<h1 class="mb-4">{{ title }}</h1>
+
+<div class="table-responsive">
+	<table class="table table-sm table-striped align-middle">
+		<thead>
+			<tr>
+				<th>no_EJ</th>
+				<th>Date</th>
+				<th>Desc</th>
+				<th>Compte</th>
+				<th class="text-end">Débit</th>
+				<th class="text-end">Crédit</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for row in journal_rows %}
+				{% if row.group_start and not forloop.first %}
+					<tr>
+						<td colspan="6" class="p-0 border-0">
+							<div class="border-top border-3 border-dark my-1"></div>
+						</td>
+					</tr>
+				{% endif %}
+				<tr>
+					<td>{{ row.no_ej }}</td>
+					<td>{{ row.date|date:"Y-m-d" }}</td>
+					<td>{{ row.desc }}</td>
+					<td>{{ row.compte }}</td>
+					<td class="text-end">{% if row.debit %}{{ row.debit }}{% endif %}</td>
+					<td class="text-end">{% if row.credit %}{{ row.credit }}{% endif %}</td>
+				</tr>
+			{% empty %}
+				<tr>
+					<td colspan="6" class="text-center text-muted">Aucune écriture pour le moment.</td>
+				</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+</div>
+
+
+{% endblock %}
+
+{% block scripts %}
+    
+{% endblock %}

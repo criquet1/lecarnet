@@ -137,6 +137,7 @@
                                 <table class="table table-sm table-hover">
                                     <thead>
                                         <tr>
+                                            <th>no_EJ</th>
                                             <th>Numéro</th>
                                             <th>Date</th>
                                             <th>Total</th>
@@ -450,7 +451,7 @@
                         for (var i = 0; i < factures.length; i++) {
                             var f = factures[i];
                             var row = document.createElement('tr');
-                            row.innerHTML = '<td>' + f.numero + '</td><td>' + f.date + '</td><td>' + f.total.toFixed(2) + '</td>';
+                            row.innerHTML = '<td>' + (f.no_ej || '') + '</td><td>' + f.numero + '</td><td>' + f.date + '</td><td>' + f.total.toFixed(2) + '</td>';
                             facturesTableBody.appendChild(row);
                         }
                         companyFacturesDiv.style.display = '';

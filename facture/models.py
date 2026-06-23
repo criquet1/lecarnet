@@ -9,6 +9,13 @@ class Compagnie(models.Model):
         help_text="Chemin relatif dans static/ vers le logo (ex: images/logos/Hydro-Québec-Logo.png)."
     )
     comptes = models.ManyToManyField(Compte, related_name='compagnies', blank=True)
+    cap_ou_car = models.ForeignKey(
+        Compte,
+        on_delete=models.CASCADE,
+        related_name='compagnies_cap_ou_car',
+        blank=True,
+        null=True,
+    )
 
     def __str__(self):
         return self.nom

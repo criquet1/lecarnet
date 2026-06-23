@@ -4,7 +4,7 @@ from .models import Compagnie, Facture, DetailFacture
 class CompagnieForm(forms.ModelForm):
     class Meta:
         model = Compagnie
-        fields = ['nom', 'logo', 'comptes']
+        fields = ['nom', 'logo', 'comptes', 'cap_ou_car']
 
 
 class FactureForm(forms.ModelForm):
