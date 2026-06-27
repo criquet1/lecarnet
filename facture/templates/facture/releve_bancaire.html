@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% load facture_extras %}
+
+{% block body %}
+
+    <div class="d-flex align-items-baseline gap-3 mb-3">
+        <h1 class="mb-0">Relevés bancaires pour le mois de</h1>
+        <form method="get" class="d-inline">
+            <select name="mois" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                <option value="">-- choisir --</option>
+                <option value="01" {% if mois_selectionne == "01" %}selected{% endif %}>Janvier</option>
+                <option value="02" {% if mois_selectionne == "02" %}selected{% endif %}>Février</option>
+                <option value="03" {% if mois_selectionne == "03" %}selected{% endif %}>Mars</option>
+                <option value="04" {% if mois_selectionne == "04" %}selected{% endif %}>Avril</option>
+                <option value="05" {% if mois_selectionne == "05" %}selected{% endif %}>Mai</option>
+                <option value="06" {% if mois_selectionne == "06" %}selected{% endif %}>Juin</option>
+                <option value="07" {% if mois_selectionne == "07" %}selected{% endif %}>Juillet</option>
+                <option value="08" {% if mois_selectionne == "08" %}selected{% endif %}>Août</option>
+                <option value="09" {% if mois_selectionne == "09" %}selected{% endif %}>Septembre</option>
+                <option value="10" {% if mois_selectionne == "10" %}selected{% endif %}>Octobre</option>
+                <option value="11" {% if mois_selectionne == "11" %}selected{% endif %}>Novembre</option>
+                <option value="12" {% if mois_selectionne == "12" %}selected{% endif %}>Décembre</option>
+            </select>
+        </form>
+    </div>
+
+    {% if errors %}
+        <div class="alert alert-warning">
+            {% for error in errors %}
+                <div>{{ error }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" id="csvForm" class="mb-4">
+        {% csrf_token %}
+        <div class="form-group mb-3">
+            <label for="csvFile" class="form-label">Choisir un fichier CSV:</label>
+            <input type="file" name="csv_file" id="csvFile" accept=".csv" class="form-control">
+        </div>
+        <button type="submit" class="btn btn-primary">Charger le fichier</button>
+    </form>
+
+    <ul class="nav nav-tabs mb-3" id="releveTabs" role="tablist">
+        {% for groupe in groupes %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if forloop.first %}active{% endif %}"
+                        id="tab-{{ groupe.type_onglet }}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#pane-{{ groupe.type_onglet }}"
+                        type="button" role="tab"
+                        aria-controls="pane-{{ groupe.type_onglet }}"
+                        aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
+                    {{ groupe.label }}
+                </button>
+            </li>
+        {% endfor %}
+    </ul>
+
+    <div class="tab-content" id="releveTabsContent">
+        {% for groupe in groupes %}
+            <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
+                 id="pane-{{ groupe.type_onglet }}"
+                 role="tabpanel"
+                 aria-labelledby="tab-{{ groupe.type_onglet }}">
+
+                {% if groupe.comptes %}
+                    {% for compte in groupe.comptes %}
+                        <h5 class="mt-4 mb-1 text-center">{{ compte.nom_affichage }}</h5>
+                        {% with fichiers=fichiers_par_compte|get_item:compte.pk %}
+                            {% if fichiers %}
+                                <p class="text-muted small mb-2 text-center">
+                                    {% for f in fichiers %}{{ f }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                </p>
+                            {% endif %}
+                        {% endwith %}
+                        {% with lignes=releves_par_compte|get_item:compte.pk %}
+                        {% if lignes %}
+                            <table class="table table-sm table-striped table-hover releve-table mx-auto" style="table-layout:fixed;width:75%">
+                                <colgroup>
+                                    <col style="width:11%">
+                                    <col style="width:8%">
+                                    <col style="width:35%">
+                                    <col style="width:15%">
+                                    <col style="width:15%">
+                                    <col style="width:16%">
+                                </colgroup>
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>No ligne</th>
+                                        <th>Description</th>
+                                        <th class="text-end">Retrait</th>
+                                        <th class="text-end">Dépôt</th>
+                                        <th class="text-end">Solde</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for r in lignes %}
+                                    <tr>
+                                        <td>{{ r.date }}</td>
+                                        <td>{{ r.no_ligne }}</td>
+                                        <td>{{ r.description }}</td>
+                                        <td class="text-end">{% if r.retrait %}{{ r.retrait }}{% endif %}</td>
+                                        <td class="text-end">{% if r.depot %}{{ r.depot }}{% endif %}</td>
+                                        <td class="text-end">{{ r.solde }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        {% else %}
+                            <p class="text-muted">Aucune donnée{% if mois_selectionne %} pour ce mois{% endif %}.</p>
+                        {% endif %}
+                        {% endwith %}
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted mt-3">Aucun compte dans cette catégorie.</p>
+                {% endif %}
+
+            </div>
+        {% endfor %}
+    </div>
+
+
+{% endblock %}
