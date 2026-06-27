@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block body %}
+<h2 class="fw-bold text-center mb-2">{{ title }}</h2>
+{% if site_settings and site_settings.annee_financiere %}
+<h2 class="fw-bold text-center mb-4">Pour l'annee au {{ site_settings.annee_financiere|date:"j F Y" }}</h2>
+{% endif %}
+
+<div class="mx-auto w-100" style="max-width: 1120px;">
+<div class="d-flex flex-column gap-3">
+    {% for bloc in comptes %}
+        <div class="border rounded p-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                <div>
+                    <strong>{{ bloc.compte.numero }} - {{ bloc.compte.libelle }}</strong>
+                </div>
+                <div class="text-muted small">
+                    {% if bloc.is_bilan %}Compte de bilan{% else %}Compte de resultat{% endif %}
+                </div>
+            </div>
+
+            <div>
+                <table class="table table-sm table-striped align-middle mb-0" style="table-layout: fixed; width: 100%;">
+                    <colgroup>
+                        <col style="width: 90px;">
+                        <col style="width: 120px;">
+                        <col style="width: 140px;">
+                        <col>
+                        <col>
+                        <col style="width: 120px;">
+                        <col style="width: 120px;">
+                        <col style="width: 120px;">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>No_EJ</th>
+                            <th>Date</th>
+                            <th>Compagnie</th>
+                            <th>Description</th>
+                            <th>Source</th>
+                            <th class="text-end text-nowrap">Debit</th>
+                            <th class="text-end text-nowrap">Credit</th>
+                            <th class="text-end text-nowrap">Solde</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in bloc.entries %}
+                            <tr>
+                                <td>{{ row.no_ej }}</td>
+                                <td class="text-nowrap">{{ row.date|date:"Y-m-d" }}</td>
+                                <td class="text-nowrap">{% if row.compagnie %}{{ row.compagnie.nom }}{% endif %}</td>
+                                <td class="text-wrap" style="word-break: break-word;">{{ row.description }}</td>
+                                <td class="text-wrap" style="word-break: break-word;">{% if row.source %}{{ row.source.nom }}{% endif %}</td>
+                                <td class="text-end text-nowrap font-monospace">{% if row.debit %}{{ row.debit|floatformat:2 }}{% endif %}</td>
+                                <td class="text-end text-nowrap font-monospace">{% if row.credit %}{{ row.credit|floatformat:2 }}{% endif %}</td>
+                                <td class="text-end text-nowrap font-monospace">{{ row.solde|floatformat:2 }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="8" class="text-muted">Aucune ecriture pour ce compte.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th colspan="5" class="text-end">Total compte</th>
+                            <th class="text-end font-monospace">{{ bloc.total_debit|floatformat:2 }}</th>
+                            <th class="text-end font-monospace">{{ bloc.total_credit|floatformat:2 }}</th>
+                            <th class="text-end font-monospace">{{ bloc.solde|floatformat:2 }}</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    {% empty %}
+        <div class="text-center text-muted">Aucune ecriture pour le grand livre.</div>
+    {% endfor %}
+</div>
+
+<div class="border rounded p-3 mt-4">
+    <h5 class="mb-3">Totaux generaux</h5>
+    <div>
+        <table class="table table-sm align-middle mb-0" style="table-layout: fixed; width: 100%;">
+            <colgroup>
+                <col style="width: 90px;">
+                <col style="width: 120px;">
+                <col style="width: 140px;">
+                <col>
+                <col>
+                <col style="width: 120px;">
+                <col style="width: 120px;">
+                <col style="width: 120px;">
+            </colgroup>
+            <tbody>
+                <tr>
+                    <th colspan="5" class="text-end">Totaux generaux</th>
+                    <th class="text-end font-monospace">{{ grand_total_debit|floatformat:2 }}</th>
+                    <th class="text-end font-monospace">{{ grand_total_credit|floatformat:2 }}</th>
+                    <th class="text-end font-monospace">{{ grand_total_solde|floatformat:2 }}</th>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="mt-2 {% if is_balanced %}text-success{% else %}text-danger{% endif %}">
+        {% if is_balanced %}
+            Le grand livre est equilibre.
+        {% else %}
+            Le grand livre n'est pas equilibre.
+        {% endif %}
+    </div>
+</div>
+</div>
+{% endblock %}

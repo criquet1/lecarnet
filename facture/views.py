@@ -8,6 +8,7 @@ from django.utils import timezone
 from decimal import Decimal, InvalidOperation
 import re
 import csv
+import json
 from io import TextIOWrapper
 import chardet
 from datetime import datetime
@@ -209,6 +210,13 @@ def company_invoices_api(request, company_id):
 def facture(request):
     title = "Facture"
     company_form = CompagnieForm(request.POST or None, prefix='company')
+    settings_instance = Setting.objects.select_related(
+        'compte_tps_percue',
+        'compte_tps_payee',
+        'compte_tvq_percue',
+        'compte_tvq_payee',
+        'compte_fr_retard',
+    ).first()
     comptes_count = Compte.objects.count()
     compagnies = Compagnie.objects.prefetch_related(
         'comptes',
@@ -224,6 +232,79 @@ def facture(request):
         )
     ).all()
     comptes_queryset = Compte.objects.all()
+
+    all_comptes = [
+        {
+            'id': compte.pk,
+            'label': f"{compte.numero} - {compte.libelle}",
+        }
+        for compte in comptes_queryset.order_by('numero')
+    ]
+
+    companies_comptes = {}
+    companies_factures = {}
+    for compagnie in compagnies:
+        comptes_company = [
+            {
+                'id': compte.pk,
+                'label': f"{compte.numero} - {compte.libelle}",
+            }
+            for compte in compagnie.comptes.all().order_by('numero')
+        ]
+
+        # Injecte les comptes attendus selon le mode de compagnie.
+        # Ces comptes sont forces en fin de liste pour apparaitre en bas du modal.
+        tax_accounts = []
+        company_mode = (compagnie.cap_ou_car or '').strip().upper()
+        if settings_instance:
+            if company_mode == 'CAP':
+                tax_accounts = [
+                    settings_instance.compte_tps_payee,
+                    settings_instance.compte_tvq_payee,
+                    settings_instance.compte_fr_retard,
+                ]
+            elif company_mode == 'CAR':
+                tax_accounts = [
+                    settings_instance.compte_tps_percue,
+                    settings_instance.compte_tvq_percue,
+                    settings_instance.compte_fr_retard,
+                ]
+
+        forced_ids = {
+            account.pk
+            for account in tax_accounts
+            if account
+        }
+
+        # Retire les comptes forces de la liste de base pour les re-ajouter en bas.
+        comptes_company = [
+            item for item in comptes_company
+            if item['id'] not in forced_ids
+        ]
+
+        existing_ids = {item['id'] for item in comptes_company}
+        for tax_account in tax_accounts:
+            if not tax_account or tax_account.pk in existing_ids:
+                continue
+            comptes_company.append({
+                'id': tax_account.pk,
+                'label': f"{tax_account.numero} - {tax_account.libelle}",
+            })
+            existing_ids.add(tax_account.pk)
+
+        companies_comptes[str(compagnie.pk)] = comptes_company
+        company_invoices = []
+        for tr in compagnie.tr_desc.all():
+            serialized = _serialize_invoice(tr)
+            company_invoices.append({
+                'id': tr.id,
+                'no_ej': tr.no_ej,
+                'numero': tr.description or '',
+                'date': tr.date.isoformat() if tr.date else '',
+                'total': float(serialized['total']),
+                'details': serialized['details'],
+            })
+        companies_factures[str(compagnie.pk)] = company_invoices
 
     tr_desc_form = TrDescForm(prefix='trdesc')
     tr_detail_formset = TrDetailFormSet(
@@ -248,7 +329,6 @@ def facture(request):
             selected_company = Compagnie.objects.filter(pk=selected_company_id).first()
             editing_tr_desc_id = (request.POST.get('editing_tr_desc_id') or '').strip()
             editing_tr_desc = None
-            settings_instance = Setting.objects.first()
             company_mode = ''
             forced_compte = None
 
@@ -381,6 +461,7 @@ def facture(request):
         'title': title,
         'company_form': company_form,
         'comptes_count': comptes_count,
+        'compagnies': compagnies,
         'companies': compagnies,
         'tr_desc_form': tr_desc_form,
         'tr_detail_formset': tr_detail_formset,
@@ -389,6 +470,9 @@ def facture(request):
         'selected_company_id': selected_company_id,
         'selected_company_name': selected_company_name,
         'editing_tr_desc_id': editing_tr_desc_id,
+        'all_comptes_json': json.dumps(all_comptes),
+        'companies_comptes_json': json.dumps(companies_comptes),
+        'companies_factures_json': json.dumps(companies_factures),
     })
 
 

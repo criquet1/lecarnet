@@ -4,44 +4,50 @@
 {% block title %} {{ title }} {% endblock %}
 
 {% block body %}
-<h1 class="mb-4">{{ title }}</h1>
+<h2 class="fw-bold text-center mb-2">{{ title }}</h2>
+{% if site_settings and site_settings.annee_financiere %}
+<h2 class="fw-bold text-center mb-4">Pour l'annee au {{ site_settings.annee_financiere|date:"j F Y" }}</h2>
+{% endif %}
 
-<div class="table-responsive">
-	<table class="table table-sm table-striped align-middle">
-		<thead>
-			<tr>
-				<th>no_EJ</th>
-				<th>Date</th>
-				<th>Desc</th>
-				<th>Compte</th>
-				<th class="text-end">Débit</th>
-				<th class="text-end">Crédit</th>
-			</tr>
-		</thead>
-		<tbody>
-			{% for row in journal_rows %}
-				{% if row.group_start and not forloop.first %}
-					<tr>
-						<td colspan="6" class="p-0 border-0">
-							<div class="border-top border-3 border-dark my-1"></div>
-						</td>
-					</tr>
-				{% endif %}
-				<tr>
-					<td>{{ row.no_ej }}</td>
-					<td>{{ row.date|date:"Y-m-d" }}</td>
-					<td>{{ row.desc }}</td>
-					<td>{{ row.compte }}</td>
-					<td class="text-end">{% if row.debit %}{{ row.debit }}{% endif %}</td>
-					<td class="text-end">{% if row.credit %}{{ row.credit }}{% endif %}</td>
-				</tr>
-			{% empty %}
-				<tr>
-					<td colspan="6" class="text-center text-muted">Aucune écriture pour le moment.</td>
-				</tr>
-			{% endfor %}
-		</tbody>
-	</table>
+<div class="d-flex flex-column gap-3 mx-auto w-100" style="max-width: 840px;">
+	{% for entry in journal_entries %}
+		<div class="border rounded p-3">
+			<div class="d-flex align-items-center gap-3 flex-wrap mb-2">
+				<span>{{ entry.no_ej }}</span>
+				<span>{{ entry.date|date:"Y-m-d" }}</span>
+				<span>{{ entry.description }}</span>
+				<span>{% if entry.compagnie %}{{ entry.compagnie.nom }}{% endif %}</span>
+				<span class="ms-auto text-end"><strong>Source :</strong> {% if entry.source %}{{ entry.source.nom }}{% endif %}</span>
+			</div>
+
+			<div class="table-responsive">
+				<table class="table table-sm table-striped align-middle mb-0">
+					<thead>
+						<tr>
+							<th>Compte</th>
+							<th class="text-end">Débit</th>
+							<th class="text-end">Crédit</th>
+						</tr>
+					</thead>
+					<tbody>
+						{% for detail in entry.details.all %}
+							<tr>
+								<td>{{ detail.compte.numero }} - {{ detail.compte.libelle }}</td>
+								<td class="text-end">{% if detail.montant >= 0 %}{{ detail.montant }}{% endif %}</td>
+								<td class="text-end">{% if detail.montant < 0 %}{{ detail.montant|floatformat:2|slice:"1:" }}{% endif %}</td>
+							</tr>
+						{% empty %}
+							<tr>
+								<td colspan="3" class="text-muted">Aucune ligne de détail</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	{% empty %}
+		<div class="text-center text-muted">Aucune écriture pour le moment.</div>
+	{% endfor %}
 </div>
 
 

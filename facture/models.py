@@ -13,6 +13,15 @@ class Source(models.Model):
 
 
 class Compagnie(models.Model):
+    MODE_CAP = 'CAP'
+    MODE_CAR = 'CAR'
+    MODE_AUTRE = 'AUTRE'
+    MODE_CHOICES = [
+        (MODE_CAP, 'CAP'),
+        (MODE_CAR, 'CAR'),
+        (MODE_AUTRE, 'Autre'),
+    ]
+
     nom = models.CharField(max_length=60, blank=False, null=False)
     logo = models.CharField(
         max_length=100,
@@ -22,7 +31,13 @@ class Compagnie(models.Model):
         help_text="Nom du fichier logo dans static/images/logos (ex: images.png)."
     )
     comptes = models.ManyToManyField(Compte, related_name='compagnies', blank=True)
-    cap_ou_car = models.CharField(max_length=10, blank=True, null=True)
+    cap_ou_car = models.CharField(
+        max_length=10,
+        choices=MODE_CHOICES,
+        default=MODE_AUTRE,
+        blank=True,
+        null=True,
+    )
 
     def __str__(self):
         return self.nom

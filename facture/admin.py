@@ -8,9 +8,14 @@ class SettingAdmin(admin.ModelAdmin):
 
 
 class CompagnieAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nom', 'logo', 'get_comptes')
+    list_display = ('id', 'nom', 'logo', 'get_cap_ou_car', 'get_comptes')
     list_filter = ('nom',)
     list_editable = ('nom',)
+
+    def get_cap_ou_car(self, obj):
+        return obj.cap_ou_car or ''
+
+    get_cap_ou_car.short_description = 'CAP/CAR'
     
     def get_comptes(self, obj):
         return ", ".join([compte.libelle for compte in obj.comptes.all()])

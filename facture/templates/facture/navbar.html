@@ -25,6 +25,12 @@
           <a class="nav-link" href="{% url 'journal_general' %}">Journal général</a>
         </li>
         <li class="nav-item">
+          <a class="nav-link" href="{% url 'grand_livre' %}">Grand livre</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'balance_de_verification' %}">Balance de vérification</a>
+        </li>
+        <li class="nav-item">
         <a class="nav-link" href="/">{{ request.session.nom|default:'Le Carnet' }}</a>
         </li>
         <li class="nav-item">
