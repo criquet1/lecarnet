@@ -1,5 +1,5 @@
 from django.contrib import admin
-from facture.models import Compagnie, Setting, Tr_desc, Tr_detail, Releve, RapportTaxes
+from facture.models import Compagnie, Setting, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve
 
 
 class SettingAdmin(admin.ModelAdmin):
@@ -47,9 +47,16 @@ class ReleveBancaireAdmin(admin.ModelAdmin):
     search_fields = ('nom_institut',)
 
 
+class CompteReleveAdmin(admin.ModelAdmin):
+    list_display = ('id', 'nom_affichage', 'no_compte', 'type_compte', 'type_onglet', 'compte_comptable')
+    list_filter = ('type_onglet', 'type_compte')
+    search_fields = ('nom_affichage', 'no_compte', 'nom_institut', 'compte_comptable__libelle')
+
+
 admin.site.register(Compagnie, CompagnieAdmin)
 admin.site.register(Setting, SettingAdmin)
 admin.site.register(Tr_desc, TrDescAdmin)
 admin.site.register(Tr_detail, TrDetailAdmin)
 admin.site.register(Releve, ReleveBancaireAdmin)
 admin.site.register(RapportTaxes, RapportTaxesAdmin)
+admin.site.register(CompteReleve, CompteReleveAdmin)

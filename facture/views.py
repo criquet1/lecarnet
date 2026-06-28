@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Prefetch, Sum, Value, DecimalField, Case, When, IntegerField
+from django.db.models import Prefetch, Sum, Value, DecimalField, Case, When, IntegerField, F
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from decimal import Decimal, InvalidOperation
@@ -13,6 +13,7 @@ from io import TextIOWrapper
 import chardet
 from datetime import datetime
 from facture.models import Compagnie, Tr_desc, Tr_detail, Source, Setting, Releve, RapportTaxes, CompteReleve
+from facture.context_processors import build_fiscal_period_options
 from facture.forms import CompagnieForm, TrDescForm, TrDetailFormSet
 from compte.models import Compte
 
@@ -626,7 +627,7 @@ def rapport_de_taxes(request):
 
         for tax_type in ('TPS', 'TVQ'):
             blocks[tax_type]['solde_a_reclamer'] = (
-                blocks[tax_type]['total_percue_signee'] - blocks[tax_type]['total_payee']
+                blocks[tax_type]['total_percue_signee'] + blocks[tax_type]['total_payee']
             )
 
         return blocks
@@ -727,7 +728,7 @@ def rapport_de_taxes(request):
     if selected_report:
         selected_report.tax_blocks = build_tax_blocks(selected_report.details_taxes.all())
 
-    return render(request, "facture/rapport_de_taxes.html", {
+    return render(request, "facture/rapport_de_taxe.html", {
         'title': "Rapport de taxes",
         'selected_report': selected_report,
         'tax_accounts_configured': bool(tax_account_ids),
@@ -776,6 +777,33 @@ def _obtenir_ou_creer_compte_releve(no_compte, nom_institut, type_compte_csv):
         type_onglet = 'autre'
         nom_affichage = no_compte
 
+    default_compte_comptable = None
+
+    # Héritage intelligent pour les nouveaux comptes similaires:
+    # - cartes Visa: si un seul compte comptable est deja utilise pour les cartes Visa,
+    #   on le reprend automatiquement sur la nouvelle carte.
+    # - marge de credit: meme principe pour les comptes de marge.
+    # - banque: seulement si no_compte + type_compte trouvent deja un mapping (rare).
+    if type_onglet == 'carte_credit' and 'VISA' in no_compte_upper:
+        visa_compte_ids = list(
+            CompteReleve.objects.filter(
+                type_onglet='carte_credit',
+                no_compte__icontains='VISA',
+                compte_comptable__isnull=False,
+            ).values_list('compte_comptable_id', flat=True).distinct()
+        )
+        if len(visa_compte_ids) == 1:
+            default_compte_comptable = Compte.objects.filter(pk=visa_compte_ids[0]).first()
+    elif type_onglet == 'marge_credit':
+        marge_compte_ids = list(
+            CompteReleve.objects.filter(
+                type_onglet='marge_credit',
+                compte_comptable__isnull=False,
+            ).values_list('compte_comptable_id', flat=True).distinct()
+        )
+        if len(marge_compte_ids) == 1:
+            default_compte_comptable = Compte.objects.filter(pk=marge_compte_ids[0]).first()
+
     compte, _ = CompteReleve.objects.get_or_create(
         no_compte=no_compte,
         type_compte=type_compte_csv,
@@ -783,135 +811,540 @@ def _obtenir_ou_creer_compte_releve(no_compte, nom_institut, type_compte_csv):
             'nom_affichage': nom_affichage,
             'nom_institut': nom_institut,
             'type_onglet': type_onglet,
+            'compte_comptable': default_compte_comptable,
         },
     )
     return compte
 
 
+def _relink_releves_compte_type_mismatch():
+    """Reassocie les lignes Releve au bon CompteReleve quand type_compte differe."""
+    mismatches = Releve.objects.select_related('compte_releve').exclude(
+        compte_releve__isnull=True
+    ).exclude(
+        type_compte=F('compte_releve__type_compte')
+    )
+
+    for releve in mismatches:
+        corrected_compte = _obtenir_ou_creer_compte_releve(
+            releve.no_compte,
+            releve.nom_institut,
+            releve.type_compte,
+        )
+        if releve.compte_releve_id != corrected_compte.id:
+            releve.compte_releve = corrected_compte
+            releve.save(update_fields=['compte_releve'])
+
+
+def _suggest_compte_from_releve(releve):
+    if releve.compte_releve_id and getattr(releve.compte_releve, 'compte_comptable_id', None):
+        return releve.compte_releve.compte_comptable
+
+    numero_compte = ''.join(ch for ch in (releve.no_compte or '') if ch.isdigit())
+    if not numero_compte:
+        return None
+
+    candidates = [numero_compte]
+    if len(numero_compte) > 4:
+        candidates.extend([numero_compte[:4], numero_compte[-4:]])
+
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            compte = Compte.objects.filter(numero=int(candidate)).first()
+        except (TypeError, ValueError):
+            compte = None
+        if compte:
+            return compte
+    return None
+
+
+def _suggest_montant_from_releve(releve):
+    if releve.depot is not None and releve.depot != 0:
+        return abs(releve.depot)
+    if releve.retrait is not None and releve.retrait != 0:
+        return -abs(releve.retrait)
+    return None
+
+
+def _compte_releve_aliases(compte_releve):
+    aliases = set()
+    if not compte_releve:
+        return aliases
+
+    raw_values = [
+        compte_releve.nom_affichage or '',
+        compte_releve.no_compte or '',
+        compte_releve.type_compte or '',
+    ]
+
+    for raw in raw_values:
+        value = str(raw).strip().upper()
+        if not value:
+            continue
+        aliases.add(value)
+        for token in re.findall(r'[A-Z0-9]+', value):
+            if len(token) >= 3:
+                aliases.add(token)
+
+    numero = ''.join(ch for ch in (compte_releve.no_compte or '') if ch.isdigit())
+    if numero:
+        aliases.add(numero)
+        if len(numero) >= 4:
+            aliases.add(numero[-4:])
+
+    return aliases
+
+
+def _description_alias_score(description, aliases):
+    if not description or not aliases:
+        return 0
+    desc = str(description).upper()
+    score = 0
+    for alias in aliases:
+        if alias and alias in desc:
+            score = max(score, len(alias))
+    return score
+
+
+def _find_releve_counterpart(current_releve, compte_cible, montant_cible):
+    """Trouve une ligne de releve contrepartie (montant oppose, meme date) sur le compte cible."""
+    if not current_releve or not compte_cible or montant_cible is None:
+        return None
+
+    comptes_releves_cibles = list(CompteReleve.objects.filter(compte_comptable=compte_cible))
+    if not comptes_releves_cibles:
+        return None
+
+    depot_present = current_releve.depot is not None and current_releve.depot != 0
+    retrait_present = current_releve.retrait is not None and current_releve.retrait != 0
+    if depot_present == retrait_present:
+        return None
+
+    base_qs = Releve.objects.filter(
+        compte_releve__in=comptes_releves_cibles,
+        date=current_releve.date,
+    ).exclude(pk=current_releve.pk).select_related('compte_releve')
+
+    if depot_present:
+        # Ligne courante: depot. Contrepartie attendue: retrait du meme montant.
+        base_qs = base_qs.filter(retrait=montant_cible)
+    else:
+        # Ligne courante: retrait. Contrepartie attendue: depot du meme montant.
+        base_qs = base_qs.filter(depot=montant_cible)
+
+    candidates = list(base_qs.order_by('ecriture_creee', 'id'))
+    if not candidates:
+        return None
+
+    # Validation douce par indice textuel (ex: EOP, ET2, VISA 5011) pour reduire les faux positifs.
+    source_aliases = _compte_releve_aliases(getattr(current_releve, 'compte_releve', None))
+    target_aliases = set()
+    for compte_releve in comptes_releves_cibles:
+        target_aliases.update(_compte_releve_aliases(compte_releve))
+
+    scored = []
+    for candidate in candidates:
+        score_from_current_desc = _description_alias_score(current_releve.description, target_aliases)
+        score_from_candidate_desc = _description_alias_score(candidate.description, source_aliases)
+        combined_score = max(score_from_current_desc, score_from_candidate_desc)
+        scored.append((combined_score, 0 if not candidate.ecriture_creee else 1, candidate.id, candidate))
+
+    scored.sort(key=lambda item: (-item[0], item[1], item[2]))
+
+    # S'il y a un indice descriptif, on le privilegie.
+    if scored[0][0] > 0:
+        return scored[0][3]
+
+    # Regle stricte: s'il y a plusieurs candidates mais aucun indice textuel,
+    # on ne choisit pas automatiquement pour eviter les faux positifs.
+    if len(scored) > 1:
+        return None
+
+    # Sans indice, conserver le comportement precedent (premiere non transmise puis plus ancienne).
+    return scored[0][3]
+
+
 def releve_bancaire(request):
     releves = []
     errors = []
+    open_releve_modal = False
+    modal_releve_id = ''
+    selected_compagnie_id = ''
+    comptes_queryset = Compte.objects.all().order_by('numero')
+    compagnies = Compagnie.objects.order_by('nom')
 
-    if request.method == 'POST' and request.FILES.get('csv_file'):
-        csv_file = request.FILES['csv_file']
+    tr_desc_form = TrDescForm(prefix='trdesc_releve')
+    tr_detail_formset = TrDetailFormSet(
+        prefix='detail_releve',
+        form_kwargs={'comptes_queryset': comptes_queryset}
+    )
 
-        try:
-            file_name = csv_file.name
+    if request.method == 'POST':
+        action = (request.POST.get('action') or '').strip()
 
-            # Vérifier si ce fichier a déjà été importé
-            if Releve.objects.filter(fichier_source=file_name).exists():
-                errors.append(f"⚠ Le fichier « {file_name} » a déjà été importé. Aucune ligne n'a été ajoutée.")
+        if action == 'create_ecriture':
+            releve_id = (request.POST.get('releve_id') or '').strip()
+            selected_compagnie_id = (request.POST.get('compagnie_id') or '').strip()
+            modal_releve_id = releve_id
+            open_releve_modal = True
+            releve = Releve.objects.select_related('ecriture_tr_desc', 'compte_releve', 'compte_releve__compte_comptable').filter(pk=releve_id).first()
+            existing_tr_desc = releve.ecriture_tr_desc if releve and releve.ecriture_creee and releve.ecriture_tr_desc_id else None
+            selected_compagnie = None
+            if selected_compagnie_id:
+                selected_compagnie = Compagnie.objects.filter(pk=selected_compagnie_id).first()
+                if not selected_compagnie:
+                    errors.append("Compagnie invalide.")
+
+            tr_desc_form = TrDescForm(request.POST, prefix='trdesc_releve', instance=existing_tr_desc)
+            tr_detail_formset = TrDetailFormSet(
+                request.POST,
+                prefix='detail_releve',
+                form_kwargs={'comptes_queryset': comptes_queryset}
+            )
+
+            if not releve:
+                errors.append("Ligne de relevé introuvable.")
             else:
-                # Détecter l'encodage du fichier
-                raw_data = csv_file.file.read(5000)
-                csv_file.file.seek(0)
-                detected = chardet.detect(raw_data)
-                encoding = detected.get('encoding', 'utf-8') or 'utf-8'
+                depot_present = releve.depot is not None and releve.depot != 0
+                retrait_present = releve.retrait is not None and releve.retrait != 0
 
-                text_file = TextIOWrapper(csv_file.file, encoding=encoding)
+                if depot_present and retrait_present:
+                    errors.append("La ligne de relevé contient dépôt et retrait en même temps; impossible de déterminer le sens.")
+                elif not depot_present and not retrait_present:
+                    errors.append("La ligne de relevé ne contient ni dépôt ni retrait.")
 
-                sample = text_file.read(1024)
-                text_file.seek(0)
+                compte_lie = None
+                if releve.compte_releve_id and releve.compte_releve.compte_comptable_id:
+                    compte_lie = releve.compte_releve.compte_comptable
+                else:
+                    compte_lie = _suggest_compte_from_releve(releve)
 
-                try:
-                    dialect = csv.Sniffer().sniff(sample)
-                except csv.Error:
-                    dialect = csv.excel
+                if not compte_lie:
+                    errors.append(
+                        "Aucun compte comptable lié au compte de relevé. Configure `compte_comptable` sur ce compte de relevé."
+                    )
 
-                reader = csv.reader(text_file, dialect=dialect)
-                compte_releve_cache = {}
-
-                for row_num, row in enumerate(reader, 1):
-                    try:
-                        if not row or all(not cell.strip() for cell in row):
+                if not errors and tr_desc_form.is_valid() and tr_detail_formset.is_valid():
+                    detail_rows = []
+                    for detail_form in tr_detail_formset:
+                        cleaned_data = detail_form.cleaned_data
+                        if not cleaned_data:
                             continue
+                        compte = cleaned_data.get('compte')
+                        montant = cleaned_data.get('montant')
+                        if compte and montant is not None:
+                            detail_rows.append((compte, abs(montant)))
 
-                        if len(row) < 12:
-                            errors.append(f"Ligne {row_num}: {len(row)} colonnes trouvées. Données: {row[:3]}")
-                            continue
+                    if not detail_rows:
+                        errors.append("Ajoute au moins une ligne Tr_detail (compte + montant).")
+                    else:
+                        detail_compte_ids = [compte.pk for compte, _ in detail_rows if getattr(compte, 'pk', None) is not None]
+                        compte_ids_releves = set(
+                            CompteReleve.objects.filter(compte_comptable_id__in=detail_compte_ids)
+                            .values_list('compte_comptable_id', flat=True)
+                        )
+                        is_virement_inter_releves = any(compte.pk in compte_ids_releves for compte, _ in detail_rows)
+                        compagnie_ecriture = None if is_virement_inter_releves else selected_compagnie
 
-                        no_compte, nom_institut, type_compte = _detecter_compte_csv(row)
-                        date_str = row[3].strip() if len(row) > 3 else ''
-                        no_ligne = row[4].strip() if len(row) > 4 else ''
-                        description = row[5].strip() if len(row) > 5 else ''
+                        montant_releve = abs(releve.depot) if depot_present else abs(releve.retrait)
+                        total_contrepartie = sum((montant for _, montant in detail_rows), Decimal('0'))
+                        if total_contrepartie != montant_releve:
+                            errors.append(
+                                f"La somme des lignes Tr_detail ({total_contrepartie:.2f}) doit egaler le montant du relevé ({montant_releve:.2f})."
+                            )
+                            return_open = True
+                        else:
+                            return_open = False
 
-                        if not all([no_compte, date_str, no_ligne, description]):
-                            errors.append(f"Ligne {row_num}: Données manquantes")
-                            continue
+                        if return_open:
+                            pass
+                        else:
+                            # Sens comptable:
+                            # - Depot => compte lie au debit (+), lignes modal au credit (-)
+                            # - Retrait => compte lie au credit (-), lignes modal au debit (+)
+                            montant_compte_lie = montant_releve if depot_present else -montant_releve
+                            signe_contrepartie = Decimal('-1') if depot_present else Decimal('1')
 
-                        try:
-                            date_obj = datetime.strptime(date_str, '%Y/%m/%d').date()
-                        except ValueError:
-                            errors.append(f"Ligne {row_num}: Format de date invalide ({date_str})")
-                            continue
+                            with transaction.atomic():
+                                source_nom = ''
+                                if releve.compte_releve_id and releve.compte_releve and releve.compte_releve.nom_affichage:
+                                    source_nom = releve.compte_releve.nom_affichage.strip()
+                                if not source_nom:
+                                    source_nom = f"{(releve.no_compte or '').strip()} {(releve.type_compte or '').strip()}".strip()
+                                if not source_nom:
+                                    source_nom = '0024883 EOP'
 
-                        def _decimal(val):
-                            try:
-                                return Decimal(val.replace(',', '.')) if val else None
-                            except (InvalidOperation, ValueError):
-                                return None
+                                source_releve, _ = Source.objects.get_or_create(nom=source_nom[:15])
+                                tr_desc = tr_desc_form.save(commit=False)
+                                if not tr_desc.no_ej:
+                                    tr_desc.no_ej = _next_no_ej()
+                                tr_desc.source = source_releve
+                                tr_desc.compagnie = compagnie_ecriture
+                                tr_desc.save()
 
-                        # Format banque : col[7]=retrait, col[8]=dépôt, col[13]=solde
-                        # Format VISA   : col[11]=charge (retrait), col[12]=paiement (dépôt négatif)
-                        if type_compte:  # banque
-                            retrait = _decimal(row[7].strip() if len(row) > 7 else '')
-                            depot   = _decimal(row[8].strip() if len(row) > 8 else '')
-                            solde   = _decimal(row[13].strip() if len(row) > 13 else '') or Decimal('0')
-                        else:  # VISA / autre
-                            charge   = _decimal(row[11].strip() if len(row) > 11 else '')
-                            paiement = _decimal(row[12].strip() if len(row) > 12 else '')
-                            retrait  = charge if charge and charge > 0 else None
-                            depot    = abs(paiement) if paiement and paiement < 0 else None
-                            solde    = Decimal('0')
+                                Tr_detail.objects.filter(tr_desc=tr_desc).delete()
 
-                        if no_compte not in compte_releve_cache:
-                            compte_releve_cache[no_compte] = _obtenir_ou_creer_compte_releve(
-                                no_compte, nom_institut, type_compte
+                                Tr_detail.objects.create(
+                                    tr_desc=tr_desc,
+                                    compte=compte_lie,
+                                    montant=montant_compte_lie,
+                                )
+
+                                for compte, montant in detail_rows:
+                                    Tr_detail.objects.create(
+                                        tr_desc=tr_desc,
+                                        compte=compte,
+                                        montant=signe_contrepartie * montant,
+                                    )
+
+                                if releve.compte_releve_id and not releve.compte_releve.compte_comptable_id:
+                                    releve.compte_releve.compte_comptable = compte_lie
+                                    releve.compte_releve.save(update_fields=['compte_comptable'])
+
+                                releve.ecriture_creee = True
+                                releve.ecriture_tr_desc = tr_desc
+                                releve.save(update_fields=['ecriture_creee', 'ecriture_tr_desc'])
+
+                                lignes_liees = []
+                                for compte, montant in detail_rows:
+                                    counterpart = _find_releve_counterpart(releve, compte, montant)
+                                    if not counterpart:
+                                        continue
+                                    if counterpart.ecriture_tr_desc_id and counterpart.ecriture_tr_desc_id != tr_desc.id:
+                                        continue
+
+                                    counterpart.ecriture_creee = True
+                                    counterpart.ecriture_tr_desc = tr_desc
+                                    counterpart.save(update_fields=['ecriture_creee', 'ecriture_tr_desc'])
+                                    lignes_liees.append(str(counterpart.no_ligne or counterpart.id))
+
+                            if existing_tr_desc:
+                                msg = f"✓ Écriture {tr_desc.no_ej} mise à jour pour la ligne #{releve.no_ligne}."
+                            else:
+                                msg = f"✓ Écriture {tr_desc.no_ej} créée pour la ligne #{releve.no_ligne}."
+                            if is_virement_inter_releves:
+                                msg += " Virement inter-relevés: compagnie laissée vide."
+                            if lignes_liees:
+                                msg += f" Contrepartie reliée: ligne(s) {', '.join(lignes_liees)}."
+                            errors.insert(0, msg)
+                            open_releve_modal = False
+                            modal_releve_id = ''
+                            selected_compagnie_id = ''
+                            tr_desc_form = TrDescForm(prefix='trdesc_releve')
+                            tr_detail_formset = TrDetailFormSet(
+                                prefix='detail_releve',
+                                form_kwargs={'comptes_queryset': comptes_queryset}
                             )
 
-                        releve_data = {
-                            'compte_releve': compte_releve_cache[no_compte],
-                            'fichier_source': file_name,
-                            'nom_institut': nom_institut,
-                            'no_compte': no_compte,
-                            'type_compte': type_compte,
-                            'date': date_obj,
-                            'no_ligne': no_ligne,
-                            'description': description,
-                            'retrait': retrait,
-                            'depot': depot,
-                            'solde': solde,
-                        }
+        elif request.FILES.get('csv_file'):
+            csv_file = request.FILES['csv_file']
 
-                        releves.append(releve_data)
+            try:
+                file_name = csv_file.name
 
-                    except Exception as e:
-                        errors.append(f"Ligne {row_num}: Erreur lors du parsing ({str(e)})")
-                        continue
+                # Vérifier si ce fichier a déjà été importé
+                if Releve.objects.filter(fichier_source=file_name).exists():
+                    errors.append(f"⚠ Le fichier « {file_name} » a déjà été importé. Aucune ligne n'a été ajoutée.")
+                else:
+                    # Détecter l'encodage du fichier
+                    raw_data = csv_file.file.read(5000)
+                    csv_file.file.seek(0)
+                    detected = chardet.detect(raw_data)
+                    encoding = detected.get('encoding', 'utf-8') or 'utf-8'
 
-                if releves:
+                    text_file = TextIOWrapper(csv_file.file, encoding=encoding)
+
+                    sample = text_file.read(1024)
+                    text_file.seek(0)
+
                     try:
-                        for data in releves:
-                            Releve.objects.create(**data)
-                        errors.insert(0, f"✓ {len(releves)} ligne(s) ajoutée(s) à la base de données avec succès!")
-                        releves = []
-                    except Exception as e:
-                        errors.append(f"Erreur lors de l'insertion: {str(e)}")
+                        dialect = csv.Sniffer().sniff(sample)
+                    except csv.Error:
+                        dialect = csv.excel
 
-        except Exception as e:
-            errors.append(f"Erreur lors de la lecture du fichier: {str(e)}")
+                    reader = csv.reader(text_file, dialect=dialect)
+                    compte_releve_cache = {}
 
-    mois_selectionne = request.GET.get('mois', '')
+                    for row_num, row in enumerate(reader, 1):
+                        try:
+                            if not row or all(not cell.strip() for cell in row):
+                                continue
+
+                            if len(row) < 12:
+                                errors.append(f"Ligne {row_num}: {len(row)} colonnes trouvées. Données: {row[:3]}")
+                                continue
+
+                            no_compte, nom_institut, type_compte = _detecter_compte_csv(row)
+                            date_str = row[3].strip() if len(row) > 3 else ''
+                            no_ligne = row[4].strip() if len(row) > 4 else ''
+                            description = row[5].strip() if len(row) > 5 else ''
+
+                            if not all([no_compte, date_str, no_ligne, description]):
+                                errors.append(f"Ligne {row_num}: Données manquantes")
+                                continue
+
+                            try:
+                                date_obj = datetime.strptime(date_str, '%Y/%m/%d').date()
+                            except ValueError:
+                                errors.append(f"Ligne {row_num}: Format de date invalide ({date_str})")
+                                continue
+
+                            def _decimal(val):
+                                try:
+                                    return Decimal(val.replace(',', '.')) if val else None
+                                except (InvalidOperation, ValueError):
+                                    return None
+
+                            # Format banque : col[7]=retrait, col[8]=dépôt, col[13]=solde
+                            # Format VISA   : col[11]=charge (retrait), col[12]=paiement (dépôt négatif)
+                            if type_compte:  # banque
+                                retrait = _decimal(row[7].strip() if len(row) > 7 else '')
+                                depot   = _decimal(row[8].strip() if len(row) > 8 else '')
+                                solde   = _decimal(row[13].strip() if len(row) > 13 else '') or Decimal('0')
+                            else:  # VISA / autre
+                                charge   = _decimal(row[11].strip() if len(row) > 11 else '')
+                                paiement = _decimal(row[12].strip() if len(row) > 12 else '')
+                                retrait  = charge if charge and charge > 0 else None
+                                depot    = abs(paiement) if paiement and paiement < 0 else None
+                                solde    = Decimal('0')
+
+                            cache_key = (no_compte, type_compte)
+                            if cache_key not in compte_releve_cache:
+                                compte_releve_cache[cache_key] = _obtenir_ou_creer_compte_releve(
+                                    no_compte, nom_institut, type_compte
+                                )
+
+                            releve_data = {
+                                'compte_releve': compte_releve_cache[cache_key],
+                                'fichier_source': file_name,
+                                'nom_institut': nom_institut,
+                                'no_compte': no_compte,
+                                'type_compte': type_compte,
+                                'date': date_obj,
+                                'no_ligne': no_ligne,
+                                'description': description,
+                                'retrait': retrait,
+                                'depot': depot,
+                                'solde': solde,
+                                'ecriture_creee': False,
+                            }
+
+                            releves.append(releve_data)
+
+                        except Exception as e:
+                            errors.append(f"Ligne {row_num}: Erreur lors du parsing ({str(e)})")
+                            continue
+
+                    if releves:
+                        try:
+                            for data in releves:
+                                Releve.objects.create(**data)
+                            errors.insert(0, f"✓ {len(releves)} ligne(s) ajoutée(s) à la base de données avec succès!")
+                            releves = []
+                        except Exception as e:
+                            errors.append(f"Erreur lors de l'insertion: {str(e)}")
+
+            except Exception as e:
+                errors.append(f"Erreur lors de la lecture du fichier: {str(e)}")
+
+    _relink_releves_compte_type_mismatch()
+
+    settings_instance = Setting.objects.first()
+    fiscal_period_options = build_fiscal_period_options(settings_instance)
+    fiscal_period_map = {item['value']: item for item in fiscal_period_options}
+
+    selected_periode = (request.GET.get('periode') or '').strip()
+    cookie_periode = (request.COOKIES.get('releve_periode') or '').strip()
+
+    # Compatibilite avec anciens parametres ?mois=MM&annee=YYYY
+    legacy_mois = (request.GET.get('mois') or '').strip()
+    legacy_annee = (request.GET.get('annee') or '').strip()
+    legacy_periode = f"{legacy_annee}-{legacy_mois}" if legacy_mois and legacy_annee else ''
+    if not selected_periode and legacy_periode in fiscal_period_map:
+        selected_periode = legacy_periode
+
+    if not selected_periode and cookie_periode in fiscal_period_map:
+        selected_periode = cookie_periode
+
+    if selected_periode not in fiscal_period_map and fiscal_period_options:
+        selected_periode = fiscal_period_options[0]['value']
+
+    selected_period = fiscal_period_map.get(selected_periode, {})
+    mois_selectionne = selected_period.get('mois', '')
+    annee_selectionnee = selected_period.get('annee', '')
+    periode_label = selected_period.get('label', '')
+
     comptes_releves = CompteReleve.objects.order_by('type_onglet', 'nom_affichage')
 
     # Construire les données par compte pour l'affichage dans les onglets
-    releves_qs = Releve.objects.select_related('compte_releve').order_by('date', 'no_ligne')
-    if mois_selectionne:
+    releves_qs = Releve.objects.select_related(
+        'compte_releve',
+        'compte_releve__compte_comptable',
+        'ecriture_tr_desc',
+        'ecriture_tr_desc__compagnie',
+    ).prefetch_related(
+        Prefetch('ecriture_tr_desc__details', queryset=Tr_detail.objects.select_related('compte').order_by('id')),
+    ).order_by('date', 'no_ligne')
+    if annee_selectionnee.isdigit():
+        releves_qs = releves_qs.filter(date__year=int(annee_selectionnee))
+    if mois_selectionne.isdigit() and 1 <= int(mois_selectionne) <= 12:
         releves_qs = releves_qs.filter(date__month=int(mois_selectionne))
 
     releves_par_compte = {}
     for compte in comptes_releves:
         releves_list = list(releves_qs.filter(compte_releve=compte))
+
+        for releve in releves_list:
+            suggested_compte = _suggest_compte_from_releve(releve)
+            suggested_montant = _suggest_montant_from_releve(releve)
+            releve.suggested_compte_id = suggested_compte.pk if suggested_compte else ''
+            releve.suggested_compte_label = str(suggested_compte) if suggested_compte else ''
+            releve.suggested_montant = suggested_montant
+            releve.ecriture_date = ''
+            releve.ecriture_description = ''
+            releve.ecriture_compagnie_id = ''
+            releve.ecriture_details_json = '[]'
+
+            tr_desc = releve.ecriture_tr_desc
+            if tr_desc:
+                releve.ecriture_date = tr_desc.date.strftime('%Y-%m-%d') if tr_desc.date else ''
+                releve.ecriture_description = tr_desc.description or ''
+                releve.ecriture_compagnie_id = str(tr_desc.compagnie_id or '')
+
+                detail_rows = []
+                montant_releve = abs(releve.depot) if (releve.depot is not None and releve.depot != 0) else abs(releve.retrait) if (releve.retrait is not None and releve.retrait != 0) else None
+                montant_compte_lie = None
+                if montant_releve is not None:
+                    if releve.depot is not None and releve.depot != 0 and not (releve.retrait is not None and releve.retrait != 0):
+                        montant_compte_lie = montant_releve
+                    elif releve.retrait is not None and releve.retrait != 0 and not (releve.depot is not None and releve.depot != 0):
+                        montant_compte_lie = -montant_releve
+
+                compte_lie_id = None
+                if releve.compte_releve_id and releve.compte_releve and releve.compte_releve.compte_comptable_id:
+                    compte_lie_id = releve.compte_releve.compte_comptable_id
+
+                ligne_compte_lie_ignoree = False
+                for detail in tr_desc.details.all():
+                    if (
+                        not ligne_compte_lie_ignoree
+                        and compte_lie_id
+                        and montant_compte_lie is not None
+                        and detail.compte_id == compte_lie_id
+                        and detail.montant == montant_compte_lie
+                    ):
+                        ligne_compte_lie_ignoree = True
+                        continue
+                    detail_rows.append({
+                        'compte_id': detail.compte_id,
+                        'montant': str(abs(detail.montant or Decimal('0'))),
+                    })
+
+                releve.ecriture_details_json = json.dumps(detail_rows)
         
         # Calculer le solde cumulatif pour les cartes de crédit
         if compte.type_onglet in ['carte_credit', 'marge_credit']:
@@ -954,14 +1387,34 @@ def releve_bancaire(request):
         for type_val, label in types_onglets
     ]
 
-    return render(request, "facture/releve_bancaire.html", {
+    response = render(request, "facture/releve.html", {
         'title': "Relevé bancaire",
         'errors': errors,
+        'open_releve_modal': open_releve_modal,
+        'modal_releve_id': modal_releve_id,
+        'selected_compagnie_id': selected_compagnie_id,
+        'compagnies': compagnies,
+        'selected_periode': selected_periode,
         'mois_selectionne': mois_selectionne,
+        'annee_selectionnee': annee_selectionnee,
+        'periode_label': periode_label,
+        'fiscal_period_options': fiscal_period_options,
+        'tr_desc_form': tr_desc_form,
+        'tr_detail_formset': tr_detail_formset,
         'groupes': groupes,
         'releves_par_compte': releves_par_compte,
         'fichiers_par_compte': fichiers_par_compte,
     })
+
+    if selected_periode:
+        response.set_cookie(
+            'releve_periode',
+            selected_periode,
+            max_age=365 * 24 * 60 * 60,
+            samesite='Lax',
+        )
+
+    return response
 
 
 

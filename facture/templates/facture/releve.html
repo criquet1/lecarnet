@@ -1,0 +1,482 @@
+{% extends "base.html" %}
+{% load facture_extras %}
+{% load l10n %}
+
+{% block title %}Relevés{% endblock %}
+
+{% block body %}
+
+    <div class="d-flex align-items-baseline gap-3 mb-3">
+        <h1 class="mb-0">Relevés bancaires</h1>
+        <form method="get" class="d-inline-flex align-items-center gap-2">
+            <span class="fw-semibold">Période:</span>
+            <select name="periode" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                {% for period in fiscal_period_options %}
+                    <option value="{{ period.value }}" {% if selected_periode == period.value %}selected{% endif %}>{{ period.label }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+    {% if periode_label %}
+        <p class="text-muted mb-3">Période sélectionnée: {{ periode_label }}</p>
+    {% endif %}
+
+    {% if errors %}
+        <div class="alert alert-warning">
+            {% for error in errors %}
+                <div>{{ error }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" id="csvForm" class="mb-4">
+        {% csrf_token %}
+        <div class="form-group mb-3">
+            <label for="csvFile" class="form-label">Choisir un fichier CSV:</label>
+            <input type="file" name="csv_file" id="csvFile" accept=".csv" class="form-control">
+        </div>
+        <button type="submit" class="btn btn-primary">Charger le fichier</button>
+    </form>
+
+    <ul class="nav nav-tabs mb-3" id="releveTabs" role="tablist">
+        {% for groupe in groupes %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if forloop.first %}active{% endif %}"
+                        id="tab-{{ groupe.type_onglet }}"
+                        data-bs-toggle="tab"
+                        data-bs-target="#pane-{{ groupe.type_onglet }}"
+                        type="button" role="tab"
+                        aria-controls="pane-{{ groupe.type_onglet }}"
+                        aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
+                    {{ groupe.label }}
+                </button>
+            </li>
+        {% endfor %}
+    </ul>
+
+    <div class="tab-content" id="releveTabsContent">
+        {% for groupe in groupes %}
+            <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
+                 id="pane-{{ groupe.type_onglet }}"
+                 role="tabpanel"
+                 aria-labelledby="tab-{{ groupe.type_onglet }}">
+
+                {% if groupe.comptes %}
+                    {% for compte in groupe.comptes %}
+                        <h5 class="mt-4 mb-1 text-center">{{ compte.nom_affichage }}</h5>
+                        {% with fichiers=fichiers_par_compte|get_item:compte.pk %}
+                            {% if fichiers %}
+                                <p class="text-muted small mb-2 text-center">
+                                    {% for f in fichiers %}{{ f }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                </p>
+                            {% endif %}
+                        {% endwith %}
+                        {% with lignes=releves_par_compte|get_item:compte.pk %}
+                        {% if lignes %}
+                            <table class="table table-sm table-striped table-hover releve-table mx-auto" style="table-layout:fixed;width:75%">
+                                <colgroup>
+                                    <col style="width:11%">
+                                    <col style="width:8%">
+                                    <col style="width:35%">
+                                    <col style="width:15%">
+                                    <col style="width:15%">
+                                    <col style="width:16%">
+                                </colgroup>
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>No ligne</th>
+                                        <th>Description</th>
+                                        <th class="text-end">Retrait</th>
+                                        <th class="text-end">Dépôt</th>
+                                        <th class="text-end">Solde</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for r in lignes %}
+                                    <tr class="releve-row {% if r.ecriture_creee %}table-success{% endif %}"
+                                        role="button"
+                                        tabindex="0"
+                                        data-releve-id="{{ r.id }}"
+                                        data-compte="{{ compte.nom_affichage|escape }}"
+                                        data-suggested-compte-id="{{ r.suggested_compte_id }}"
+                                        data-suggested-compte-label="{{ r.suggested_compte_label|escape }}"
+                                        data-suggested-montant="{% if r.suggested_montant is not None %}{{ r.suggested_montant }}{% endif %}"
+                                        data-date="{{ r.date|date:'Y-m-d' }}"
+                                        data-no-ligne="{{ r.no_ligne|escape }}"
+                                        data-description="{{ r.description|escape }}"
+                                        data-retrait="{% if r.retrait is not None %}{{ r.retrait|unlocalize }}{% endif %}"
+                                        data-depot="{% if r.depot is not None %}{{ r.depot|unlocalize }}{% endif %}"
+                                        data-debit="{% if r.retrait is not None %}{{ r.retrait|unlocalize }}{% endif %}"
+                                        data-credit="{% if r.depot is not None %}{{ r.depot|unlocalize }}{% endif %}"
+                                        data-solde="{{ r.solde }}"
+                                        data-ecriture-creee="{% if r.ecriture_creee %}1{% else %}0{% endif %}"
+                                        data-no-ej="{% if r.ecriture_tr_desc %}{{ r.ecriture_tr_desc.no_ej }}{% endif %}"
+                                        data-ecriture-date="{{ r.ecriture_date|default:'' }}"
+                                        data-ecriture-description="{{ r.ecriture_description|default:''|escape }}"
+                                        data-ecriture-compagnie-id="{{ r.ecriture_compagnie_id|default:'' }}"
+                                        data-ecriture-details="{{ r.ecriture_details_json|default:'[]'|escape }}">
+                                        <td>{{ r.date }}</td>
+                                        <td>{{ r.no_ligne }}</td>
+                                        <td>{{ r.description }}</td>
+                                        <td class="text-end">{% if r.retrait %}{{ r.retrait }}{% endif %}</td>
+                                        <td class="text-end">{% if r.depot %}{{ r.depot }}{% endif %}</td>
+                                        <td class="text-end">{{ r.solde }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        {% else %}
+                            <p class="text-muted">Aucune donnée{% if periode_label %} pour {{ periode_label }}{% endif %}.</p>
+                        {% endif %}
+                        {% endwith %}
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted mt-3">Aucun compte dans cette catégorie.</p>
+                {% endif %}
+
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="modal fade" id="releveDetailModal" tabindex="-1" aria-labelledby="releveDetailModalLabel" aria-hidden="true" data-open-releve-modal="{{ open_releve_modal|yesno:'1,0' }}" data-modal-releve-id="{{ modal_releve_id|default:''|escape }}">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="releveDetailModalLabel">Détail de la ligne de relevé</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+                <div class="modal-body">
+                    {% if tr_desc_form.non_field_errors %}
+                        <div class="alert alert-danger py-2">
+                            {% for error in tr_desc_form.non_field_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    {% if tr_detail_formset.non_form_errors %}
+                        <div class="alert alert-danger py-2">
+                            {% for error in tr_detail_formset.non_form_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <dl class="row mb-3">
+                        <dt class="col-sm-4">Compte</dt>
+                        <dd class="col-sm-8" id="modal-compte"></dd>
+
+                        <dt class="col-sm-4">Statut écriture</dt>
+                        <dd class="col-sm-8" id="modal-statut-ecriture"></dd>
+
+                        <dt class="col-sm-4">No EJ</dt>
+                        <dd class="col-sm-8" id="modal-no-ej"></dd>
+                    </dl>
+
+                    <form method="post" id="create-ecriture-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="create_ecriture">
+                        <input type="hidden" name="releve_id" id="modal-releve-id" value="{{ modal_releve_id }}">
+
+                        <div class="border rounded p-3 mb-3">
+                            <h6 class="mb-3">Tr_desc</h6>
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    {{ tr_desc_form.date.label_tag }}
+                                    {{ tr_desc_form.date }}
+                                    {% if tr_desc_form.date.errors %}
+                                        <div class="text-danger small mt-1">{{ tr_desc_form.date.errors|join:", " }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-12">
+                                    {{ tr_desc_form.description.label_tag }}
+                                    {{ tr_desc_form.description }}
+                                    {% if tr_desc_form.description.errors %}
+                                        <div class="text-danger small mt-1">{{ tr_desc_form.description.errors|join:", " }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-12">
+                                    <label for="id_compagnie_id" class="form-label">Compagnie (optionnelle)</label>
+                                    <select name="compagnie_id" id="id_compagnie_id" class="form-select">
+                                        <option value="">-- aucune --</option>
+                                        {% for compagnie in compagnies %}
+                                            <option value="{{ compagnie.id }}" {% if selected_compagnie_id == compagnie.id|stringformat:'s' %}selected{% endif %}>{{ compagnie.nom }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="form-text">Pour un virement d'un relevé vers un autre, laissez ce champ vide.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="border rounded p-3">
+                            <h6 class="mb-3">Tr_detail</h6>
+                            {{ tr_detail_formset.management_form }}
+                            <div id="releve-detail-rows">
+                                {% for detail_form in tr_detail_formset %}
+                                    <div class="row g-2 align-items-end mb-2 releve-detail-row {% if forloop.counter > 1 %}d-none{% endif %}">
+                                        <div class="col-md-8">
+                                            <label class="form-label" for="{{ detail_form.compte.id_for_label }}">Compte</label>
+                                            {{ detail_form.compte }}
+                                            {% if detail_form.compte.errors %}
+                                                <div class="text-danger small mt-1">{{ detail_form.compte.errors|join:", " }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label" for="{{ detail_form.montant.id_for_label }}">Montant</label>
+                                            {{ detail_form.montant }}
+                                            {% if detail_form.montant.errors %}
+                                                <div class="text-danger small mt-1">{{ detail_form.montant.errors|join:", " }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="add-releve-detail-row">+ ligne Tr_detail</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" form="create-ecriture-form" class="btn btn-primary" id="modal-create-ecriture-btn">Créer l'écriture</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var modalElement = document.getElementById('releveDetailModal');
+        if (!modalElement) {
+            return;
+        }
+
+        var detailModal = new bootstrap.Modal(modalElement);
+        var addDetailBtn = document.getElementById('add-releve-detail-row');
+        var releveRows = Array.from(document.querySelectorAll('.releve-row'));
+        var detailRows = Array.from(document.querySelectorAll('.releve-detail-row'));
+        var totalFormsInput = document.getElementById('id_detail_releve-TOTAL_FORMS');
+        var totalForms = totalFormsInput ? parseInt(totalFormsInput.value || '0', 10) : detailRows.length;
+        var releveIdInput = document.getElementById('modal-releve-id');
+        var createBtn = document.getElementById('modal-create-ecriture-btn');
+        var statutText = document.getElementById('modal-statut-ecriture');
+        var noEjText = document.getElementById('modal-no-ej');
+        var compagnieSelect = document.getElementById('id_compagnie_id');
+
+        function getField(id) {
+            return document.getElementById(id);
+        }
+
+        function setText(id, value) {
+            var el = getField(id);
+            if (el) {
+                el.textContent = value || '-';
+            }
+        }
+
+        function normalizeAmount(raw) {
+            var value = String(raw || '').trim();
+            if (!value) {
+                return '';
+            }
+            value = value.replace(/\u00A0/g, '');
+            value = value.replace(/\s+/g, '');
+            value = value.replace(',', '.');
+            return value;
+        }
+
+        function getDetailField(index, name) {
+            return getField('id_detail_releve-' + index + '-' + name);
+        }
+
+        function setSelectValue(selectField, rawValue) {
+            if (!selectField) {
+                return false;
+            }
+            var targetValue = String(rawValue || '').trim();
+            if (!targetValue) {
+                selectField.value = '';
+                return false;
+            }
+            if (selectField.value === targetValue) {
+                return true;
+            }
+            for (var i = 0; i < selectField.options.length; i++) {
+                if (String(selectField.options[i].value) === targetValue) {
+                    selectField.selectedIndex = i;
+                    return true;
+                }
+            }
+            selectField.value = '';
+            return false;
+        }
+
+        // Harmonise le style des champs du formset dans ce modal.
+        detailRows.forEach(function (row, idx) {
+            var compteField = row.querySelector('[id$="-compte"]');
+            var montantField = row.querySelector('[id$="-montant"]');
+            if (compteField) {
+                compteField.classList.add('form-select');
+                compteField.classList.add('form-select-sm');
+                compteField.dataset.rowIndex = String(idx);
+            }
+            if (montantField) {
+                montantField.classList.add('form-control-sm');
+                montantField.dataset.rowIndex = String(idx);
+            }
+        });
+
+        function clearDetailRows() {
+            for (var i = 0; i < totalForms; i++) {
+                var compte = getDetailField(i, 'compte');
+                var montant = getDetailField(i, 'montant');
+                var row = detailRows[i];
+                if (compte) {
+                    compte.value = '';
+                }
+                if (montant) {
+                    montant.value = '';
+                }
+                if (row && i >= 1) {
+                    row.classList.add('d-none');
+                }
+            }
+        }
+
+        function prefillFormFromRow(row) {
+            var trDate = getField('id_trdesc_releve-date');
+            var trDescription = getField('id_trdesc_releve-description');
+            var ecritureExiste = row.dataset.ecritureCreee === '1';
+
+            if (compagnieSelect) {
+                compagnieSelect.value = '';
+            }
+
+            if (trDate) {
+                trDate.value = ecritureExiste ? (row.dataset.ecritureDate || '') : (row.dataset.date || '');
+            }
+            if (trDescription) {
+                trDescription.value = ecritureExiste ? (row.dataset.ecritureDescription || '') : (row.dataset.description || '');
+            }
+            if (compagnieSelect && ecritureExiste) {
+                compagnieSelect.value = row.dataset.ecritureCompagnieId || '';
+            }
+
+            clearDetailRows();
+
+            var firstCompte = getDetailField(0, 'compte');
+            var firstMontant = getDetailField(0, 'montant');
+
+            if (ecritureExiste) {
+                var rawDetails = row.dataset.ecritureDetails || '[]';
+                var details = [];
+                try {
+                    details = JSON.parse(rawDetails);
+                } catch (error) {
+                    details = [];
+                }
+
+                details.forEach(function (item, index) {
+                    var detailRow = detailRows[index];
+                    var compteField = getDetailField(index, 'compte');
+                    var montantField = getDetailField(index, 'montant');
+                    if (detailRow) {
+                        detailRow.classList.remove('d-none');
+                    }
+                    if (compteField) {
+                        setSelectValue(compteField, item.compte_id);
+                    }
+                    if (montantField) {
+                        montantField.value = normalizeAmount(item.montant || '');
+                    }
+                });
+
+                if (details.length > 0) {
+                    return;
+                }
+            }
+
+            if (firstCompte) {
+                firstCompte.value = '';
+            }
+            if (firstMontant) {
+                var retraitValue = row.dataset.retrait || '';
+                var depotValue = row.dataset.depot || '';
+                var montantValue = retraitValue || depotValue || row.dataset.suggestedMontant || '';
+                firstMontant.value = normalizeAmount(montantValue);
+            }
+        }
+
+        if (addDetailBtn) {
+            addDetailBtn.addEventListener('click', function () {
+                var hidden = detailRows.find(function (r) { return r.classList.contains('d-none'); });
+                if (hidden) {
+                    hidden.classList.remove('d-none');
+                }
+            });
+        }
+
+        function openDetail(row, preserveFormValues) {
+            setText('modal-compte', row.dataset.compte);
+
+            var ecritureExiste = row.dataset.ecritureCreee === '1';
+            var noEj = row.dataset.noEj || '';
+
+            if (releveIdInput) {
+                releveIdInput.value = row.dataset.releveId || '';
+            }
+
+            if (statutText) {
+                statutText.textContent = ecritureExiste
+                    ? ('Créée (' + (noEj || 'sans no EJ') + ')')
+                    : 'Aucune écriture créée';
+            }
+
+            if (noEjText) {
+                noEjText.textContent = noEj || '-';
+            }
+
+            if (createBtn) {
+                createBtn.disabled = false;
+                createBtn.textContent = ecritureExiste ? "Mettre à jour l'écriture" : "Créer l'écriture";
+            }
+
+            if (!preserveFormValues) {
+                prefillFormFromRow(row);
+            }
+
+            detailModal.show();
+        }
+
+        releveRows.forEach(function (row) {
+            row.style.cursor = 'pointer';
+
+            row.addEventListener('click', function () {
+                openDetail(row, false);
+            });
+
+            row.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    openDetail(row, false);
+                }
+            });
+        });
+
+        var shouldReopen = modalElement.dataset.openReleveModal === '1';
+        var reopenReleveId = modalElement.dataset.modalReleveId || '';
+        if (shouldReopen && reopenReleveId) {
+            var targetRow = releveRows.find(function (row) {
+                return row.dataset.releveId === reopenReleveId;
+            });
+            if (targetRow) {
+                openDetail(targetRow, true);
+            }
+        }
+    });
+</script>
+{% endblock %}

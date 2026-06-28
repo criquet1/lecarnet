@@ -47,7 +47,7 @@ class Tr_desc(models.Model):
     no_ej = models.CharField(max_length=10, blank=False, null=False)
     compagnie = models.ForeignKey(Compagnie, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
     date = models.DateField()
-    description = models.CharField(max_length=30, blank=True, null=True)
+    description = models.CharField(max_length=100, blank=True, null=True)
     source = models.ForeignKey(Source, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
 
     def __str__(self):
@@ -270,6 +270,13 @@ class CompteReleve(models.Model):
     nom_affichage = models.CharField(max_length=60, blank=True)
     type_onglet = models.CharField(max_length=20, choices=TYPE_ONGLET_CHOICES, default='banque')
     nom_institut = models.CharField(max_length=60, blank=True)
+    compte_comptable = models.ForeignKey(
+        Compte,
+        on_delete=models.SET_NULL,
+        related_name='comptes_releves',
+        blank=True,
+        null=True,
+    )
 
     class Meta:
         unique_together = ('no_compte', 'type_compte')
@@ -306,6 +313,14 @@ class Releve(models.Model):
     champ3 = models.CharField(max_length=10, blank=True, null=True)
     champ4 = models.CharField(max_length=10, blank=True, null=True)
     solde = models.DecimalField(max_digits=10, decimal_places=2)
+    ecriture_creee = models.BooleanField(default=False)
+    ecriture_tr_desc = models.ForeignKey(
+        Tr_desc,
+        on_delete=models.SET_NULL,
+        related_name='releves_sources',
+        blank=True,
+        null=True,
+    )
 
     def __str__(self):
         return f"{self.no_compte} {self.type_compte} {self.date} #{self.no_ligne}"

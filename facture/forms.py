@@ -44,7 +44,7 @@ class TrDescForm(forms.ModelForm):
 
 
 class TrDetailForm(forms.Form):
-    compte = forms.ModelChoiceField(queryset=None, required=False, empty_label="Choisir un compte")
+    compte = forms.ModelChoiceField(queryset=None, required=False, empty_label="Choisissez un compte")
     montant = forms.DecimalField(
         max_digits=10,
         decimal_places=2,

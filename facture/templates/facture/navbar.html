@@ -1,5 +1,6 @@
 {% load static %}
 <nav class="navbar navbar-expand-lg sticky-top bg-primary" data-bs-theme="dark">
+  {% with current_url=request.resolver_match.url_name %}
   <div class="container-fluid">
     <a class="navbar-brand" href="{% url 'accueil' %}">
       {% if request.session.logo %}
@@ -16,27 +17,29 @@
     <div class="collapse navbar-collapse" id="navbarNav">
       <ul class="navbar-nav">
         <li class="nav-item">
-          <a class="nav-link active" aria-current="page" href="{% url 'accueil' %}">Accueil</a>
+          <a class="nav-link {% if current_url == 'accueil' %}active{% endif %}" {% if current_url == 'accueil' %}aria-current="page"{% endif %} href="{% url 'accueil' %}">Accueil</a>
         </li>
         <li class="nav-item">
-            <a class="nav-link" href="{% url 'facture' %}">Facture</a>
+            <a class="nav-link {% if current_url == 'facture' %}active{% endif %}" {% if current_url == 'facture' %}aria-current="page"{% endif %} href="{% url 'facture' %}">Facture</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="{% url 'journal_general' %}">Journal général</a>
+          <a class="nav-link {% if current_url == 'releve_bancaire' %}active{% endif %}" {% if current_url == 'releve_bancaire' %}aria-current="page"{% endif %} href="{% url 'releve_bancaire' %}">Relevés</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="{% url 'grand_livre' %}">Grand livre</a>
+          <a class="nav-link {% if current_url == 'journal_general' %}active{% endif %}" {% if current_url == 'journal_general' %}aria-current="page"{% endif %} href="{% url 'journal_general' %}">Journal général</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="{% url 'balance_de_verification' %}">Balance de vérification</a>
+          <a class="nav-link {% if current_url == 'grand_livre' %}active{% endif %}" {% if current_url == 'grand_livre' %}aria-current="page"{% endif %} href="{% url 'grand_livre' %}">Grand livre</a>
         </li>
         <li class="nav-item">
-        <a class="nav-link" href="/">{{ request.session.nom|default:'Le Carnet' }}</a>
+          <a class="nav-link {% if current_url == 'balance_de_verification' %}active{% endif %}" {% if current_url == 'balance_de_verification' %}aria-current="page"{% endif %} href="{% url 'balance_de_verification' %}">Balance de vérification</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link disabled" aria-disabled="true">Disabled</a>
+          <a class="nav-link {% if current_url == 'rapport_de_taxes' %}active{% endif %}" {% if current_url == 'rapport_de_taxes' %}aria-current="page"{% endif %} href="{% url 'rapport_de_taxes' %}">Rapport de taxes</a>
         </li>
       </ul>
+      <span class="navbar-text ms-auto">{{ request.session.nom|default:'Le Carnet' }}</span>
     </div>
   </div>
+  {% endwith %}
 </nav>
