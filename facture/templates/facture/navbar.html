@@ -33,6 +33,17 @@
             <li><a class="dropdown-item {% if current_url == 'grand_livre' %}active{% endif %}" {% if current_url == 'grand_livre' %}aria-current="page"{% endif %} href="{% url 'grand_livre' %}">Grand livre</a></li>
           </ul>
         </li>
+        {% if request.user.is_superuser or request.user|in_group:"expert" %}
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if current_url == 'compte' or current_url == 'settings' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            Administration
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item {% if current_url == 'compte' %}active{% endif %}" {% if current_url == 'compte' %}aria-current="page"{% endif %} href="{% url 'compte' %}">Comptes</a></li>
+            <li><a class="dropdown-item {% if current_url == 'settings' %}active{% endif %}" {% if current_url == 'settings' %}aria-current="page"{% endif %} href="{% url 'settings' %}">Paramètres</a></li>
+          </ul>
+        </li>
+        {% endif %}
       </ul>
       <div class="ms-auto d-flex align-items-center gap-2">
         {% if request.user.is_authenticated %}

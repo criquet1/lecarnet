@@ -16,3 +16,10 @@ def logo_static_path(value):
     if '/' in logo:
         return logo
     return f'images/logos/{logo}'
+
+
+@register.filter
+def in_group(user, group_name):
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    return user.groups.filter(name__iexact=(group_name or '').strip()).exists()

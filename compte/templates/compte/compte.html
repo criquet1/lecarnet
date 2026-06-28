@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+{% load facture_extras %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block body %}
+<h2 class="fw-bold text-center mb-2">{{ title }}</h2>
+
+<div class="row g-4">
+    <div class="col-12 col-lg-4">
+        <div class="border rounded p-3">
+            <h5 class="mb-3">{% if editing_compte %}Modifier{% else %}Créer{% endif %} un compte</h5>
+            <form method="post">
+                {% csrf_token %}
+                {% if editing_compte %}
+                    <input type="hidden" name="editing_numero" value="{{ editing_compte.numero }}">
+                {% endif %}
+                {{ form.non_field_errors }}
+                <div class="mb-3">
+                    <label class="form-label" for="{{ form.numero.id_for_label }}">Numéro</label>
+                    {{ form.numero }}
+                    {{ form.numero.errors }}
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="{{ form.libelle.id_for_label }}">Libellé</label>
+                    {{ form.libelle }}
+                    {{ form.libelle.errors }}
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="{{ form.no_total.id_for_label }}">Total</label>
+                    {{ form.no_total }}
+                    {{ form.no_total.errors }}
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">{% if editing_compte %}Mettre à jour{% else %}Créer{% endif %}</button>
+                    {% if editing_compte %}
+                        <a href="{% url 'compte' %}" class="btn btn-outline-secondary">Annuler</a>
+                    {% endif %}
+                </div>
+                <div class="form-text mt-3">Le solde de départ se modifie directement dans la liste, par double-clic.</div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-8">
+        <div class="border rounded p-3">
+            <div class="mb-3">
+                <label for="id_compte_search" class="form-label">Recherche</label>
+                <input
+                    type="search"
+                    id="id_compte_search"
+                    class="form-control"
+                    placeholder="Rechercher par numéro, libellé ou total"
+                >
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Numéro</th>
+                            <th>Libellé</th>
+                            <th>Total</th>
+                            <th class="text-end">Solde de départ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for compte in comptes %}
+                            <tr class="clickable-row" role="link" tabindex="0" style="cursor: pointer;" data-edit-url="{% url 'compte' %}?edit={{ compte.numero }}">
+                                <td>{{ compte.numero }}</td>
+                                <td>{{ compte.libelle }}</td>
+                                <td>{{ compte.no_total.no_total }} - {{ compte.no_total.desc }}</td>
+                                <td class="text-end font-monospace">
+                                    <span
+                                        class="solde-inline"
+                                        data-compte-id="{{ compte.pk }}"
+                                        data-update-url="{% url 'compte' %}"
+                                        data-value="{{ soldes_par_compte|get_item:compte.pk|floatformat:2 }}"
+                                        title="Double-clique pour modifier"
+                                    >
+                                        {{ soldes_par_compte|get_item:compte.pk|floatformat:2 }}
+                                    </span>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr id="empty-comptes-row">
+                                <td colspan="4" class="text-muted">Aucun compte pour le moment.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var rows = document.querySelectorAll('.clickable-row');
+        var soldeCells = document.querySelectorAll('.solde-inline');
+        var searchInput = document.getElementById('id_compte_search');
+        var emptyRow = document.getElementById('empty-comptes-row');
+
+        function getCookie(name) {
+            var cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                var cookies = document.cookie.split(';');
+                for (var i = 0; i < cookies.length; i++) {
+                    var cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function formatAmount(value) {
+            var amount = Number(value);
+            if (isNaN(amount)) {
+                amount = 0;
+            }
+            return amount.toFixed(2);
+        }
+
+        function makeEditable(cell) {
+            if (cell.querySelector('input')) {
+                return;
+            }
+
+            var compteId = cell.getAttribute('data-compte-id');
+            var updateUrl = cell.getAttribute('data-update-url');
+            var originalValue = cell.getAttribute('data-value') || '0.00';
+            var input = document.createElement('input');
+            input.type = 'number';
+            input.step = '0.01';
+            input.value = originalValue;
+            input.className = 'form-control form-control-sm text-end font-monospace';
+            input.style.minWidth = '120px';
+
+            cell.innerHTML = '';
+            cell.appendChild(input);
+            input.focus();
+            input.select();
+
+            var committed = false;
+
+            function restore(text) {
+                cell.innerHTML = '';
+                cell.textContent = text;
+                cell.setAttribute('data-value', text);
+            }
+
+            function save() {
+                if (committed) {
+                    return;
+                }
+                committed = true;
+
+                var payload = new FormData();
+                payload.append('inline_solde_compte', compteId);
+                payload.append('solde_depart', input.value);
+
+                fetch(updateUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: payload,
+                    credentials: 'same-origin'
+                }).then(function (response) {
+                    return response.json().then(function (data) {
+                        if (!response.ok || !data.ok) {
+                            throw new Error(data.error || 'Erreur lors de la sauvegarde.');
+                        }
+                        restore(formatAmount(data.solde_depart));
+                    });
+                }).catch(function () {
+                    restore(originalValue);
+                });
+            }
+
+            input.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    save();
+                }
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    restore(originalValue);
+                }
+            });
+
+            input.addEventListener('blur', function () {
+                save();
+            });
+
+        }
+
+        for (var k = 0; k < soldeCells.length; k++) {
+            soldeCells[k].addEventListener('dblclick', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                makeEditable(this);
+            });
+        }
+
+        for (var i = 0; i < rows.length; i++) {
+            rows[i].addEventListener('click', function (event) {
+                if (event.target.closest('.solde-inline')) {
+                    return;
+                }
+                var editUrl = this.getAttribute('data-edit-url');
+                if (editUrl) {
+                    window.location.href = editUrl;
+                }
+            });
+            rows[i].addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    if (event.target.closest && event.target.closest('.solde-inline')) {
+                        return;
+                    }
+                    event.preventDefault();
+                    var editUrl = this.getAttribute('data-edit-url');
+                    if (editUrl) {
+                        window.location.href = editUrl;
+                    }
+                }
+            });
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                var query = (searchInput.value || '').toLowerCase().trim();
+                var visibleCount = 0;
+
+                for (var j = 0; j < rows.length; j++) {
+                    var rowText = (rows[j].textContent || '').toLowerCase();
+                    var match = !query || rowText.indexOf(query) !== -1;
+                    rows[j].style.display = match ? '' : 'none';
+                    if (match) {
+                        visibleCount += 1;
+                    }
+                }
+
+                if (emptyRow) {
+                    emptyRow.style.display = visibleCount === 0 ? '' : 'none';
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

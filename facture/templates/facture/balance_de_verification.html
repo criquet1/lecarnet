@@ -4,8 +4,8 @@
 
 {% block body %}
 <h2 class="fw-bold text-center mb-2">{{ title }}</h2>
-{% if site_settings and site_settings.annee_financiere %}
-<h2 class="fw-bold text-center mb-4">Pour l'année au {{ site_settings.annee_financiere|date:"j F Y" }}</h2>
+{% if report_year_label %}
+<h2 class="fw-bold text-center mb-4">{{ report_year_label }}</h2>
 {% endif %}
 
 <div class="mx-auto w-100" style="max-width: 840px;">

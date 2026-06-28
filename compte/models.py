@@ -50,3 +50,20 @@ class Compte(models.Model):
     def __str__(self):
         # Retourne une chaîne de caractères au lieu d'un entier direct
         return f"{self.numero} - {self.libelle}"
+
+
+class SoldeAuxLivres(models.Model):
+    compte = models.OneToOneField(
+        Compte,
+        on_delete=models.CASCADE,
+        related_name='solde_aux_livres',
+    )
+    solde_depart = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    class Meta:
+        verbose_name = "Solde aux livres"
+        verbose_name_plural = "Soldes aux livres"
+        ordering = ['compte__numero']
+
+    def __str__(self):
+        return f"{self.compte.numero} - {self.solde_depart}"

@@ -4,18 +4,15 @@
 
 {% block body %}
 <h2 class="fw-bold text-center mb-2">{{ title }}</h2>
-{% if site_settings and site_settings.annee_financiere %}
-<h2 class="fw-bold text-center mb-4">Pour l'année au {{ site_settings.annee_financiere|date:"j F Y" }}</h2>
+{% if report_year_label %}
+<h2 class="fw-bold text-center mb-4">{{ report_year_label }}</h2>
 {% endif %}
 
 <div class="mx-auto w-100" style="max-width: 980px;">
     <form method="get" class="row g-2 align-items-end mb-3">
         <div class="col-auto">
             <label for="id_mois" class="form-label mb-1">Periode mensuelle</label>
-            <input id="id_mois" type="month" name="mois" class="form-control form-control-sm" value="{{ selected_month_value }}">
-        </div>
-        <div class="col-auto">
-            <button type="submit" class="btn btn-sm btn-primary">Charger</button>
+            <input id="id_mois" type="month" name="mois" class="form-control form-control-sm" value="{{ selected_month_value }}" onchange="this.form.submit()">
         </div>
     </form>
 

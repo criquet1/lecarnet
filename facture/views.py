@@ -1,4 +1,6 @@
 from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -6,6 +8,8 @@ from django.db.models import Prefetch, Sum, Value, DecimalField, Case, When, Int
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from decimal import Decimal, InvalidOperation
+from collections import defaultdict
+from calendar import monthrange
 import re
 import csv
 import json
@@ -13,9 +17,49 @@ from io import TextIOWrapper
 import chardet
 from datetime import datetime
 from facture.models import Compagnie, Tr_desc, Tr_detail, Source, Setting, Releve, RapportTaxes, CompteReleve
-from facture.context_processors import build_fiscal_period_options
+from facture.context_processors import MONTH_LABELS_FR, build_fiscal_period_options
 from facture.forms import CompagnieForm, TrDescForm, TrDetailFormSet
-from compte.models import Compte
+from compte.models import Compte, SoldeAuxLivres
+
+
+def _is_expert(user):
+    return user.is_superuser or user.groups.filter(name__iexact='expert').exists()
+
+
+def expert_required(view_func):
+    @login_required
+    def _wrapped(request, *args, **kwargs):
+        if not _is_expert(request.user):
+            raise PermissionDenied("Accès réservé aux experts.")
+        return view_func(request, *args, **kwargs)
+
+    return _wrapped
+
+
+def _solde_depart_par_compte():
+    return {
+        row['compte_id']: (row['solde_depart'] or Decimal('0'))
+        for row in SoldeAuxLivres.objects.values('compte_id', 'solde_depart')
+    }
+
+
+def _closing_date_label(reference_date, settings_instance=None):
+    if not reference_date:
+        return None
+
+    closing_month = 12
+    closing_day = 31
+    if settings_instance and getattr(settings_instance, 'annee_financiere', None):
+        closing_month = settings_instance.annee_financiere.month
+        closing_day = settings_instance.annee_financiere.day
+
+    closing_year = reference_date.year
+    if (reference_date.month, reference_date.day) > (closing_month, closing_day):
+        closing_year += 1
+
+    closing_day = min(closing_day, monthrange(closing_year, closing_month)[1])
+    month_label = MONTH_LABELS_FR[closing_month].lower()
+    return f"Pour l'année en cours au {closing_day} {month_label} {closing_year}"
 
 
 def index(request):
@@ -55,11 +99,16 @@ def journal_general(request):
 
     journal_entries.sort(key=no_ej_sort_value, reverse=True)
 
+    settings_instance = Setting.objects.first()
+    report_date = max((entry.date for entry in journal_entries if entry.date), default=None)
+    report_year_label = _closing_date_label(report_date, settings_instance)
+
     return render(request, "facture/journal_general.html", {
         'title': "Journal général",
         'journal_entries': journal_entries,
         'total_debit': total_debit,
         'total_credit': total_credit,
+        'report_year_label': report_year_label,
     })
 
 
@@ -73,6 +122,9 @@ def grand_livre(request):
         'tr_desc__compagnie',
         'tr_desc__source'
     ).order_by('compte_id', 'tr_desc__date', 'tr_desc_id', 'id')
+    settings_instance = Setting.objects.first()
+    report_date = details.order_by('-tr_desc__date').values_list('tr_desc__date', flat=True).first()
+    report_year_label = _closing_date_label(report_date, settings_instance)
 
     comptes = []
     grand_total_debit = Decimal('0')
@@ -147,6 +199,7 @@ def grand_livre(request):
         'grand_total_credit': grand_total_credit,
         'grand_total_solde': grand_total_solde,
         'is_balanced': is_balanced,
+        'report_year_label': report_year_label,
     })
 
 
@@ -498,45 +551,38 @@ def facture(request):
 
 def balance_de_verification(request):
     details = Tr_detail.objects.select_related('compte').order_by('compte_id', 'id')
+    settings_instance = Setting.objects.first()
+    report_date = details.order_by('-tr_desc__date').values_list('tr_desc__date', flat=True).first()
+    report_year_label = _closing_date_label(report_date, settings_instance)
+    solde_depart_par_compte = _solde_depart_par_compte()
+    details_par_compte = defaultdict(list)
+    for detail in details:
+        details_par_compte[detail.compte_id].append(detail)
 
     rows = []
-    current_compte_id = None
-    current_compte = None
-    solde = Decimal('0')
 
     total_debit = Decimal('0')
     total_credit = Decimal('0')
 
-    for detail in details:
-        if current_compte_id is None:
-            current_compte_id = detail.compte_id
-            current_compte = detail.compte
+    for compte in Compte.objects.select_related('no_total').order_by('numero'):
+        compte_details = details_par_compte.get(compte.pk, [])
+        solde_depart = solde_depart_par_compte.get(compte.pk, Decimal('0'))
 
-        if detail.compte_id != current_compte_id:
-            debit = solde if solde >= 0 else Decimal('0')
-            credit = abs(solde) if solde < 0 else Decimal('0')
-            rows.append({
-                'compte': current_compte,
-                'debit': debit,
-                'credit': credit,
-            })
-            total_debit += debit
-            total_credit += credit
+        if not compte_details and solde_depart == Decimal('0'):
+            continue
 
-            current_compte_id = detail.compte_id
-            current_compte = detail.compte
-            solde = Decimal('0')
+        solde = solde_depart
+        for detail in compte_details:
+            montant = detail.montant or Decimal('0')
+            solde += montant
 
-        montant = detail.montant or Decimal('0')
-        solde += montant
-
-    if current_compte_id is not None:
         debit = solde if solde >= 0 else Decimal('0')
         credit = abs(solde) if solde < 0 else Decimal('0')
         rows.append({
-            'compte': current_compte,
+            'compte': compte,
             'debit': debit,
             'credit': credit,
+            'solde_depart': solde_depart,
         })
         total_debit += debit
         total_credit += credit
@@ -549,6 +595,7 @@ def balance_de_verification(request):
         'total_debit': total_debit,
         'total_credit': total_credit,
         'is_balanced': is_balanced,
+        'report_year_label': report_year_label,
     })
 
 
@@ -579,6 +626,10 @@ def compte_a_payer(request):
             'tr_desc_id',
             'id',
         )
+
+    settings_instance = Setting.objects.first()
+    report_date = details.order_by('-tr_desc__date').values_list('tr_desc__date', flat=True).first()
+    report_year_label = _closing_date_label(report_date, settings_instance)
 
     rows_by_company = {compagnie.id: [] for compagnie in cap_compagnies}
     soldes_by_company = {compagnie.id: Decimal('0') for compagnie in cap_compagnies}
@@ -624,6 +675,7 @@ def compte_a_payer(request):
         'ecart_solde_cap': ecart_solde_cap,
         'is_solde_cap_coherent': ecart_solde_cap == Decimal('0'),
         'cap_compte': settings_instance.cap if settings_instance else None,
+        'report_year_label': report_year_label,
     })
 
 
@@ -654,6 +706,10 @@ def compte_a_recevoir(request):
             'tr_desc_id',
             'id',
         )
+
+    settings_instance = Setting.objects.first()
+    report_date = details.order_by('-tr_desc__date').values_list('tr_desc__date', flat=True).first()
+    report_year_label = _closing_date_label(report_date, settings_instance)
 
     rows_by_company = {compagnie.id: [] for compagnie in car_compagnies}
     soldes_by_company = {compagnie.id: Decimal('0') for compagnie in car_compagnies}
@@ -699,6 +755,7 @@ def compte_a_recevoir(request):
         'ecart_solde_car': ecart_solde_car,
         'is_solde_car_coherent': ecart_solde_car == Decimal('0'),
         'car_compte': settings_instance.car if settings_instance else None,
+        'report_year_label': report_year_label,
     })
 
 
@@ -903,6 +960,7 @@ def rapport_de_taxes(request):
         'feedback': feedback,
         'error_messages': error_messages,
         'selected_month_value': selected_month_value,
+        'report_year_label': None,
     })
 
 

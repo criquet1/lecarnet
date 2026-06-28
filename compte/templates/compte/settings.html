@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block body %}
+<h2 class="fw-bold text-center mb-4">{{ title }}</h2>
+
+<form method="post" class="row g-4">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    <div class="col-12 col-xl-6">
+        <div class="border rounded p-3 h-100">
+            <h5 class="mb-3">Identité du site</h5>
+            <div class="mb-3">
+                <label class="form-label" for="{{ form.nom.id_for_label }}">Nom</label>
+                {{ form.nom }}
+                {{ form.nom.errors }}
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="{{ form.logo.id_for_label }}">Logo</label>
+                {{ form.logo }}
+                {% if form.logo.help_text %}<div class="form-text">{{ form.logo.help_text }}</div>{% endif %}
+                {{ form.logo.errors }}
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="{{ form.email.id_for_label }}">Courriel</label>
+                {{ form.email }}
+                {{ form.email.errors }}
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="{{ form.phone.id_for_label }}">Téléphone</label>
+                {{ form.phone }}
+                {{ form.phone.errors }}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-6">
+        <div class="border rounded p-3 h-100">
+            <h5 class="mb-3">Adresse</h5>
+            <div class="mb-3">
+                <label class="form-label" for="{{ form.adresse.id_for_label }}">Adresse</label>
+                {{ form.adresse }}
+                {{ form.adresse.errors }}
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="{{ form.ville.id_for_label }}">Ville</label>
+                {{ form.ville }}
+                {{ form.ville.errors }}
+            </div>
+            <div class="row g-3">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="{{ form.code_postal.id_for_label }}">Code postal</label>
+                    {{ form.code_postal }}
+                    {{ form.code_postal.errors }}
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label" for="{{ form.pays.id_for_label }}">Pays</label>
+                    {{ form.pays }}
+                    {{ form.pays.errors }}
+                </div>
+            </div>
+            <div class="row g-3">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label" for="{{ form.fin_annee_jour.id_for_label }}">Jour de fin d'exercice</label>
+                    {{ form.fin_annee_jour }}
+                    {{ form.fin_annee_jour.errors }}
+                </div>
+                <div class="col-md-8 mb-3">
+                    <label class="form-label" for="{{ form.fin_annee_mois.id_for_label }}">Mois de fin d'exercice</label>
+                    {{ form.fin_annee_mois }}
+                    {{ form.fin_annee_mois.errors }}
+                </div>
+            </div>
+            <div class="form-text">La date complète est récurrente: seul le jour et le mois sont saisis.</div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="border rounded p-3">
+            <h5 class="mb-3">Comptes de référence</h5>
+            <div class="row g-3">
+                <div class="col-md-6 col-xl-4">
+                    <label class="form-label" for="{{ form.cap.id_for_label }}">CAP</label>
+                    {{ form.cap }}
+                    {{ form.cap.errors }}
+                </div>
+                <div class="col-md-6 col-xl-4">
+                    <label class="form-label" for="{{ form.car.id_for_label }}">CAR</label>
+                    {{ form.car }}
+                    {{ form.car.errors }}
+                </div>
+                <div class="col-md-6 col-xl-4">
+                    <label class="form-label" for="{{ form.compte_fr_retard.id_for_label }}">Frais de retard</label>
+                    {{ form.compte_fr_retard }}
+                    {{ form.compte_fr_retard.errors }}
+                </div>
+                <div class="col-md-6 col-xl-3">
+                    <label class="form-label" for="{{ form.compte_tps_percue.id_for_label }}">TPS perçue</label>
+                    {{ form.compte_tps_percue }}
+                    {{ form.compte_tps_percue.errors }}
+                </div>
+                <div class="col-md-6 col-xl-3">
+                    <label class="form-label" for="{{ form.compte_tps_payee.id_for_label }}">TPS payée</label>
+                    {{ form.compte_tps_payee }}
+                    {{ form.compte_tps_payee.errors }}
+                </div>
+                <div class="col-md-6 col-xl-3">
+                    <label class="form-label" for="{{ form.compte_tvq_percue.id_for_label }}">TVQ perçue</label>
+                    {{ form.compte_tvq_percue }}
+                    {{ form.compte_tvq_percue.errors }}
+                </div>
+                <div class="col-md-6 col-xl-3">
+                    <label class="form-label" for="{{ form.compte_tvq_payee.id_for_label }}">TVQ payée</label>
+                    {{ form.compte_tvq_payee }}
+                    {{ form.compte_tvq_payee.errors }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 d-flex justify-content-end gap-2">
+        <button type="submit" class="btn btn-primary">Enregistrer</button>
+    </div>
+</form>
+{% endblock %}
