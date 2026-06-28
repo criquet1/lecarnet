@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block body %}
+<h2 class="fw-bold text-center mb-2">{{ title }}</h2>
+{% if site_settings and site_settings.annee_financiere %}
+<h2 class="fw-bold text-center mb-4">Pour l'année au {{ site_settings.annee_financiere|date:"j F Y" }}</h2>
+{% endif %}
+
+<div class="mx-auto w-100" style="max-width: 980px;">
+    <div class="d-flex flex-column gap-3">
+        {% if car_compte %}
+            <div class="border rounded p-3">
+                <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center">
+                    <div>
+                        <div class="fw-semibold">Compte CAR (grand-livre / balance)</div>
+                        <div class="text-muted small">{{ car_compte.numero }} - {{ car_compte.libelle }}</div>
+                    </div>
+                    <div class="text-end">
+                        <div class="small text-muted">Solde du compte CAR</div>
+                        <div class="font-monospace fw-semibold">{{ car_solde_grand_livre|floatformat:2 }}</div>
+                    </div>
+                </div>
+                <div class="mt-2 small {% if is_solde_car_coherent %}text-success{% else %}text-danger{% endif %}">
+                    {% if is_solde_car_coherent %}
+                        Le solde CAR correspond au total des soldes affichés.
+                    {% else %}
+                        Écart détecté entre le total des soldes et le solde global CAR : {{ ecart_solde_car|floatformat:2 }}.
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        {% for block in blocks %}
+            <div class="border rounded p-3">
+                <div class="fw-semibold mb-2">{{ block.compagnie.nom }}</div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped align-middle mb-0" style="table-layout: fixed; width: 100%;">
+                        <colgroup>
+                            <col style="width: 120px;">
+                            <col style="width: 140px;">
+                            <col>
+                            <col style="width: 120px;">
+                            <col style="width: 120px;">
+                            <col style="width: 120px;">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Source</th>
+                                <th>Description</th>
+                                <th class="text-end text-nowrap">Débit</th>
+                                <th class="text-end text-nowrap">Crédit</th>
+                                <th class="text-end text-nowrap">Solde</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in block.rows %}
+                                <tr>
+                                    <td class="text-nowrap">{{ row.date|date:"Y-m-d" }}</td>
+                                    <td>{% if row.source %}{{ row.source.nom }}{% endif %}</td>
+                                    <td class="text-wrap" style="word-break: break-word;">{{ row.description }}</td>
+                                    <td class="text-end text-nowrap font-monospace">{% if row.debit %}{{ row.debit|floatformat:2 }}{% endif %}</td>
+                                    <td class="text-end text-nowrap font-monospace">{% if row.credit %}{{ row.credit|floatformat:2 }}{% endif %}</td>
+                                    <td class="text-end text-nowrap font-monospace">{{ row.solde|floatformat:2 }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-muted">Aucune écriture pour cette compagnie.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% empty %}
+            <div class="alert alert-info mb-0">Aucune compagnie CAR trouvée.</div>
+        {% endfor %}
+
+        {% if blocks %}
+            <div class="border rounded p-3">
+                <table class="table table-sm align-middle mb-0" style="table-layout: fixed; width: 100%;">
+                    <colgroup>
+                        <col style="width: 120px;">
+                        <col style="width: 140px;">
+                        <col>
+                        <col style="width: 120px;">
+                        <col style="width: 120px;">
+                        <col style="width: 120px;">
+                    </colgroup>
+                    <tbody>
+                        <tr>
+                            <th colspan="5" class="text-end">Total des soldes</th>
+                            <th class="text-end text-nowrap font-monospace">{{ total_des_soldes|floatformat:2 }}</th>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

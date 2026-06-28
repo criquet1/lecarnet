@@ -6,7 +6,7 @@
 {% block body %}
 <h2 class="fw-bold text-center mb-2">{{ title }}</h2>
 {% if site_settings and site_settings.annee_financiere %}
-<h2 class="fw-bold text-center mb-4">Pour l'annee au {{ site_settings.annee_financiere|date:"j F Y" }}</h2>
+<h2 class="fw-bold text-center mb-4">Pour l'année au {{ site_settings.annee_financiere|date:"j F Y" }}</h2>
 {% endif %}
 
 <div class="d-flex flex-column gap-3 mx-auto w-100" style="max-width: 840px;">
@@ -21,20 +21,25 @@
 			</div>
 
 			<div class="table-responsive">
-				<table class="table table-sm table-striped align-middle mb-0">
+				<table class="table table-sm table-striped align-middle mb-0" style="table-layout: fixed; width: 100%;">
+					<colgroup>
+						<col>
+						<col style="width: 130px;">
+						<col style="width: 130px;">
+					</colgroup>
 					<thead>
 						<tr>
 							<th>Compte</th>
-							<th class="text-end">Débit</th>
-							<th class="text-end">Crédit</th>
+							<th class="text-end text-nowrap">Débit</th>
+							<th class="text-end text-nowrap">Crédit</th>
 						</tr>
 					</thead>
 					<tbody>
 						{% for detail in entry.details.all %}
 							<tr>
 								<td>{{ detail.compte.numero }} - {{ detail.compte.libelle }}</td>
-								<td class="text-end">{% if detail.montant >= 0 %}{{ detail.montant }}{% endif %}</td>
-								<td class="text-end">{% if detail.montant < 0 %}{{ detail.montant|floatformat:2|slice:"1:" }}{% endif %}</td>
+								<td class="text-end text-nowrap font-monospace">{% if detail.montant >= 0 %}{{ detail.montant|floatformat:2 }}{% endif %}</td>
+								<td class="text-end text-nowrap font-monospace">{% if detail.montant < 0 %}{{ detail.montant|floatformat:2|slice:"1:" }}{% endif %}</td>
 							</tr>
 						{% empty %}
 							<tr>
@@ -48,6 +53,23 @@
 	{% empty %}
 		<div class="text-center text-muted">Aucune écriture pour le moment.</div>
 	{% endfor %}
+
+	<div class="border rounded p-3">
+		<table class="table table-sm align-middle mb-0" style="table-layout: fixed; width: 100%;">
+			<colgroup>
+				<col>
+				<col style="width: 130px;">
+				<col style="width: 130px;">
+			</colgroup>
+			<tbody>
+				<tr>
+					<th>Totaux généraux</th>
+					<th class="text-end text-nowrap font-monospace">{{ total_debit|floatformat:2 }}</th>
+					<th class="text-end text-nowrap font-monospace">{{ total_credit|floatformat:2 }}</th>
+				</tr>
+			</tbody>
+		</table>
+	</div>
 </div>
 
 

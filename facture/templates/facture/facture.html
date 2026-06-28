@@ -238,6 +238,7 @@
             var TVQ_RATE = 0.09975;
             var activeCompteTpsId = 0;
             var activeCompteTvqId = 0;
+            var activeCompanyComptes = [];
             var editedInvoiceId = null;
 
             function parseAmount(value) {
@@ -331,6 +332,20 @@
                     option.textContent = comptes[i].label;
                     select.appendChild(option);
                 }
+            }
+
+            function syncHiddenCompteFromSelect(row) {
+                if (!row) {
+                    return;
+                }
+
+                var hiddenCompte = row.querySelector('input[type="hidden"][name$="-compte"]');
+                var select = row.querySelector('.compte-select');
+                if (!hiddenCompte || !select) {
+                    return;
+                }
+
+                hiddenCompte.value = select.value || '';
             }
 
             function highlightEditedInvoiceLine() {
@@ -486,6 +501,7 @@
                 editedInvoiceId = null;
                 activeCompteTpsId = 0;
                 activeCompteTvqId = 0;
+                activeCompanyComptes = [];
 
                 if (invoiceModalLabel) {
                     invoiceModalLabel.textContent = 'Créer une facture';
@@ -665,6 +681,7 @@
                     var companiesComptes = companiesComptesRaw ? JSON.parse(companiesComptesRaw) : {};
 
                     var comptes = companiesComptes[companyId] || [];
+                    activeCompanyComptes = comptes;
                     var compteHiddenInputs = document.querySelectorAll('input[type="hidden"][name$="-compte"]');
                     var compteSelects = document.querySelectorAll('.compte-select');
                     var compteLabels = document.querySelectorAll('.compte-label');
@@ -765,11 +782,13 @@
 
                     if (select) {
                         fillCompteSelect(select, allComptes);
-                        select.style.display = 'none';
+                        select.style.display = '';
                         select.value = '';
+                        syncHiddenCompteFromSelect(rowToShow);
                     }
 
                     if (label) {
+                        label.style.display = 'none';
                         label.innerHTML = '&nbsp;';
                     }
 
@@ -793,6 +812,10 @@
                     var rows = invoiceForm.querySelectorAll('.invoice-detail-row');
                     for (var i = 0; i < rows.length; i++) {
                         var row = rows[i];
+                        var selectCompte = row.querySelector('.compte-select');
+                        if (selectCompte && selectCompte.style.display !== 'none') {
+                            syncHiddenCompteFromSelect(row);
+                        }
                         var montantInput = row.querySelector('input[name$="-montant"]');
                         var compteInput = row.querySelector('input[type="hidden"][name$="-compte"]');
                         
@@ -802,6 +825,18 @@
                             compteInput.value = '';
                         }
                     }
+                });
+            }
+
+            if (invoiceModal) {
+                invoiceModal.addEventListener('change', function (event) {
+                    var target = event.target;
+                    if (!target || !target.classList || !target.classList.contains('compte-select')) {
+                        return;
+                    }
+
+                    var row = target.closest('.invoice-detail-row');
+                    syncHiddenCompteFromSelect(row);
                 });
             }
         });

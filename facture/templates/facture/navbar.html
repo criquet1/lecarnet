@@ -1,15 +1,10 @@
-{% load static %}
+{% load static facture_extras %}
 <nav class="navbar navbar-expand-lg sticky-top bg-primary" data-bs-theme="dark">
   {% with current_url=request.resolver_match.url_name %}
   <div class="container-fluid">
     <a class="navbar-brand" href="{% url 'accueil' %}">
-      {% if request.session.logo %}
-        <img src="{% static request.session.logo %}" alt="Le Carnet" style="max-height: 40px;">
-      {% elif site_settings and site_settings.logo %}
-        <img src="{% static site_settings.logo %}" alt="Le Carnet" style="max-height: 40px;">
-      {% else %}
-        <img src="{% static 'images/logos/images.png' %}" alt="Le Carnet" style="max-height: 40px;">
-      {% endif %}
+      {% firstof request.session.logo site_settings.logo '' as logo_value %}
+      <img src="{% static logo_value|logo_static_path %}" alt="Le Carnet" style="max-height: 40px;">
     </a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
@@ -25,17 +20,18 @@
         <li class="nav-item">
           <a class="nav-link {% if current_url == 'releve_bancaire' %}active{% endif %}" {% if current_url == 'releve_bancaire' %}aria-current="page"{% endif %} href="{% url 'releve_bancaire' %}">Relevés</a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link {% if current_url == 'journal_general' %}active{% endif %}" {% if current_url == 'journal_general' %}aria-current="page"{% endif %} href="{% url 'journal_general' %}">Journal général</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if current_url == 'grand_livre' %}active{% endif %}" {% if current_url == 'grand_livre' %}aria-current="page"{% endif %} href="{% url 'grand_livre' %}">Grand livre</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if current_url == 'balance_de_verification' %}active{% endif %}" {% if current_url == 'balance_de_verification' %}aria-current="page"{% endif %} href="{% url 'balance_de_verification' %}">Balance de vérification</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if current_url == 'rapport_de_taxes' %}active{% endif %}" {% if current_url == 'rapport_de_taxes' %}aria-current="page"{% endif %} href="{% url 'rapport_de_taxes' %}">Rapport de taxes</a>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if current_url == 'rapport_de_taxes' or current_url == 'journal_general' or current_url == 'balance_de_verification' or current_url == 'grand_livre' or current_url == 'compte_a_payer' or current_url == 'compte_a_recevoir' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            Rapports
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item {% if current_url == 'compte_a_payer' %}active{% endif %}" {% if current_url == 'compte_a_payer' %}aria-current="page"{% endif %} href="{% url 'compte_a_payer' %}">Comptes à payer</a></li>
+            <li><a class="dropdown-item {% if current_url == 'compte_a_recevoir' %}active{% endif %}" {% if current_url == 'compte_a_recevoir' %}aria-current="page"{% endif %} href="{% url 'compte_a_recevoir' %}">Comptes à recevoir</a></li>
+            <li><a class="dropdown-item {% if current_url == 'rapport_de_taxes' %}active{% endif %}" {% if current_url == 'rapport_de_taxes' %}aria-current="page"{% endif %} href="{% url 'rapport_de_taxes' %}">Rapport de taxes</a></li>
+            <li><a class="dropdown-item {% if current_url == 'journal_general' %}active{% endif %}" {% if current_url == 'journal_general' %}aria-current="page"{% endif %} href="{% url 'journal_general' %}">Journal général</a></li>
+            <li><a class="dropdown-item {% if current_url == 'balance_de_verification' %}active{% endif %}" {% if current_url == 'balance_de_verification' %}aria-current="page"{% endif %} href="{% url 'balance_de_verification' %}">Balance de vérification</a></li>
+            <li><a class="dropdown-item {% if current_url == 'grand_livre' %}active{% endif %}" {% if current_url == 'grand_livre' %}aria-current="page"{% endif %} href="{% url 'grand_livre' %}">Grand livre</a></li>
+          </ul>
         </li>
       </ul>
       <span class="navbar-text ms-auto">{{ request.session.nom|default:'Le Carnet' }}</span>

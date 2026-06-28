@@ -5,7 +5,7 @@
 {% block body %}
 <h2 class="fw-bold text-center mb-2">{{ title }}</h2>
 {% if site_settings and site_settings.annee_financiere %}
-<h2 class="fw-bold text-center mb-4">Pour l'annee au {{ site_settings.annee_financiere|date:"j F Y" }}</h2>
+<h2 class="fw-bold text-center mb-4">Pour l'année au {{ site_settings.annee_financiere|date:"j F Y" }}</h2>
 {% endif %}
 
 <div class="mx-auto w-100" style="max-width: 980px;">
@@ -100,8 +100,20 @@
                                         <th class="text-end">{{ block.total_payee|floatformat:2 }}</th>
                                     </tr>
                                     <tr>
-                                        <th colspan="3" class="text-end">Solde a reclamer</th>
-                                        <th colspan="2" class="text-end">{{ block.solde_a_reclamer|floatformat:2 }}</th>
+                                        <th colspan="3" class="text-end">
+                                            {% if block.solde_a_reclamer < 0 %}
+                                                Montant a payer
+                                            {% else %}
+                                                Montant a reclamer
+                                            {% endif %}
+                                        </th>
+                                        <th colspan="2" class="text-end">
+                                            {% if block.solde_a_reclamer < 0 %}
+                                                ({{ block.solde_a_reclamer|floatformat:2|slice:"1:" }})
+                                            {% else %}
+                                                {{ block.solde_a_reclamer|floatformat:2 }}
+                                            {% endif %}
+                                        </th>
                                     </tr>
                                 </tfoot>
                             </table>

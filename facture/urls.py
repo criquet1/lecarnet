@@ -9,5 +9,7 @@ urlpatterns = [
     path('journal-general/', views.journal_general, name='journal_general'),
     path('grand-livre/', views.grand_livre, name='grand_livre'),
     path('balance-de-verification/', views.balance_de_verification, name='balance_de_verification'),
+    path('compte-a-payer/', views.compte_a_payer, name='compte_a_payer'),
+    path('compte-a-recevoir/', views.compte_a_recevoir, name='compte_a_recevoir'),
     path('rapport-de-taxes/', views.rapport_de_taxes, name='rapport_de_taxes'),
 ]

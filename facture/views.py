@@ -31,16 +31,35 @@ def journal_general(request):
         )
     ).order_by('debit_first', 'compte_id', 'id')
 
-    journal_entries = Tr_desc.objects.select_related(
+    total_debit = Decimal('0')
+    total_credit = Decimal('0')
+    for montant in Tr_detail.objects.values_list('montant', flat=True):
+        amount = montant or Decimal('0')
+        if amount >= 0:
+            total_debit += amount
+        else:
+            total_credit += abs(amount)
+
+    journal_entries = list(Tr_desc.objects.select_related(
         'compagnie',
         'source'
     ).prefetch_related(
         Prefetch('details', queryset=details_queryset)
-    ).order_by('-date', '-id')
+    ))
+
+    def no_ej_sort_value(entry):
+        match = re.match(r'^EJ(\d+)$', entry.no_ej or '')
+        if match:
+            return int(match.group(1))
+        return -1
+
+    journal_entries.sort(key=no_ej_sort_value, reverse=True)
 
     return render(request, "facture/journal_general.html", {
         'title': "Journal général",
         'journal_entries': journal_entries,
+        'total_debit': total_debit,
+        'total_credit': total_credit,
     })
 
 
@@ -483,8 +502,7 @@ def balance_de_verification(request):
     rows = []
     current_compte_id = None
     current_compte = None
-    debit = Decimal('0')
-    credit = Decimal('0')
+    solde = Decimal('0')
 
     total_debit = Decimal('0')
     total_credit = Decimal('0')
@@ -495,6 +513,8 @@ def balance_de_verification(request):
             current_compte = detail.compte
 
         if detail.compte_id != current_compte_id:
+            debit = solde if solde >= 0 else Decimal('0')
+            credit = abs(solde) if solde < 0 else Decimal('0')
             rows.append({
                 'compte': current_compte,
                 'debit': debit,
@@ -505,16 +525,14 @@ def balance_de_verification(request):
 
             current_compte_id = detail.compte_id
             current_compte = detail.compte
-            debit = Decimal('0')
-            credit = Decimal('0')
+            solde = Decimal('0')
 
         montant = detail.montant or Decimal('0')
-        if montant >= 0:
-            debit += montant
-        else:
-            credit += abs(montant)
+        solde += montant
 
     if current_compte_id is not None:
+        debit = solde if solde >= 0 else Decimal('0')
+        credit = abs(solde) if solde < 0 else Decimal('0')
         rows.append({
             'compte': current_compte,
             'debit': debit,
@@ -531,6 +549,156 @@ def balance_de_verification(request):
         'total_debit': total_debit,
         'total_credit': total_credit,
         'is_balanced': is_balanced,
+    })
+
+
+def compte_a_payer(request):
+    settings_instance = Setting.objects.select_related('cap').first()
+    cap_compte_id = settings_instance.cap_id if settings_instance else None
+    cap_solde_grand_livre = Decimal('0')
+    if cap_compte_id:
+        cap_solde_grand_livre = Tr_detail.objects.filter(
+            compte_id=cap_compte_id,
+        ).aggregate(total=Sum('montant')).get('total') or Decimal('0')
+
+    cap_compagnies = Compagnie.objects.filter(
+        cap_ou_car=Compagnie.MODE_CAP,
+    ).order_by('nom')
+
+    details = Tr_detail.objects.none()
+    if cap_compte_id:
+        details = Tr_detail.objects.select_related(
+            'tr_desc__compagnie',
+            'tr_desc__source',
+        ).filter(
+            tr_desc__compagnie__cap_ou_car=Compagnie.MODE_CAP,
+            compte_id=cap_compte_id,
+        ).order_by(
+            'tr_desc__compagnie__nom',
+            'tr_desc__date',
+            'tr_desc_id',
+            'id',
+        )
+
+    rows_by_company = {compagnie.id: [] for compagnie in cap_compagnies}
+    soldes_by_company = {compagnie.id: Decimal('0') for compagnie in cap_compagnies}
+
+    for detail in details:
+        compagnie_id = detail.tr_desc.compagnie_id
+        if compagnie_id not in rows_by_company:
+            continue
+
+        montant = detail.montant or Decimal('0')
+        debit = montant if montant >= 0 else Decimal('0')
+        credit = abs(montant) if montant < 0 else Decimal('0')
+
+        soldes_by_company[compagnie_id] += montant
+
+        rows_by_company[compagnie_id].append({
+            'date': detail.tr_desc.date,
+            'source': detail.tr_desc.source,
+            'description': detail.tr_desc.description,
+            'debit': debit,
+            'credit': credit,
+            'solde': soldes_by_company[compagnie_id],
+        })
+
+    blocks = []
+    total_des_soldes = Decimal('0')
+    for compagnie in cap_compagnies:
+        company_solde = soldes_by_company.get(compagnie.id, Decimal('0'))
+        total_des_soldes += company_solde
+        blocks.append({
+            'compagnie': compagnie,
+            'rows': rows_by_company.get(compagnie.id, []),
+            'solde_final': company_solde,
+        })
+
+    ecart_solde_cap = total_des_soldes - cap_solde_grand_livre
+
+    return render(request, "facture/compte_a_payer.html", {
+        'title': "Comptes à payer",
+        'blocks': blocks,
+        'total_des_soldes': total_des_soldes,
+        'cap_solde_grand_livre': cap_solde_grand_livre,
+        'ecart_solde_cap': ecart_solde_cap,
+        'is_solde_cap_coherent': ecart_solde_cap == Decimal('0'),
+        'cap_compte': settings_instance.cap if settings_instance else None,
+    })
+
+
+def compte_a_recevoir(request):
+    settings_instance = Setting.objects.select_related('car').first()
+    car_compte_id = settings_instance.car_id if settings_instance else None
+    car_solde_grand_livre = Decimal('0')
+    if car_compte_id:
+        car_solde_grand_livre = Tr_detail.objects.filter(
+            compte_id=car_compte_id,
+        ).aggregate(total=Sum('montant')).get('total') or Decimal('0')
+
+    car_compagnies = Compagnie.objects.filter(
+        cap_ou_car=Compagnie.MODE_CAR,
+    ).order_by('nom')
+
+    details = Tr_detail.objects.none()
+    if car_compte_id:
+        details = Tr_detail.objects.select_related(
+            'tr_desc__compagnie',
+            'tr_desc__source',
+        ).filter(
+            tr_desc__compagnie__cap_ou_car=Compagnie.MODE_CAR,
+            compte_id=car_compte_id,
+        ).order_by(
+            'tr_desc__compagnie__nom',
+            'tr_desc__date',
+            'tr_desc_id',
+            'id',
+        )
+
+    rows_by_company = {compagnie.id: [] for compagnie in car_compagnies}
+    soldes_by_company = {compagnie.id: Decimal('0') for compagnie in car_compagnies}
+
+    for detail in details:
+        compagnie_id = detail.tr_desc.compagnie_id
+        if compagnie_id not in rows_by_company:
+            continue
+
+        montant = detail.montant or Decimal('0')
+        debit = montant if montant >= 0 else Decimal('0')
+        credit = abs(montant) if montant < 0 else Decimal('0')
+
+        soldes_by_company[compagnie_id] += montant
+
+        rows_by_company[compagnie_id].append({
+            'date': detail.tr_desc.date,
+            'source': detail.tr_desc.source,
+            'description': detail.tr_desc.description,
+            'debit': debit,
+            'credit': credit,
+            'solde': soldes_by_company[compagnie_id],
+        })
+
+    blocks = []
+    total_des_soldes = Decimal('0')
+    for compagnie in car_compagnies:
+        company_solde = soldes_by_company.get(compagnie.id, Decimal('0'))
+        total_des_soldes += company_solde
+        blocks.append({
+            'compagnie': compagnie,
+            'rows': rows_by_company.get(compagnie.id, []),
+            'solde_final': company_solde,
+        })
+
+    ecart_solde_car = total_des_soldes - car_solde_grand_livre
+
+    return render(request, "facture/compte_a_recevoir.html", {
+        'title': "Comptes à recevoir",
+        'blocks': blocks,
+        'total_des_soldes': total_des_soldes,
+        'car_solde_grand_livre': car_solde_grand_livre,
+        'ecart_solde_car': ecart_solde_car,
+        'is_solde_car_coherent': ecart_solde_car == Decimal('0'),
+        'car_compte': settings_instance.car if settings_instance else None,
     })
 
 
