@@ -34,7 +34,17 @@
           </ul>
         </li>
       </ul>
-      <span class="navbar-text ms-auto">{{ request.session.nom|default:'Le Carnet' }}</span>
+      <div class="ms-auto d-flex align-items-center gap-2">
+        {% if request.user.is_authenticated %}
+          <span class="navbar-text">{{ request.user.username }}</span>
+          <form method="post" action="{% url 'logout' %}" class="m-0">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-light btn-sm">Logout</button>
+          </form>
+        {% else %}
+          <a class="btn btn-outline-light btn-sm" href="{% url 'login' %}">Login</a>
+        {% endif %}
+      </div>
     </div>
   </div>
   {% endwith %}
