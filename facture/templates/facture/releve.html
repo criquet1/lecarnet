@@ -29,6 +29,23 @@
         </div>
     {% endif %}
 
+    {% if unlinked_comptes_with_lines %}
+        <div class="alert alert-danger border border-danger border-2 shadow-sm" role="alert">
+            <h5 class="alert-heading mb-2">Action requise: comptes de relevé non associés</h5>
+            <p class="mb-2">
+                {{ unlinked_comptes_with_lines|length }} compte(s) chargé(s) dans cette période ne sont pas liés à un compte comptable.
+                Tant que ce lien n'est pas fait, la création d'écriture échouera.
+            </p>
+            <p class="mb-2"><strong>Comptes à lier:</strong></p>
+            <ul class="mb-3">
+                {% for c in unlinked_comptes_with_lines %}
+                    <li>{{ c.nom_affichage }}{% if c.no_compte %} ({{ c.no_compte }} {{ c.type_compte }}){% endif %}</li>
+                {% endfor %}
+            </ul>
+            <a class="btn btn-danger" href="{% url 'compte' %}">Aller lier les comptes maintenant</a>
+        </div>
+    {% endif %}
+
     <form method="post" enctype="multipart/form-data" id="csvForm" class="mb-4">
         {% csrf_token %}
         <div class="form-group mb-3">

@@ -1,15 +1,13 @@
 from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import transaction, connections, DatabaseError
 from django.db.models import Prefetch, Sum, Value, DecimalField, Case, When, IntegerField, F
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from decimal import Decimal, InvalidOperation
-from collections import defaultdict
 from calendar import monthrange
+from types import SimpleNamespace
 import re
 import csv
 import json
@@ -19,21 +17,8 @@ from datetime import datetime
 from facture.models import Compagnie, Tr_desc, Tr_detail, Source, Setting, Releve, RapportTaxes, CompteReleve
 from facture.context_processors import MONTH_LABELS_FR, build_fiscal_period_options
 from facture.forms import CompagnieForm, TrDescForm, TrDetailFormSet
+from facture.utils import expert_required, get_setting, parse_decimal, split_debit_credit
 from compte.models import Compte, SoldeAuxLivres
-
-
-def _is_expert(user):
-    return user.is_superuser or user.groups.filter(name__iexact='expert').exists()
-
-
-def expert_required(view_func):
-    @login_required
-    def _wrapped(request, *args, **kwargs):
-        if not _is_expert(request.user):
-            raise PermissionDenied("Accès réservé aux experts.")
-        return view_func(request, *args, **kwargs)
-
-    return _wrapped
 
 
 def _solde_depart_par_compte():
@@ -41,6 +26,152 @@ def _solde_depart_par_compte():
         row['compte_id']: (row['solde_depart'] or Decimal('0'))
         for row in SoldeAuxLivres.objects.values('compte_id', 'solde_depart')
     }
+
+
+def _aggregate_debit_credit(details_qs):
+    total_debit = details_qs.filter(montant__gte=0).aggregate(
+        total=Coalesce(
+            Sum('montant'),
+            Value(0),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        )
+    ).get('total') or Decimal('0')
+
+    total_credit_raw = details_qs.filter(montant__lt=0).aggregate(
+        total=Coalesce(
+            Sum('montant'),
+            Value(0),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        )
+    ).get('total') or Decimal('0')
+
+    return total_debit, abs(total_credit_raw)
+
+
+def _ledger_db_alias():
+    return Tr_detail.objects.all().db
+
+
+def _fetch_balance_rows_from_sql_view():
+    db_alias = _ledger_db_alias()
+    query = """
+        SELECT
+            compte_id,
+            compte_numero,
+            compte_libelle,
+            solde_depart,
+            debit,
+            credit
+        FROM facture_v_balance_verification
+        ORDER BY compte_numero
+    """
+
+    rows = []
+    with connections[db_alias].cursor() as cursor:
+        cursor.execute(query)
+        for compte_id, compte_numero, compte_libelle, solde_depart, debit, credit in cursor.fetchall():
+            rows.append({
+                'compte': SimpleNamespace(
+                    pk=compte_id,
+                    numero=compte_numero,
+                    libelle=compte_libelle,
+                ),
+                'debit': debit or Decimal('0'),
+                'credit': credit or Decimal('0'),
+                'solde_depart': solde_depart or Decimal('0'),
+            })
+
+    total_debit = sum((row['debit'] for row in rows), Decimal('0'))
+    total_credit = sum((row['credit'] for row in rows), Decimal('0'))
+    return rows, total_debit, total_credit
+
+
+def _fetch_grand_livre_from_sql_view():
+    db_alias = _ledger_db_alias()
+    query = """
+        SELECT
+            compte_id,
+            compte_numero,
+            compte_libelle,
+            tr_date,
+            no_ej,
+            compagnie_nom,
+            tr_description,
+            source_nom,
+            debit,
+            credit,
+            solde
+        FROM facture_v_grand_livre_lignes
+        ORDER BY compte_numero, tr_date, no_ej, tr_desc_id, tr_detail_id
+    """
+
+    comptes = []
+    grand_total_debit = Decimal('0')
+    grand_total_credit = Decimal('0')
+    current_compte_id = None
+    current_block = None
+
+    with connections[db_alias].cursor() as cursor:
+        cursor.execute(query)
+        for (
+            compte_id,
+            compte_numero,
+            compte_libelle,
+            tr_date,
+            no_ej,
+            compagnie_nom,
+            tr_description,
+            source_nom,
+            debit,
+            credit,
+            solde,
+        ) in cursor.fetchall():
+            if current_compte_id != compte_id:
+                if current_block is not None:
+                    comptes.append(current_block)
+
+                numero = compte_numero or 0
+                current_compte_id = compte_id
+                current_block = {
+                    'compte': SimpleNamespace(
+                        pk=compte_id,
+                        numero=compte_numero,
+                        libelle=compte_libelle,
+                    ),
+                    'is_bilan': 1000 <= numero <= 3999,
+                    'entries': [],
+                    'total_debit': Decimal('0'),
+                    'total_credit': Decimal('0'),
+                    'solde': Decimal('0'),
+                }
+
+            debit = debit or Decimal('0')
+            credit = credit or Decimal('0')
+            solde = solde or Decimal('0')
+
+            current_block['entries'].append({
+                'date': tr_date,
+                'no_ej': no_ej,
+                'compagnie': SimpleNamespace(nom=compagnie_nom) if compagnie_nom else None,
+                'description': tr_description,
+                'source': SimpleNamespace(nom=source_nom) if source_nom else None,
+                'debit': debit,
+                'credit': credit,
+                'solde': solde,
+            })
+            current_block['total_debit'] += debit
+            current_block['total_credit'] += credit
+            current_block['solde'] = solde
+            grand_total_debit += debit
+            grand_total_credit += credit
+
+    if current_block is not None:
+        comptes.append(current_block)
+
+    grand_total_solde = grand_total_debit - grand_total_credit
+    is_balanced = (grand_total_debit == grand_total_credit) and (grand_total_solde == Decimal('0'))
+
+    return comptes, grand_total_debit, grand_total_credit, grand_total_solde, is_balanced
 
 
 def _closing_date_label(reference_date, settings_instance=None):
@@ -75,14 +206,7 @@ def journal_general(request):
         )
     ).order_by('debit_first', 'compte_id', 'id')
 
-    total_debit = Decimal('0')
-    total_credit = Decimal('0')
-    for montant in Tr_detail.objects.values_list('montant', flat=True):
-        amount = montant or Decimal('0')
-        if amount >= 0:
-            total_debit += amount
-        else:
-            total_credit += abs(amount)
+    total_debit, total_credit = _aggregate_debit_credit(Tr_detail.objects.all())
 
     journal_entries = list(Tr_desc.objects.select_related(
         'compagnie',
@@ -99,7 +223,7 @@ def journal_general(request):
 
     journal_entries.sort(key=no_ej_sort_value, reverse=True)
 
-    settings_instance = Setting.objects.first()
+    settings_instance = get_setting()
     report_date = max((entry.date for entry in journal_entries if entry.date), default=None)
     report_year_label = _closing_date_label(report_date, settings_instance)
 
@@ -113,35 +237,76 @@ def journal_general(request):
 
 
 def grand_livre(request):
-    def is_bilan_account(compte):
-        numero = getattr(compte, 'numero', None)
-        return numero is not None and 1000 <= numero <= 3999
-
-    details = Tr_detail.objects.select_related(
-        'compte',
-        'tr_desc__compagnie',
-        'tr_desc__source'
-    ).order_by('compte_id', 'tr_desc__date', 'tr_desc_id', 'id')
-    settings_instance = Setting.objects.first()
-    report_date = details.order_by('-tr_desc__date').values_list('tr_desc__date', flat=True).first()
+    settings_instance = get_setting()
+    report_date = Tr_desc.objects.order_by('-date').values_list('date', flat=True).first()
     report_year_label = _closing_date_label(report_date, settings_instance)
+    try:
+        comptes, grand_total_debit, grand_total_credit, grand_total_solde, is_balanced = _fetch_grand_livre_from_sql_view()
+    except DatabaseError:
+        # Fallback temporaire tant que la migration SQL view n'est pas appliquee.
+        def is_bilan_account(compte):
+            numero = getattr(compte, 'numero', None)
+            return numero is not None and 1000 <= numero <= 3999
 
-    comptes = []
-    grand_total_debit = Decimal('0')
-    grand_total_credit = Decimal('0')
-    current_compte_id = None
-    current_compte = None
-    current_entries = []
-    total_debit = Decimal('0')
-    total_credit = Decimal('0')
-    solde = Decimal('0')
+        details = Tr_detail.objects.select_related(
+            'compte',
+            'tr_desc__compagnie',
+            'tr_desc__source'
+        ).order_by('compte_id', 'tr_desc__date', 'tr_desc_id', 'id')
 
-    for detail in details:
-        if current_compte_id is None:
-            current_compte_id = detail.compte_id
-            current_compte = detail.compte
+        comptes = []
+        grand_total_debit = Decimal('0')
+        grand_total_credit = Decimal('0')
+        current_compte_id = None
+        current_compte = None
+        current_entries = []
+        total_debit = Decimal('0')
+        total_credit = Decimal('0')
+        solde = Decimal('0')
 
-        if detail.compte_id != current_compte_id:
+        for detail in details:
+            if current_compte_id is None:
+                current_compte_id = detail.compte_id
+                current_compte = detail.compte
+
+            if detail.compte_id != current_compte_id:
+                comptes.append({
+                    'compte': current_compte,
+                    'is_bilan': is_bilan_account(current_compte),
+                    'entries': current_entries,
+                    'total_debit': total_debit,
+                    'total_credit': total_credit,
+                    'solde': solde,
+                })
+
+                current_compte_id = detail.compte_id
+                current_compte = detail.compte
+                current_entries = []
+                total_debit = Decimal('0')
+                total_credit = Decimal('0')
+                solde = Decimal('0')
+
+            montant = detail.montant or Decimal('0')
+            debit, credit = split_debit_credit(montant)
+
+            total_debit += debit
+            total_credit += credit
+            solde += montant
+            grand_total_debit += debit
+            grand_total_credit += credit
+
+            current_entries.append({
+                'date': detail.tr_desc.date,
+                'no_ej': detail.tr_desc.no_ej,
+                'compagnie': detail.tr_desc.compagnie,
+                'description': detail.tr_desc.description,
+                'source': detail.tr_desc.source,
+                'debit': debit,
+                'credit': credit,
+                'solde': solde,
+            })
+
+        if current_compte_id is not None:
             comptes.append({
                 'compte': current_compte,
                 'is_bilan': is_bilan_account(current_compte),
@@ -151,46 +316,8 @@ def grand_livre(request):
                 'solde': solde,
             })
 
-            current_compte_id = detail.compte_id
-            current_compte = detail.compte
-            current_entries = []
-            total_debit = Decimal('0')
-            total_credit = Decimal('0')
-            solde = Decimal('0')
-
-        montant = detail.montant or Decimal('0')
-        debit = montant if montant >= 0 else Decimal('0')
-        credit = abs(montant) if montant < 0 else Decimal('0')
-
-        total_debit += debit
-        total_credit += credit
-        solde += montant
-        grand_total_debit += debit
-        grand_total_credit += credit
-
-        current_entries.append({
-            'date': detail.tr_desc.date,
-            'no_ej': detail.tr_desc.no_ej,
-            'compagnie': detail.tr_desc.compagnie,
-            'description': detail.tr_desc.description,
-            'source': detail.tr_desc.source,
-            'debit': debit,
-            'credit': credit,
-            'solde': solde,
-        })
-
-    if current_compte_id is not None:
-        comptes.append({
-            'compte': current_compte,
-            'is_bilan': is_bilan_account(current_compte),
-            'entries': current_entries,
-            'total_debit': total_debit,
-            'total_credit': total_credit,
-            'solde': solde,
-        })
-
-    grand_total_solde = grand_total_debit - grand_total_credit
-    is_balanced = (grand_total_debit == grand_total_credit) and (grand_total_solde == Decimal('0'))
+        grand_total_solde = grand_total_debit - grand_total_credit
+        is_balanced = (grand_total_debit == grand_total_credit) and (grand_total_solde == Decimal('0'))
 
     return render(request, "facture/grand_livre.html", {
         'title': "Grand livre",
@@ -226,7 +353,7 @@ def _company_invoices_queryset(company):
 
 
 def _serialize_invoice(tr):
-    settings_instance = Setting.objects.first()
+    settings_instance = get_setting()
     company_mode = (getattr(tr.compagnie, 'cap_ou_car', '') or '').strip().upper()
     forced_compte_id = None
     if settings_instance:
@@ -265,10 +392,7 @@ def _serialize_invoice(tr):
 
 
 def _parse_facture_total(raw_value):
-    normalized = str(raw_value or '').strip().replace(' ', '').replace(',', '.')
-    if not normalized:
-        return Decimal('0')
-    return Decimal(normalized)
+    return parse_decimal(raw_value, strip_spaces=True)
 
 
 def company_invoices_api(request, company_id):
@@ -550,42 +674,48 @@ def facture(request):
 
 
 def balance_de_verification(request):
-    details = Tr_detail.objects.select_related('compte').order_by('compte_id', 'id')
-    settings_instance = Setting.objects.first()
-    report_date = details.order_by('-tr_desc__date').values_list('tr_desc__date', flat=True).first()
+    settings_instance = get_setting()
+    report_date = Tr_desc.objects.order_by('-date').values_list('date', flat=True).first()
     report_year_label = _closing_date_label(report_date, settings_instance)
-    solde_depart_par_compte = _solde_depart_par_compte()
-    details_par_compte = defaultdict(list)
-    for detail in details:
-        details_par_compte[detail.compte_id].append(detail)
+    try:
+        rows, total_debit, total_credit = _fetch_balance_rows_from_sql_view()
+    except DatabaseError:
+        # Fallback temporaire tant que la migration SQL view n'est pas appliquee.
+        details_qs = Tr_detail.objects.all()
+        solde_depart_par_compte = _solde_depart_par_compte()
+        total_par_compte = dict(
+            details_qs.values('compte_id').annotate(
+                total=Coalesce(
+                    Sum('montant'),
+                    Value(0),
+                    output_field=DecimalField(max_digits=14, decimal_places=2),
+                )
+            ).values_list('compte_id', 'total')
+        )
 
-    rows = []
+        rows = []
+        total_debit = Decimal('0')
+        total_credit = Decimal('0')
 
-    total_debit = Decimal('0')
-    total_credit = Decimal('0')
+        for compte in Compte.objects.select_related('no_total').order_by('numero'):
+            solde_depart = solde_depart_par_compte.get(compte.pk, Decimal('0'))
+            total_mouvements = total_par_compte.get(compte.pk, Decimal('0'))
 
-    for compte in Compte.objects.select_related('no_total').order_by('numero'):
-        compte_details = details_par_compte.get(compte.pk, [])
-        solde_depart = solde_depart_par_compte.get(compte.pk, Decimal('0'))
+            if total_mouvements == Decimal('0') and solde_depart == Decimal('0'):
+                continue
 
-        if not compte_details and solde_depart == Decimal('0'):
-            continue
+            solde = solde_depart + total_mouvements
 
-        solde = solde_depart
-        for detail in compte_details:
-            montant = detail.montant or Decimal('0')
-            solde += montant
-
-        debit = solde if solde >= 0 else Decimal('0')
-        credit = abs(solde) if solde < 0 else Decimal('0')
-        rows.append({
-            'compte': compte,
-            'debit': debit,
-            'credit': credit,
-            'solde_depart': solde_depart,
-        })
-        total_debit += debit
-        total_credit += credit
+            debit = solde if solde >= 0 else Decimal('0')
+            credit = abs(solde) if solde < 0 else Decimal('0')
+            rows.append({
+                'compte': compte,
+                'debit': debit,
+                'credit': credit,
+                'solde_depart': solde_depart,
+            })
+            total_debit += debit
+            total_credit += credit
 
     is_balanced = total_debit == total_credit
 
@@ -600,7 +730,7 @@ def balance_de_verification(request):
 
 
 def compte_a_payer(request):
-    settings_instance = Setting.objects.select_related('cap').first()
+    settings_instance = get_setting()
     cap_compte_id = settings_instance.cap_id if settings_instance else None
     cap_solde_grand_livre = Decimal('0')
     if cap_compte_id:
@@ -627,7 +757,6 @@ def compte_a_payer(request):
             'id',
         )
 
-    settings_instance = Setting.objects.first()
     report_date = details.order_by('-tr_desc__date').values_list('tr_desc__date', flat=True).first()
     report_year_label = _closing_date_label(report_date, settings_instance)
 
@@ -680,7 +809,7 @@ def compte_a_payer(request):
 
 
 def compte_a_recevoir(request):
-    settings_instance = Setting.objects.select_related('car').first()
+    settings_instance = get_setting()
     car_compte_id = settings_instance.car_id if settings_instance else None
     car_solde_grand_livre = Decimal('0')
     if car_compte_id:
@@ -707,7 +836,6 @@ def compte_a_recevoir(request):
             'id',
         )
 
-    settings_instance = Setting.objects.first()
     report_date = details.order_by('-tr_desc__date').values_list('tr_desc__date', flat=True).first()
     report_year_label = _closing_date_label(report_date, settings_instance)
 
@@ -772,7 +900,7 @@ def rapport_de_taxes(request):
             pass
         return None, None, None
 
-    settings_instance = Setting.objects.first()
+    settings_instance = get_setting()
     tps_percue_id = None
     tps_payee_id = None
     tvq_percue_id = None
@@ -1194,6 +1322,105 @@ def _find_releve_counterpart(current_releve, compte_cible, montant_cible):
     return scored[0][3]
 
 
+def _import_releve_csv(csv_file):
+    errors = []
+
+    file_name = csv_file.name
+    if Releve.objects.filter(fichier_source=file_name).exists():
+        errors.append(f"⚠ Le fichier « {file_name} » a déjà été importé. Aucune ligne n'a été ajoutée.")
+        return errors
+
+    raw_data = csv_file.file.read(5000)
+    csv_file.file.seek(0)
+    detected = chardet.detect(raw_data)
+    encoding = detected.get('encoding', 'utf-8') or 'utf-8'
+
+    text_file = TextIOWrapper(csv_file.file, encoding=encoding)
+    sample = text_file.read(1024)
+    text_file.seek(0)
+
+    try:
+        dialect = csv.Sniffer().sniff(sample)
+    except csv.Error:
+        dialect = csv.excel
+
+    reader = csv.reader(text_file, dialect=dialect)
+    releves = []
+    compte_releve_cache = {}
+
+    for row_num, row in enumerate(reader, 1):
+        try:
+            if not row or all(not cell.strip() for cell in row):
+                continue
+
+            if len(row) < 12:
+                errors.append(f"Ligne {row_num}: {len(row)} colonnes trouvées. Données: {row[:3]}")
+                continue
+
+            no_compte, nom_institut, type_compte = _detecter_compte_csv(row)
+            date_str = row[3].strip() if len(row) > 3 else ''
+            no_ligne = row[4].strip() if len(row) > 4 else ''
+            description = row[5].strip() if len(row) > 5 else ''
+
+            if not all([no_compte, date_str, no_ligne, description]):
+                errors.append(f"Ligne {row_num}: Données manquantes")
+                continue
+
+            try:
+                date_obj = datetime.strptime(date_str, '%Y/%m/%d').date()
+            except ValueError:
+                errors.append(f"Ligne {row_num}: Format de date invalide ({date_str})")
+                continue
+
+            if type_compte:
+                retrait = parse_decimal(row[7] if len(row) > 7 else '', none_if_blank=True)
+                depot = parse_decimal(row[8] if len(row) > 8 else '', none_if_blank=True)
+                solde = parse_decimal(row[13] if len(row) > 13 else '', none_if_blank=False) or Decimal('0')
+            else:
+                charge = parse_decimal(row[11] if len(row) > 11 else '', none_if_blank=True)
+                paiement = parse_decimal(row[12] if len(row) > 12 else '', none_if_blank=True)
+                retrait = charge if charge and charge > 0 else None
+                depot = abs(paiement) if paiement and paiement < 0 else None
+                solde = Decimal('0')
+
+            cache_key = (no_compte, type_compte)
+            if cache_key not in compte_releve_cache:
+                compte_releve_cache[cache_key] = _obtenir_ou_creer_compte_releve(
+                    no_compte, nom_institut, type_compte
+                )
+
+            releve_data = {
+                'compte_releve': compte_releve_cache[cache_key],
+                'fichier_source': file_name,
+                'nom_institut': nom_institut,
+                'no_compte': no_compte,
+                'type_compte': type_compte,
+                'date': date_obj,
+                'no_ligne': no_ligne,
+                'description': description,
+                'retrait': retrait,
+                'depot': depot,
+                'solde': solde,
+                'ecriture_creee': False,
+            }
+
+            releves.append(releve_data)
+
+        except Exception as exc:
+            errors.append(f"Ligne {row_num}: Erreur lors du parsing ({str(exc)})")
+            continue
+
+    if releves:
+        try:
+            for data in releves:
+                Releve.objects.create(**data)
+            errors.insert(0, f"✓ {len(releves)} ligne(s) ajoutée(s) à la base de données avec succès!")
+        except Exception as exc:
+            errors.append(f"Erreur lors de l'insertion: {str(exc)}")
+
+    return errors
+
+
 def releve_bancaire(request):
     releves = []
     errors = []
@@ -1370,116 +1597,13 @@ def releve_bancaire(request):
             csv_file = request.FILES['csv_file']
 
             try:
-                file_name = csv_file.name
-
-                # Vérifier si ce fichier a déjà été importé
-                if Releve.objects.filter(fichier_source=file_name).exists():
-                    errors.append(f"⚠ Le fichier « {file_name} » a déjà été importé. Aucune ligne n'a été ajoutée.")
-                else:
-                    # Détecter l'encodage du fichier
-                    raw_data = csv_file.file.read(5000)
-                    csv_file.file.seek(0)
-                    detected = chardet.detect(raw_data)
-                    encoding = detected.get('encoding', 'utf-8') or 'utf-8'
-
-                    text_file = TextIOWrapper(csv_file.file, encoding=encoding)
-
-                    sample = text_file.read(1024)
-                    text_file.seek(0)
-
-                    try:
-                        dialect = csv.Sniffer().sniff(sample)
-                    except csv.Error:
-                        dialect = csv.excel
-
-                    reader = csv.reader(text_file, dialect=dialect)
-                    compte_releve_cache = {}
-
-                    for row_num, row in enumerate(reader, 1):
-                        try:
-                            if not row or all(not cell.strip() for cell in row):
-                                continue
-
-                            if len(row) < 12:
-                                errors.append(f"Ligne {row_num}: {len(row)} colonnes trouvées. Données: {row[:3]}")
-                                continue
-
-                            no_compte, nom_institut, type_compte = _detecter_compte_csv(row)
-                            date_str = row[3].strip() if len(row) > 3 else ''
-                            no_ligne = row[4].strip() if len(row) > 4 else ''
-                            description = row[5].strip() if len(row) > 5 else ''
-
-                            if not all([no_compte, date_str, no_ligne, description]):
-                                errors.append(f"Ligne {row_num}: Données manquantes")
-                                continue
-
-                            try:
-                                date_obj = datetime.strptime(date_str, '%Y/%m/%d').date()
-                            except ValueError:
-                                errors.append(f"Ligne {row_num}: Format de date invalide ({date_str})")
-                                continue
-
-                            def _decimal(val):
-                                try:
-                                    return Decimal(val.replace(',', '.')) if val else None
-                                except (InvalidOperation, ValueError):
-                                    return None
-
-                            # Format banque : col[7]=retrait, col[8]=dépôt, col[13]=solde
-                            # Format VISA   : col[11]=charge (retrait), col[12]=paiement (dépôt négatif)
-                            if type_compte:  # banque
-                                retrait = _decimal(row[7].strip() if len(row) > 7 else '')
-                                depot   = _decimal(row[8].strip() if len(row) > 8 else '')
-                                solde   = _decimal(row[13].strip() if len(row) > 13 else '') or Decimal('0')
-                            else:  # VISA / autre
-                                charge   = _decimal(row[11].strip() if len(row) > 11 else '')
-                                paiement = _decimal(row[12].strip() if len(row) > 12 else '')
-                                retrait  = charge if charge and charge > 0 else None
-                                depot    = abs(paiement) if paiement and paiement < 0 else None
-                                solde    = Decimal('0')
-
-                            cache_key = (no_compte, type_compte)
-                            if cache_key not in compte_releve_cache:
-                                compte_releve_cache[cache_key] = _obtenir_ou_creer_compte_releve(
-                                    no_compte, nom_institut, type_compte
-                                )
-
-                            releve_data = {
-                                'compte_releve': compte_releve_cache[cache_key],
-                                'fichier_source': file_name,
-                                'nom_institut': nom_institut,
-                                'no_compte': no_compte,
-                                'type_compte': type_compte,
-                                'date': date_obj,
-                                'no_ligne': no_ligne,
-                                'description': description,
-                                'retrait': retrait,
-                                'depot': depot,
-                                'solde': solde,
-                                'ecriture_creee': False,
-                            }
-
-                            releves.append(releve_data)
-
-                        except Exception as e:
-                            errors.append(f"Ligne {row_num}: Erreur lors du parsing ({str(e)})")
-                            continue
-
-                    if releves:
-                        try:
-                            for data in releves:
-                                Releve.objects.create(**data)
-                            errors.insert(0, f"✓ {len(releves)} ligne(s) ajoutée(s) à la base de données avec succès!")
-                            releves = []
-                        except Exception as e:
-                            errors.append(f"Erreur lors de l'insertion: {str(e)}")
-
+                errors.extend(_import_releve_csv(csv_file))
             except Exception as e:
                 errors.append(f"Erreur lors de la lecture du fichier: {str(e)}")
 
     _relink_releves_compte_type_mismatch()
 
-    settings_instance = Setting.objects.first()
+    settings_instance = get_setting()
     fiscal_period_options = build_fiscal_period_options(settings_instance)
     fiscal_period_map = {item['value']: item for item in fiscal_period_options}
 
@@ -1519,6 +1643,14 @@ def releve_bancaire(request):
         releves_qs = releves_qs.filter(date__year=int(annee_selectionnee))
     if mois_selectionne.isdigit() and 1 <= int(mois_selectionne) <= 12:
         releves_qs = releves_qs.filter(date__month=int(mois_selectionne))
+
+    compte_releve_ids_with_lines = set(
+        releves_qs.values_list('compte_releve_id', flat=True).distinct()
+    )
+    unlinked_comptes_with_lines = [
+        compte for compte in comptes_releves
+        if compte.compte_comptable_id is None and compte.pk in compte_releve_ids_with_lines
+    ]
 
     releves_par_compte = {}
     for compte in comptes_releves:
@@ -1616,6 +1748,7 @@ def releve_bancaire(request):
     response = render(request, "facture/releve.html", {
         'title': "Relevé bancaire",
         'errors': errors,
+        'unlinked_comptes_with_lines': unlinked_comptes_with_lines,
         'open_releve_modal': open_releve_modal,
         'modal_releve_id': modal_releve_id,
         'selected_compagnie_id': selected_compagnie_id,

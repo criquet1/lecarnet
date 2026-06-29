@@ -123,6 +123,12 @@ class Tr_detail(models.Model):
         null=True,
     )
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['compte', 'tr_desc', 'id'], name='facture_trd_compte_trd_id_idx'),
+            models.Index(fields=['tr_desc', 'id'], name='facture_trd_trd_id_idx'),
+        ]
+
     def _tax_account_ids(self):
         settings_instance = Setting.objects.first()
         if not settings_instance:

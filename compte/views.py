@@ -1,57 +1,18 @@
-import csv
-import io
-from functools import wraps
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 
-from facture.models import Compagnie, CompagnieSoldeDepart, Setting, CompteReleve
+from facture.models import Compagnie, CompagnieSoldeDepart, CompteReleve
+from facture.utils import expert_required, get_settings, parse_decimal, read_csv_rows
 
 from .forms import CompteCsvImportForm, CompteForm, SettingForm
 from .models import Compte, SoldeAuxLivres, Total
 
 
-def _is_expert(user):
-	return user.is_superuser or user.groups.filter(name__iexact='expert').exists()
-
-
-def expert_required(view_func):
-	@wraps(view_func)
-	@login_required
-	def _wrapped(request, *args, **kwargs):
-		if not _is_expert(request.user):
-			raise PermissionDenied("Accès réservé aux experts.")
-		return view_func(request, *args, **kwargs)
-
-	return _wrapped
-
-
-def _decode_csv_bytes(raw_bytes):
-	for encoding in ('utf-8-sig', 'cp1252', 'latin-1'):
-		try:
-			return raw_bytes.decode(encoding)
-		except UnicodeDecodeError:
-			continue
-	raise UnicodeDecodeError('csv', b'', 0, 1, 'Encodage non supporte')
-
-
 def _read_csv_rows(raw_bytes):
-	text = _decode_csv_bytes(raw_bytes)
-	sample = text[:4096]
-	delimiter = ','
-	try:
-		dialect = csv.Sniffer().sniff(sample, delimiters=',;\t')
-		delimiter = dialect.delimiter
-	except csv.Error:
-		delimiter = ','
-
-	stream = io.StringIO(text)
-	reader = csv.DictReader(stream, delimiter=delimiter)
-	return list(reader)
+	return read_csv_rows(raw_bytes)
 
 
 def _import_comptes_csv(csv_file):
@@ -67,65 +28,109 @@ def _import_comptes_csv(csv_file):
 		report['errors'].append('Le fichier CSV ne contient aucune ligne de donnees.')
 		return report
 
+	parsed_rows = []
+	for idx, row in enumerate(rows, start=2):
+		numero_raw = (row.get('numero') or row.get('compte_no') or '').strip()
+		libelle = (row.get('libelle') or row.get('compte_libelle') or '').strip()
+		no_total_raw = (row.get('no_total') or row.get('compte_total') or '').strip()
+
+		if not numero_raw and not libelle and not no_total_raw:
+			continue
+
+		try:
+			numero = int(numero_raw)
+		except ValueError:
+			report['skipped'] += 1
+			report['errors'].append(f'Ligne {idx}: numero invalide ({numero_raw}).')
+			continue
+
+		if not libelle:
+			report['skipped'] += 1
+			report['errors'].append(f'Ligne {idx}: libelle manquant.')
+			continue
+
+		try:
+			no_total = int(no_total_raw)
+		except ValueError:
+			report['skipped'] += 1
+			report['errors'].append(f'Ligne {idx}: no_total invalide ({no_total_raw}).')
+			continue
+
+		parsed_rows.append((numero, libelle, no_total))
+
+	if not parsed_rows:
+		return report
+
 	with transaction.atomic():
-		for idx, row in enumerate(rows, start=2):
-			numero_raw = (row.get('numero') or row.get('compte_no') or '').strip()
-			libelle = (row.get('libelle') or row.get('compte_libelle') or '').strip()
-			no_total_raw = (row.get('no_total') or row.get('compte_total') or '').strip()
+		unique_totals = sorted({no_total for _, _, no_total in parsed_rows})
+		totals_map = Total.objects.in_bulk(unique_totals, field_name='no_total')
 
-			if not numero_raw and not libelle and not no_total_raw:
-				continue
-
-			try:
-				numero = int(numero_raw)
-			except ValueError:
-				report['skipped'] += 1
-				report['errors'].append(f'Ligne {idx}: numero invalide ({numero_raw}).')
-				continue
-
-			if not libelle:
-				report['skipped'] += 1
-				report['errors'].append(f'Ligne {idx}: libelle manquant.')
-				continue
-
-			try:
-				no_total = int(no_total_raw)
-			except ValueError:
-				report['skipped'] += 1
-				report['errors'].append(f'Ligne {idx}: no_total invalide ({no_total_raw}).')
-				continue
-
-			total, _ = Total.objects.get_or_create(
+		missing_totals = [
+			Total(
 				no_total=no_total,
-				defaults={'desc': 'Sans total' if no_total == 0 else f'Total {no_total}'},
+				desc='Sans total' if no_total == 0 else f'Total {no_total}',
 			)
+			for no_total in unique_totals
+			if no_total not in totals_map
+		]
+		if missing_totals:
+			Total.objects.bulk_create(missing_totals)
+			totals_map = Total.objects.in_bulk(unique_totals, field_name='no_total')
 
-			compte, created = Compte.objects.update_or_create(
-				numero=numero,
-				defaults={'libelle': libelle, 'no_total': total},
-			)
-			if created:
-				report['created'] += 1
+		unique_numeros = sorted({numero for numero, _, _ in parsed_rows})
+		existing_comptes = Compte.objects.in_bulk(unique_numeros, field_name='numero')
+
+		to_create = []
+		to_update = []
+		for numero, libelle, no_total in parsed_rows:
+			total_obj = totals_map.get(no_total)
+			if total_obj is None:
+				report['skipped'] += 1
+				report['errors'].append(f'Ligne compte {numero}: total introuvable ({no_total}).')
+				continue
+
+			existing = existing_comptes.get(numero)
+			if existing is None:
+				to_create.append(
+					Compte(
+						numero=numero,
+						libelle=libelle,
+						no_total=total_obj,
+					)
+				)
 			else:
-				report['updated'] += 1
+				existing.libelle = libelle
+				existing.no_total = total_obj
+				to_update.append(existing)
 
-			SoldeAuxLivres.objects.get_or_create(
-				compte=compte,
-				defaults={'solde_depart': Decimal('0')},
-			)
+		if to_create:
+			Compte.objects.bulk_create(to_create)
+		if to_update:
+			Compte.objects.bulk_update(to_update, ['libelle', 'no_total'])
+
+		report['created'] += len(to_create)
+		report['updated'] += len(to_update)
+
+		all_compte_ids = set(unique_numeros)
+		existing_solde_ids = set(
+			SoldeAuxLivres.objects.filter(compte_id__in=all_compte_ids).values_list('compte_id', flat=True)
+		)
+		missing_solde_ids = [
+			SoldeAuxLivres(compte_id=compte_id, solde_depart=Decimal('0'))
+			for compte_id in sorted(all_compte_ids - existing_solde_ids)
+		]
+		if missing_solde_ids:
+			SoldeAuxLivres.objects.bulk_create(missing_solde_ids)
 
 	return report
 
 
 def _parse_decimal_value(raw_value):
-	try:
-		return Decimal((raw_value or '0').strip().replace(',', '.'))
-	except (InvalidOperation, AttributeError):
-		return None
+	return parse_decimal(raw_value)
 
 
 def _build_repartition_state():
-	settings_instance = Setting.objects.select_related('cap', 'car').first()
+	settings_instance = get_settings()
 	cap_total = Decimal('0')
 	car_total = Decimal('0')
 
@@ -190,9 +195,8 @@ def compte_page(request):
 		if not compte:
 			return JsonResponse({'ok': False, 'error': 'Compte introuvable.'}, status=404)
 
-		try:
-			solde_depart = Decimal((raw_value or '0').replace(',', '.'))
-		except (InvalidOperation, ValueError):
+		solde_depart = parse_decimal(raw_value)
+		if solde_depart is None:
 			return JsonResponse({'ok': False, 'error': 'Valeur invalide.'}, status=400)
 
 		SoldeAuxLivres.objects.update_or_create(
@@ -236,7 +240,7 @@ def compte_page(request):
 			if import_form.is_valid():
 				try:
 					import_report = _import_comptes_csv(import_form.cleaned_data['csv_file'])
-				except (UnicodeDecodeError, csv.Error) as exc:
+				except UnicodeDecodeError as exc:
 					import_report = {
 						'created': 0,
 						'updated': 0,
@@ -315,7 +319,7 @@ def compte_page(request):
 
 @expert_required
 def settings_page(request):
-	settings_instance = Setting.objects.first()
+	settings_instance = get_settings()
 
 	if request.method == 'POST':
 		form = SettingForm(request.POST, instance=settings_instance)

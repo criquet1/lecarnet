@@ -22,7 +22,7 @@ class Total(models.Model):
             validate_total_number
         ]
     )
-    desc = models.CharField(max_length=30, blank=False, null=False)
+    desc = models.CharField(max_length=120, blank=False, null=False)
 
     class Meta:
         verbose_name = "Total"
@@ -42,7 +42,7 @@ class Compte(models.Model):
             validate_4_digits
         ]
     )
-    libelle = models.CharField(max_length=30, blank=False, null=False)
+    libelle = models.CharField(max_length=120, blank=False, null=False)
     no_total = models.ForeignKey(
         Total,
         on_delete=models.CASCADE,    # Supprime ce compte si le Total associé est supprimé
