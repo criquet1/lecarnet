@@ -129,6 +129,31 @@ Cette commande:
 - met a jour le mot de passe,
 - peut supprimer les autres superusers avec `--prune-other-superusers`.
 
+## Healthcheck multi-tenant (phase 3)
+
+Verification rapide et centralisee de l'etat multi-tenant:
+
+```powershell
+c:/Users/criqu/Documents/lecarnet/venv/Scripts/python.exe manage.py healthcheck_multitenant
+```
+
+Options utiles:
+
+```powershell
+# verifier seulement certains tenants
+c:/Users/criqu/Documents/lecarnet/venv/Scripts/python.exe manage.py healthcheck_multitenant --alias client_alpha --alias client_test
+
+# echouer aussi sur warnings (CI)
+c:/Users/criqu/Documents/lecarnet/venv/Scripts/python.exe manage.py healthcheck_multitenant --fail-on-warn
+```
+
+La commande controle:
+
+- connexion base centrale et bases tenants,
+- coherence entre settings.DATABASES et tenancy.ClientDatabase,
+- migrations en attente,
+- presence d'au moins un superuser actif sur la base centrale.
+
 ## Benchmark et test de charge (phase 2)
 
 Benchmark SQL rapide des vues comptables:
