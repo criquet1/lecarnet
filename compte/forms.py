@@ -31,6 +31,23 @@ class SoldeAuxLivresForm(forms.ModelForm):
         }
 
 
+class CompteCsvImportForm(forms.Form):
+    csv_file = forms.FileField(
+        label='Fichier CSV',
+        help_text='Colonnes acceptees: compte_no/compte_libelle/compte_total ou numero/libelle/no_total.',
+        widget=forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': '.csv,text/csv'}),
+    )
+
+    def clean_csv_file(self):
+        csv_file = self.cleaned_data['csv_file']
+        filename = (csv_file.name or '').lower()
+        if not filename.endswith('.csv'):
+            raise forms.ValidationError('Le fichier doit etre au format .csv')
+        if csv_file.size == 0:
+            raise forms.ValidationError('Le fichier est vide.')
+        return csv_file
+
+
 class SettingForm(forms.ModelForm):
     logo = forms.ChoiceField(label="Logo", required=True)
     fin_annee_jour = forms.ChoiceField(label="Jour", required=True)

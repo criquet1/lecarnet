@@ -2,14 +2,19 @@
 
 import django.db.models.deletion
 from django.db import migrations, models
+from django.db.utils import OperationalError, ProgrammingError
 
 
 def clear_orphan_green_flags(apps, schema_editor):
-    Releve = apps.get_model('facture', 'Releve')
-    Releve.objects.filter(
-        ecriture_creee=True,
-        ecriture_tr_desc__isnull=True,
-    ).update(ecriture_creee=False)
+    try:
+        Releve = apps.get_model('facture', 'Releve')
+        Releve.objects.filter(
+            ecriture_creee=True,
+            ecriture_tr_desc__isnull=True,
+        ).update(ecriture_creee=False)
+    except (OperationalError, ProgrammingError):
+        # Certaines bases clientes neuves peuvent ne pas contenir la table historique.
+        return
 
 
 class Migration(migrations.Migration):

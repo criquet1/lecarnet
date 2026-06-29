@@ -10,6 +10,15 @@ env/
 
 # Django local database
 db.sqlite3
+*.sqlite3
+
+# Local PostgreSQL bootstrap config and backups
+scripts/oneclick.config.json
+scripts/oneclick.postgres.local.json
+backup/*.csv
+
+# Generated local project data
+lecarnet_central
 
 # VS Code / OS
 .vscode/

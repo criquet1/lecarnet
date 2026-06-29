@@ -47,6 +47,11 @@
       </ul>
       <div class="ms-auto d-flex align-items-center gap-2">
         {% if request.user.is_authenticated %}
+          {% if active_client %}
+            <a class="btn btn-outline-light btn-sm" href="{% url 'select_client' %}" title="Changer de client actif">
+              {{ active_client.name }}
+            </a>
+          {% endif %}
           <span class="navbar-text">{{ request.user.username }}</span>
           <form method="post" action="{% url 'logout' %}" class="m-0">
             {% csrf_token %}

@@ -1,6 +1,9 @@
 import calendar
 from datetime import date
 
+from django.db.utils import OperationalError, ProgrammingError
+from django.utils.connection import ConnectionDoesNotExist
+
 from facture.models import Setting
 
 
@@ -69,7 +72,14 @@ def build_fiscal_period_options(settings_instance=None, months_count=12, today=N
 
 
 def site_settings(request):
-    settings = Setting.objects.first()
+    settings = None
+
+    if getattr(request, 'active_client_alias', None):
+        try:
+            settings = Setting.objects.first()
+        except (OperationalError, ProgrammingError, ConnectionDoesNotExist):
+            settings = None
+
     fiscal_period_options = build_fiscal_period_options(settings)
 
     if settings:

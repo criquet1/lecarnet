@@ -1,5 +1,5 @@
 from django.contrib import admin
-from facture.models import Compagnie, Setting, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve
+from facture.models import Compagnie, Setting, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart
 
 
 class SettingAdmin(admin.ModelAdmin):
@@ -60,3 +60,4 @@ admin.site.register(Tr_detail, TrDetailAdmin)
 admin.site.register(Releve, ReleveBancaireAdmin)
 admin.site.register(RapportTaxes, RapportTaxesAdmin)
 admin.site.register(CompteReleve, CompteReleveAdmin)
+admin.site.register(CompagnieSoldeDepart)

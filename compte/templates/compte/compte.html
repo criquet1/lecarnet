@@ -4,10 +4,171 @@
 {% block title %} {{ title }} {% endblock %}
 
 {% block body %}
+<div class="alert alert-info mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <span class="fw-semibold">Client actif:</span>
+            {% if active_client %}
+                <span class="fs-5 text-dark">{{ active_client.name }}</span>
+            {% else %}
+                <span class="text-muted">Non défini</span>
+            {% endif %}
+        </div>
+        <a href="{% url 'select_client' %}" class="btn btn-sm btn-outline-info">Changer de client</a>
+    </div>
+</div>
+
 <h2 class="fw-bold text-center mb-2">{{ title }}</h2>
+
+{% if import_report %}
+    <div class="alert {% if import_report.errors %}alert-warning{% else %}alert-success{% endif %}" role="alert">
+        <div class="fw-semibold">Import CSV termine</div>
+        <div>Crees: {{ import_report.created }} | Mis a jour: {{ import_report.updated }} | Ignores: {{ import_report.skipped }}</div>
+        {% if import_report.errors %}
+            <hr>
+            <div class="small">Erreurs (max 20 affichees):</div>
+            <ul class="mb-0 small">
+                {% for err in import_report.errors|slice:":20" %}
+                    <li>{{ err }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </div>
+{% endif %}
+
+{% if repartition_report %}
+    <div class="alert {% if repartition_report.ok %}alert-success{% else %}alert-warning{% endif %}" role="alert">
+        <div class="fw-semibold">{{ repartition_report.message }}</div>
+        {% if repartition_report.errors %}
+            <ul class="mb-0 small">
+                {% for err in repartition_report.errors|slice:":20" %}
+                    <li>{{ err }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </div>
+{% endif %}
+
+<div class="border rounded p-3 mb-4">
+    <h5 class="mb-3">Repartition du solde de depart CAP/CAR par compagnie</h5>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="save_repartition" value="1">
+        <div class="table-responsive mb-3">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Compagnie</th>
+                        <th>Mode</th>
+                        <th class="text-end">Montant reparti</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in repartition_state.rows %}
+                        <tr>
+                            <td>{{ row.compagnie.nom }}</td>
+                            <td>{{ row.compagnie.cap_ou_car }}</td>
+                            <td class="text-end" style="max-width: 180px;">
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    name="{{ row.field_name }}"
+                                    value="{{ row.montant|floatformat:2 }}"
+                                    class="form-control form-control-sm text-end font-monospace"
+                                >
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="3" class="text-muted">Aucune compagnie CAP/CAR configuree.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="row g-2 small mb-3">
+            <div class="col-12 col-md-6">
+                <div class="border rounded p-2">
+                    <div>CAP total (compte): <span class="font-monospace">{{ repartition_state.cap_total|floatformat:2 }}</span></div>
+                    <div>CAP reparti: <span class="font-monospace">{{ repartition_state.cap_reparti|floatformat:2 }}</span></div>
+                    <div class="{% if repartition_state.ecart_cap == 0 %}text-success{% else %}text-danger{% endif %}">
+                        Ecart CAP: <span class="font-monospace">{{ repartition_state.ecart_cap|floatformat:2 }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-6">
+                <div class="border rounded p-2">
+                    <div>CAR total (compte): <span class="font-monospace">{{ repartition_state.car_total|floatformat:2 }}</span></div>
+                    <div>CAR reparti: <span class="font-monospace">{{ repartition_state.car_reparti|floatformat:2 }}</span></div>
+                    <div class="{% if repartition_state.ecart_car == 0 %}text-success{% else %}text-danger{% endif %}">
+                        Ecart CAR: <span class="font-monospace">{{ repartition_state.ecart_car|floatformat:2 }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-outline-primary">Enregistrer la repartition</button>
+    </form>
+</div>
+
+<div class="border rounded p-3 mb-4">
+    <h5 class="mb-3">Lier les comptes de relevé aux comptes comptables</h5>
+    <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Compte</th>
+                    <th>No compte</th>
+                    <th>Compte comptable lié</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for releve_account in comptes_releves %}
+                    <tr class="releve-account-row" data-releve-account-id="{{ releve_account.pk }}">
+                        <td>{{ releve_account.get_type_onglet_display }}</td>
+                        <td>{{ releve_account.nom_affichage }}</td>
+                        <td>{{ releve_account.no_compte }}</td>
+                        <td>
+                            <select class="form-select form-select-sm releve-account-select" data-releve-account-id="{{ releve_account.pk }}" data-update-url="{% url 'compte' %}">
+                                <option value="">-- Sélectionner --</option>
+                                {% for compte in comptes %}
+                                    <option value="{{ compte.pk }}" {% if releve_account.compte_comptable_id == compte.pk %}selected{% endif %}>{{ compte }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-muted">Aucun compte de relevé configuré.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 
 <div class="row g-4">
     <div class="col-12 col-lg-4">
+        <div class="border rounded p-3 mb-4">
+            <h5 class="mb-3">Importer des comptes (CSV)</h5>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="import_csv" value="1">
+                {{ import_form.non_field_errors }}
+                <div class="mb-3">
+                    <label class="form-label" for="{{ import_form.csv_file.id_for_label }}">{{ import_form.csv_file.label }}</label>
+                    {{ import_form.csv_file }}
+                    {% if import_form.csv_file.help_text %}
+                        <div class="form-text">{{ import_form.csv_file.help_text }}</div>
+                    {% endif %}
+                    {{ import_form.csv_file.errors }}
+                </div>
+                <button type="submit" class="btn btn-outline-primary">Charger le CSV</button>
+            </form>
+        </div>
+
         <div class="border rounded p-3">
             <h5 class="mb-3">{% if editing_compte %}Modifier{% else %}Créer{% endif %} un compte</h5>
             <form method="post">
@@ -248,6 +409,37 @@
                 if (emptyRow) {
                     emptyRow.style.display = visibleCount === 0 ? '' : 'none';
                 }
+            });
+        }
+
+        // Gestion des liaisons de comptes de relevé
+        var releveAccountSelects = document.querySelectorAll('.releve-account-select');
+        for (var m = 0; m < releveAccountSelects.length; m++) {
+            releveAccountSelects[m].addEventListener('change', function () {
+                var releveAccountId = this.getAttribute('data-releve-account-id');
+                var updateUrl = this.getAttribute('data-update-url');
+                var compteComptableId = this.value;
+
+                var payload = new FormData();
+                payload.append('link_releve_account', releveAccountId);
+                payload.append('compte_comptable_id', compteComptableId);
+
+                fetch(updateUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: payload,
+                    credentials: 'same-origin'
+                }).then(function (response) {
+                    return response.json().then(function (data) {
+                        if (!response.ok || !data.ok) {
+                            alert('Erreur: ' + (data.error || 'Erreur lors de la sauvegarde.'));
+                        }
+                    });
+                }).catch(function (error) {
+                    alert('Erreur: ' + error);
+                });
             });
         }
     });

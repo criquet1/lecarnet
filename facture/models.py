@@ -255,6 +255,23 @@ class Setting(models.Model):
 
     def __str__(self):
         return self.nom
+
+
+class CompagnieSoldeDepart(models.Model):
+    compagnie = models.OneToOneField(
+        Compagnie,
+        on_delete=models.CASCADE,
+        related_name='solde_depart',
+    )
+    montant = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    class Meta:
+        verbose_name = 'Solde de depart compagnie'
+        verbose_name_plural = 'Soldes de depart compagnies'
+        ordering = ['compagnie__nom']
+
+    def __str__(self):
+        return f"{self.compagnie.nom} - {self.montant}"
     
 
 class CompteReleve(models.Model):

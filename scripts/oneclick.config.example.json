@@ -1,0 +1,41 @@
+{
+  "defaultDb": {
+    "engine": "sqlite",
+    "name": "lecarnet_central",
+    "user": "",
+    "password": "",
+    "host": "",
+    "port": ""
+  },
+  "tenants": {
+    "Anonymus": {
+      "ENGINE": "django.db.backends.sqlite3",
+      "NAME": "tenant_anonymus.sqlite3",
+      "USER": "",
+      "PASSWORD": "",
+      "HOST": "",
+      "PORT": ""
+    },
+    "client_alpha": {
+      "ENGINE": "django.db.backends.sqlite3",
+      "NAME": "tenant_client_alpha.sqlite3",
+      "USER": "",
+      "PASSWORD": "",
+      "HOST": "",
+      "PORT": ""
+    },
+    "client_test": {
+      "ENGINE": "django.db.backends.sqlite3",
+      "NAME": "tenant_client_test.sqlite3",
+      "USER": "",
+      "PASSWORD": "",
+      "HOST": "",
+      "PORT": ""
+    }
+  },
+  "adminUser": {
+    "username": "admin",
+    "email": "admin@localhost",
+    "password": "CHANGE_ME"
+  }
+}

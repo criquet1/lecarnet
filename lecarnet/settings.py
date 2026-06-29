@@ -10,6 +10,8 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import json
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,20 +27,21 @@ SECRET_KEY = 'django-insecure-4yu1pvs&-g1oz$+skhpve!8*+45_efkzq752#!u15h+nj^&kp=
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['lecarnet.io']
+ALLOWED_HOSTS = ['lecarnet.io', '127.0.0.1', 'localhost']
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    'facture',
+    'compte',
+    'tenancy',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'facture',
-    'compte',
 ]
 
 MIDDLEWARE = [
@@ -47,6 +50,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'tenancy.middleware.ActiveClientMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -63,6 +67,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'tenancy.context_processors.active_client',
                 'facture.context_processors.site_settings',
             ],
         },
@@ -75,12 +80,61 @@ WSGI_APPLICATION = 'lecarnet.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+def _env(name, default=''):
+    return os.environ.get(name, default).strip()
+
+
+def _load_oneclick_config():
+    config_path = BASE_DIR / 'scripts' / 'oneclick.config.json'
+    if not config_path.exists():
+        return {}
+    try:
+        with config_path.open('r', encoding='utf-8') as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+_oneclick_config = _load_oneclick_config()
+_oneclick_default_db = _oneclick_config.get('defaultDb', {}) if isinstance(_oneclick_config, dict) else {}
+_oneclick_tenants = _oneclick_config.get('tenants', {}) if isinstance(_oneclick_config, dict) else {}
+
+
+default_db_engine = _env('DEFAULT_DB_ENGINE', _oneclick_default_db.get('engine', ''))
+USE_POSTGRES_DEFAULT = (default_db_engine or '').lower() in {'postgres', 'postgresql'}
+
+if USE_POSTGRES_DEFAULT:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': _env('DEFAULT_DB_NAME', _oneclick_default_db.get('name', 'lecarnet_central')),
+            'USER': _env('DEFAULT_DB_USER', _oneclick_default_db.get('user', 'postgres')),
+            'PASSWORD': _env('DEFAULT_DB_PASSWORD', _oneclick_default_db.get('password', '')),
+            'HOST': _env('DEFAULT_DB_HOST', _oneclick_default_db.get('host', '127.0.0.1')),
+            'PORT': _env('DEFAULT_DB_PORT', _oneclick_default_db.get('port', '5432')),
+        }
     }
-}
+else:
+    sqlite_name = _env('DEFAULT_DB_NAME', _oneclick_default_db.get('name', 'db.sqlite3')) or 'db.sqlite3'
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / sqlite_name,
+        }
+    }
+
+
+tenant_databases_json = _env('TENANT_DATABASES_JSON', '')
+if tenant_databases_json:
+    tenant_databases = json.loads(tenant_databases_json)
+    DATABASES.update(tenant_databases)
+elif isinstance(_oneclick_tenants, dict) and _oneclick_tenants:
+    DATABASES.update(_oneclick_tenants)
+
+
+DATABASE_ROUTERS = [
+    'tenancy.db_router.TenantDatabaseRouter',
+]
 
 
 # Password validation

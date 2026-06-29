@@ -1,0 +1,29 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <style>
+        .admin-client-banner {
+            background-color: #417690;
+            color: white;
+            padding: 12px 20px;
+            text-align: center;
+            font-size: 14px;
+            border-bottom: 2px solid #2c5aa0;
+            font-weight: 600;
+        }
+        #header {
+            padding-top: 0;
+        }
+    </style>
+{% endblock %}
+
+{% block header %}
+    {% if active_client %}
+        <div class="admin-client-banner">
+            <strong>📊 Client actif:</strong> <span style="font-size: 15px;">{{ active_client.name }}</span>
+        </div>
+    {% endif %}
+    {{ block.super }}
+{% endblock %}

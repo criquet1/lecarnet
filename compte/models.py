@@ -6,13 +6,20 @@ def validate_4_digits(value):
     if not (1000 <= value <= 9999):
         raise ValidationError("Le numéro doit être compris entre 1000 et 9999.")
 
+
+def validate_total_number(value):
+    if value == 0:
+        return
+    if not (1000 <= value <= 9999):
+        raise ValidationError("Le total doit etre 0 ou compris entre 1000 et 9999.")
+
 class Total(models.Model):
     no_total = models.IntegerField(
         primary_key=True,
         validators=[
-            MinValueValidator(1000), 
+            MinValueValidator(0), 
             MaxValueValidator(9999),
-            validate_4_digits
+            validate_total_number
         ]
     )
     desc = models.CharField(max_length=30, blank=False, null=False)
