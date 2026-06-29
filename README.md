@@ -154,6 +154,36 @@ La commande controle:
 - migrations en attente,
 - presence d'au moins un superuser actif sur la base centrale.
 
+## Validation parcours (phase 3.3)
+
+Validation finale en une commande (healthcheck + parcours pages cles):
+
+```powershell
+c:/Users/criqu/Documents/lecarnet/venv/Scripts/python.exe manage.py validate_parcours --username admin
+```
+
+Options:
+
+```powershell
+# forcer un tenant cible
+c:/Users/criqu/Documents/lecarnet/venv/Scripts/python.exe manage.py validate_parcours --username admin --client-alias client_test
+
+# mode strict (echec si warning healthcheck)
+c:/Users/criqu/Documents/lecarnet/venv/Scripts/python.exe manage.py validate_parcours --username admin --strict
+```
+
+La commande valide notamment l'acces HTTP (statut 200) pour:
+
+- accueil,
+- facture,
+- releve,
+- journal general,
+- grand livre,
+- balance,
+- CAP/CAR,
+- rapport de taxes,
+- pages comptes.
+
 ## Benchmark et test de charge (phase 2)
 
 Benchmark SQL rapide des vues comptables:
