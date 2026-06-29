@@ -50,6 +50,11 @@ class Tr_desc(models.Model):
     description = models.CharField(max_length=100, blank=True, null=True)
     source = models.ForeignKey(Source, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['date', 'id'], name='facture_trdesc_date_id_idx'),
+        ]
+
     def __str__(self):
         return f"Facture {self.no_ej}"
 
