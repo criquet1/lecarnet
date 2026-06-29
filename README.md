@@ -107,3 +107,44 @@ powershell -ExecutionPolicy Bypass -File scripts/one_click_start.ps1 -NoRunServe
 - Pas de relation FK entre base centrale et bases clientes.
 - Les donnees metier (`compte`, `facture`) sont routees vers la base client active via middleware + database router.
 - Si un utilisateur n'a aucun client assigne, il est redirige vers l'ecran de selection client.
+
+## Recuperation admin (phase 3)
+
+Pour recreer/mettre a jour un admin fiable sur la base centrale:
+
+```powershell
+c:/Users/criqu/Documents/lecarnet/venv/Scripts/python.exe manage.py ensure_admin --username admin --password-env ADMIN_PASSWORD --database default --prune-other-superusers
+```
+
+Exemple (PowerShell):
+
+```powershell
+$env:ADMIN_PASSWORD = "TonMotDePasseFort"
+c:/Users/criqu/Documents/lecarnet/venv/Scripts/python.exe manage.py ensure_admin --username admin --password-env ADMIN_PASSWORD --database default --prune-other-superusers
+```
+
+Cette commande:
+
+- force `is_active`, `is_staff`, `is_superuser` sur le compte cible,
+- met a jour le mot de passe,
+- peut supprimer les autres superusers avec `--prune-other-superusers`.
+
+## Benchmark et test de charge (phase 2)
+
+Benchmark SQL rapide des vues comptables:
+
+```powershell
+c:/Users/criqu/Documents/lecarnet/venv/Scripts/python.exe manage.py benchmark_ledger_views --database client_test
+```
+
+Chargement de donnees de stress sur un tenant:
+
+```powershell
+c:/Users/criqu/Documents/lecarnet/venv/Scripts/python.exe manage.py load_perf_tr_detail --database client_test --entries 25000 --details-per-entry 8
+```
+
+Nettoyage du dataset de stress cree par la commande:
+
+```powershell
+c:/Users/criqu/Documents/lecarnet/venv/Scripts/python.exe manage.py load_perf_tr_detail --database client_test --cleanup-only
+```

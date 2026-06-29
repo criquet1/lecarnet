@@ -9,13 +9,20 @@
             <div class="card-body p-4">
                 <h2 class="h4 mb-3 text-center">Connexion client</h2>
                 {% if form.errors %}
-                    <div class="alert alert-danger py-2">Nom d'utilisateur ou mot de passe invalide.</div>
+                    <div class="alert alert-danger py-2" role="alert">
+                        <div class="fw-semibold mb-1">Nom d'utilisateur ou mot de passe invalide.</div>
+                        <ul class="mb-0 ps-3 small">
+                            <li>Verifie la casse (majuscules/minuscules) et les espaces en trop.</li>
+                            <li>Essaie en navigation privee si le navigateur auto-remplit un ancien mot de passe.</li>
+                            <li>Si le probleme persiste, contacte l'administrateur pour reinitialiser le compte.</li>
+                        </ul>
+                    </div>
                 {% endif %}
                 <form method="post">
                     {% csrf_token %}
                     <div class="mb-3">
                         <label for="id_username" class="form-label">Nom d'utilisateur</label>
-                        <input type="text" name="username" id="id_username" class="form-control" required autofocus>
+                        <input type="text" name="username" id="id_username" class="form-control" value="{{ form.username.value|default:'' }}" required autofocus>
                     </div>
                     <div class="mb-3">
                         <label for="id_password" class="form-label">Mot de passe</label>
