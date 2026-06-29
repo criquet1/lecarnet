@@ -174,6 +174,83 @@ def _fetch_grand_livre_from_sql_view():
     return comptes, grand_total_debit, grand_total_credit, grand_total_solde, is_balanced
 
 
+def _fetch_compte_solde_from_balance_view(compte_id):
+    if not compte_id:
+        return Decimal('0')
+
+    db_alias = _ledger_db_alias()
+    query = """
+        SELECT solde
+        FROM facture_v_balance_verification
+        WHERE compte_id = %s
+    """
+
+    with connections[db_alias].cursor() as cursor:
+        cursor.execute(query, [compte_id])
+        row = cursor.fetchone()
+
+    return (row[0] or Decimal('0')) if row else Decimal('0')
+
+
+def _fetch_compte_mode_blocks_from_sql_view(mode, compte_id, compagnies):
+    db_alias = _ledger_db_alias()
+    query = """
+        SELECT
+            compagnie_id,
+            compagnie_nom,
+            tr_date,
+            source_nom,
+            tr_description,
+            debit,
+            credit,
+            solde_compagnie
+        FROM facture_v_compagnie_ledger_lignes
+        WHERE cap_ou_car = %s AND compte_id = %s
+        ORDER BY compagnie_nom, tr_date, tr_desc_id, tr_detail_id
+    """
+
+    rows_by_company = {compagnie.id: [] for compagnie in compagnies}
+    soldes_by_company = {compagnie.id: Decimal('0') for compagnie in compagnies}
+
+    with connections[db_alias].cursor() as cursor:
+        cursor.execute(query, [mode, compte_id])
+        for (
+            compagnie_id,
+            _compagnie_nom,
+            tr_date,
+            source_nom,
+            tr_description,
+            debit,
+            credit,
+            solde_compagnie,
+        ) in cursor.fetchall():
+            if compagnie_id not in rows_by_company:
+                continue
+
+            rows_by_company[compagnie_id].append({
+                'date': tr_date,
+                'source': SimpleNamespace(nom=source_nom) if source_nom else None,
+                'description': tr_description,
+                'debit': debit or Decimal('0'),
+                'credit': credit or Decimal('0'),
+                'solde': solde_compagnie or Decimal('0'),
+            })
+            soldes_by_company[compagnie_id] = solde_compagnie or Decimal('0')
+
+    blocks = []
+    total_des_soldes = Decimal('0')
+    for compagnie in compagnies:
+        company_solde = soldes_by_company.get(compagnie.id, Decimal('0'))
+        total_des_soldes += company_solde
+        blocks.append({
+            'compagnie': compagnie,
+            'rows': rows_by_company.get(compagnie.id, []),
+            'solde_final': company_solde,
+        })
+
+    return blocks, total_des_soldes
+
+
 def _closing_date_label(reference_date, settings_instance=None):
     if not reference_date:
         return None
@@ -732,67 +809,76 @@ def balance_de_verification(request):
 def compte_a_payer(request):
     settings_instance = get_setting()
     cap_compte_id = settings_instance.cap_id if settings_instance else None
-    cap_solde_grand_livre = Decimal('0')
-    if cap_compte_id:
-        cap_solde_grand_livre = Tr_detail.objects.filter(
-            compte_id=cap_compte_id,
-        ).aggregate(total=Sum('montant')).get('total') or Decimal('0')
-
     cap_compagnies = Compagnie.objects.filter(
         cap_ou_car=Compagnie.MODE_CAP,
     ).order_by('nom')
 
-    details = Tr_detail.objects.none()
-    if cap_compte_id:
-        details = Tr_detail.objects.select_related(
-            'tr_desc__compagnie',
-            'tr_desc__source',
-        ).filter(
-            tr_desc__compagnie__cap_ou_car=Compagnie.MODE_CAP,
-            compte_id=cap_compte_id,
-        ).order_by(
-            'tr_desc__compagnie__nom',
-            'tr_desc__date',
-            'tr_desc_id',
-            'id',
-        )
-
-    report_date = details.order_by('-tr_desc__date').values_list('tr_desc__date', flat=True).first()
+    report_date = Tr_desc.objects.filter(
+        compagnie__cap_ou_car=Compagnie.MODE_CAP,
+    ).order_by('-date').values_list('date', flat=True).first()
     report_year_label = _closing_date_label(report_date, settings_instance)
 
-    rows_by_company = {compagnie.id: [] for compagnie in cap_compagnies}
-    soldes_by_company = {compagnie.id: Decimal('0') for compagnie in cap_compagnies}
-
-    for detail in details:
-        compagnie_id = detail.tr_desc.compagnie_id
-        if compagnie_id not in rows_by_company:
-            continue
-
-        montant = detail.montant or Decimal('0')
-        debit = montant if montant >= 0 else Decimal('0')
-        credit = abs(montant) if montant < 0 else Decimal('0')
-
-        soldes_by_company[compagnie_id] += montant
-
-        rows_by_company[compagnie_id].append({
-            'date': detail.tr_desc.date,
-            'source': detail.tr_desc.source,
-            'description': detail.tr_desc.description,
-            'debit': debit,
-            'credit': credit,
-            'solde': soldes_by_company[compagnie_id],
-        })
-
+    cap_solde_grand_livre = Decimal('0')
     blocks = []
     total_des_soldes = Decimal('0')
-    for compagnie in cap_compagnies:
-        company_solde = soldes_by_company.get(compagnie.id, Decimal('0'))
-        total_des_soldes += company_solde
-        blocks.append({
-            'compagnie': compagnie,
-            'rows': rows_by_company.get(compagnie.id, []),
-            'solde_final': company_solde,
-        })
+
+    if cap_compte_id:
+        try:
+            cap_solde_grand_livre = _fetch_compte_solde_from_balance_view(cap_compte_id)
+            blocks, total_des_soldes = _fetch_compte_mode_blocks_from_sql_view(
+                Compagnie.MODE_CAP,
+                cap_compte_id,
+                cap_compagnies,
+            )
+        except DatabaseError:
+            cap_solde_grand_livre = Tr_detail.objects.filter(
+                compte_id=cap_compte_id,
+            ).aggregate(total=Sum('montant')).get('total') or Decimal('0')
+
+            details = Tr_detail.objects.select_related(
+                'tr_desc__compagnie',
+                'tr_desc__source',
+            ).filter(
+                tr_desc__compagnie__cap_ou_car=Compagnie.MODE_CAP,
+                compte_id=cap_compte_id,
+            ).order_by(
+                'tr_desc__compagnie__nom',
+                'tr_desc__date',
+                'tr_desc_id',
+                'id',
+            )
+
+            rows_by_company = {compagnie.id: [] for compagnie in cap_compagnies}
+            soldes_by_company = {compagnie.id: Decimal('0') for compagnie in cap_compagnies}
+
+            for detail in details:
+                compagnie_id = detail.tr_desc.compagnie_id
+                if compagnie_id not in rows_by_company:
+                    continue
+
+                montant = detail.montant or Decimal('0')
+                debit = montant if montant >= 0 else Decimal('0')
+                credit = abs(montant) if montant < 0 else Decimal('0')
+
+                soldes_by_company[compagnie_id] += montant
+
+                rows_by_company[compagnie_id].append({
+                    'date': detail.tr_desc.date,
+                    'source': detail.tr_desc.source,
+                    'description': detail.tr_desc.description,
+                    'debit': debit,
+                    'credit': credit,
+                    'solde': soldes_by_company[compagnie_id],
+                })
+
+            for compagnie in cap_compagnies:
+                company_solde = soldes_by_company.get(compagnie.id, Decimal('0'))
+                total_des_soldes += company_solde
+                blocks.append({
+                    'compagnie': compagnie,
+                    'rows': rows_by_company.get(compagnie.id, []),
+                    'solde_final': company_solde,
+                })
 
     ecart_solde_cap = total_des_soldes - cap_solde_grand_livre
 
@@ -811,67 +897,76 @@ def compte_a_payer(request):
 def compte_a_recevoir(request):
     settings_instance = get_setting()
     car_compte_id = settings_instance.car_id if settings_instance else None
-    car_solde_grand_livre = Decimal('0')
-    if car_compte_id:
-        car_solde_grand_livre = Tr_detail.objects.filter(
-            compte_id=car_compte_id,
-        ).aggregate(total=Sum('montant')).get('total') or Decimal('0')
-
     car_compagnies = Compagnie.objects.filter(
         cap_ou_car=Compagnie.MODE_CAR,
     ).order_by('nom')
 
-    details = Tr_detail.objects.none()
-    if car_compte_id:
-        details = Tr_detail.objects.select_related(
-            'tr_desc__compagnie',
-            'tr_desc__source',
-        ).filter(
-            tr_desc__compagnie__cap_ou_car=Compagnie.MODE_CAR,
-            compte_id=car_compte_id,
-        ).order_by(
-            'tr_desc__compagnie__nom',
-            'tr_desc__date',
-            'tr_desc_id',
-            'id',
-        )
-
-    report_date = details.order_by('-tr_desc__date').values_list('tr_desc__date', flat=True).first()
+    report_date = Tr_desc.objects.filter(
+        compagnie__cap_ou_car=Compagnie.MODE_CAR,
+    ).order_by('-date').values_list('date', flat=True).first()
     report_year_label = _closing_date_label(report_date, settings_instance)
 
-    rows_by_company = {compagnie.id: [] for compagnie in car_compagnies}
-    soldes_by_company = {compagnie.id: Decimal('0') for compagnie in car_compagnies}
-
-    for detail in details:
-        compagnie_id = detail.tr_desc.compagnie_id
-        if compagnie_id not in rows_by_company:
-            continue
-
-        montant = detail.montant or Decimal('0')
-        debit = montant if montant >= 0 else Decimal('0')
-        credit = abs(montant) if montant < 0 else Decimal('0')
-
-        soldes_by_company[compagnie_id] += montant
-
-        rows_by_company[compagnie_id].append({
-            'date': detail.tr_desc.date,
-            'source': detail.tr_desc.source,
-            'description': detail.tr_desc.description,
-            'debit': debit,
-            'credit': credit,
-            'solde': soldes_by_company[compagnie_id],
-        })
-
+    car_solde_grand_livre = Decimal('0')
     blocks = []
     total_des_soldes = Decimal('0')
-    for compagnie in car_compagnies:
-        company_solde = soldes_by_company.get(compagnie.id, Decimal('0'))
-        total_des_soldes += company_solde
-        blocks.append({
-            'compagnie': compagnie,
-            'rows': rows_by_company.get(compagnie.id, []),
-            'solde_final': company_solde,
-        })
+
+    if car_compte_id:
+        try:
+            car_solde_grand_livre = _fetch_compte_solde_from_balance_view(car_compte_id)
+            blocks, total_des_soldes = _fetch_compte_mode_blocks_from_sql_view(
+                Compagnie.MODE_CAR,
+                car_compte_id,
+                car_compagnies,
+            )
+        except DatabaseError:
+            car_solde_grand_livre = Tr_detail.objects.filter(
+                compte_id=car_compte_id,
+            ).aggregate(total=Sum('montant')).get('total') or Decimal('0')
+
+            details = Tr_detail.objects.select_related(
+                'tr_desc__compagnie',
+                'tr_desc__source',
+            ).filter(
+                tr_desc__compagnie__cap_ou_car=Compagnie.MODE_CAR,
+                compte_id=car_compte_id,
+            ).order_by(
+                'tr_desc__compagnie__nom',
+                'tr_desc__date',
+                'tr_desc_id',
+                'id',
+            )
+
+            rows_by_company = {compagnie.id: [] for compagnie in car_compagnies}
+            soldes_by_company = {compagnie.id: Decimal('0') for compagnie in car_compagnies}
+
+            for detail in details:
+                compagnie_id = detail.tr_desc.compagnie_id
+                if compagnie_id not in rows_by_company:
+                    continue
+
+                montant = detail.montant or Decimal('0')
+                debit = montant if montant >= 0 else Decimal('0')
+                credit = abs(montant) if montant < 0 else Decimal('0')
+
+                soldes_by_company[compagnie_id] += montant
+
+                rows_by_company[compagnie_id].append({
+                    'date': detail.tr_desc.date,
+                    'source': detail.tr_desc.source,
+                    'description': detail.tr_desc.description,
+                    'debit': debit,
+                    'credit': credit,
+                    'solde': soldes_by_company[compagnie_id],
+                })
+
+            for compagnie in car_compagnies:
+                company_solde = soldes_by_company.get(compagnie.id, Decimal('0'))
+                total_des_soldes += company_solde
+                blocks.append({
+                    'compagnie': compagnie,
+                    'rows': rows_by_company.get(compagnie.id, []),
+                    'solde_final': company_solde,
+                })
 
     ecart_solde_car = total_des_soldes - car_solde_grand_livre
 
