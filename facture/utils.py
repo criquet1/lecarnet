@@ -60,26 +60,6 @@ def get_settings():
 		return None
 
 
-def read_csv_rows(raw_bytes):
-	for encoding in ('utf-8-sig', 'cp1252', 'latin-1'):
-		try:
-			text = raw_bytes.decode(encoding)
-			break
-		except UnicodeDecodeError:
-			continue
-	else:
-		raise UnicodeDecodeError('csv', b'', 0, 1, 'Encodage non supporte')
-
-	sample = text[:4096]
-	try:
-		dialect = csv.Sniffer().sniff(sample, delimiters=',;\t')
-	except csv.Error:
-		dialect = csv.excel
-
-	reader = csv.DictReader(io.StringIO(text), delimiter=dialect.delimiter)
-	return list(reader)
-
-
 def get_setting(*select_related_fields):
 	queryset = Setting.objects
 	if select_related_fields:

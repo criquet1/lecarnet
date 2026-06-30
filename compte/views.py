@@ -11,12 +11,8 @@ from .forms import CompteCsvImportForm, CompteForm, SettingForm
 from .models import Compte, SoldeAuxLivres, Total
 
 
-def _read_csv_rows(raw_bytes):
-	return read_csv_rows(raw_bytes)
-
-
 def _import_comptes_csv(csv_file):
-	rows = _read_csv_rows(csv_file.read())
+	rows = read_csv_rows(csv_file.read())
 	report = {
 		'created': 0,
 		'updated': 0,
@@ -123,12 +119,6 @@ def _import_comptes_csv(csv_file):
 			SoldeAuxLivres.objects.bulk_create(missing_solde_ids)
 
 	return report
-
-
-def _parse_decimal_value(raw_value):
-	return parse_decimal(raw_value)
-
-
 def _build_repartition_state():
 	settings_instance = get_settings()
 	cap_total = Decimal('0')
@@ -259,7 +249,7 @@ def compte_page(request):
 				with transaction.atomic():
 					for compagnie in compagnies:
 						field_name = f'repartition_{compagnie.id}'
-						montant = _parse_decimal_value(request.POST.get(field_name, '0'))
+						montant = parse_decimal(request.POST.get(field_name, '0'))
 						if montant is None:
 							errors.append(f"{compagnie.nom}: montant invalide")
 							continue
