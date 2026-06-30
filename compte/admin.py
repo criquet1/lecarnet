@@ -6,7 +6,7 @@ class TotalAdmin(admin.ModelAdmin):
     list_filter = ('desc',)
 
 # Register your models here.
-class CpmpteAdmin(admin.ModelAdmin):
+class CompteAdmin(admin.ModelAdmin):
     list_display = ('numero', 'libelle', 'no_total')
     list_filter = ('libelle',)
 
@@ -15,6 +15,6 @@ class SoldeAuxLivresAdmin(admin.ModelAdmin):
     list_display = ('compte', 'solde_depart')
     list_filter = ('compte',)
 
-admin.site.register(Compte, CpmpteAdmin)
+admin.site.register(Compte, CompteAdmin)
 admin.site.register(Total, TotalAdmin)
 admin.site.register(SoldeAuxLivres, SoldeAuxLivresAdmin)

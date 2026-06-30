@@ -4,6 +4,7 @@ from datetime import date
 from django import forms
 from django.forms import formset_factory
 
+from .constants import MONTH_CHOICES_FR
 from .models import Compagnie, Setting, Tr_desc
 from .utils import get_available_logos
 
@@ -28,20 +29,7 @@ class SettingForm(forms.ModelForm):
     fin_annee_jour = forms.ChoiceField(label="Jour", required=True)
     fin_annee_mois = forms.ChoiceField(label="Mois", required=True)
 
-    MONTH_CHOICES = [
-        ('1', 'Janvier'),
-        ('2', 'Février'),
-        ('3', 'Mars'),
-        ('4', 'Avril'),
-        ('5', 'Mai'),
-        ('6', 'Juin'),
-        ('7', 'Juillet'),
-        ('8', 'Août'),
-        ('9', 'Septembre'),
-        ('10', 'Octobre'),
-        ('11', 'Novembre'),
-        ('12', 'Décembre'),
-    ]
+    MONTH_CHOICES = MONTH_CHOICES_FR
 
     DAY_CHOICES = [(str(day), str(day)) for day in range(1, 32)]
 

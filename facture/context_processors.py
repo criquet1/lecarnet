@@ -4,23 +4,8 @@ from datetime import date
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils.connection import ConnectionDoesNotExist
 
+from facture.constants import MONTH_LABELS_FR
 from facture.models import Setting
-
-
-MONTH_LABELS_FR = {
-    1: 'Janvier',
-    2: 'Fevrier',
-    3: 'Mars',
-    4: 'Avril',
-    5: 'Mai',
-    6: 'Juin',
-    7: 'Juillet',
-    8: 'Aout',
-    9: 'Septembre',
-    10: 'Octobre',
-    11: 'Novembre',
-    12: 'Décembre',
-}
 
 
 def _add_months(source_date, months):

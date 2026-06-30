@@ -14,8 +14,9 @@ import json
 from io import TextIOWrapper
 import chardet
 from datetime import datetime
+from facture.constants import MONTH_LABELS_FR
 from facture.models import Compagnie, Tr_desc, Tr_detail, Source, Setting, Releve, RapportTaxes, CompteReleve
-from facture.context_processors import MONTH_LABELS_FR, build_fiscal_period_options
+from facture.context_processors import build_fiscal_period_options
 from facture.forms import CompagnieForm, TrDescForm, TrDetailFormSet
 from facture.utils import expert_required, get_setting, parse_decimal, split_debit_credit
 from compte.models import Compte, SoldeAuxLivres
