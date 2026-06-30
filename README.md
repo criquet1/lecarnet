@@ -108,6 +108,18 @@ powershell -ExecutionPolicy Bypass -File scripts/one_click_start.ps1 -NoRunServe
 - Les donnees metier (`compte`, `facture`) sont routees vers la base client active via middleware + database router.
 - Si un utilisateur n'a aucun client assigne, il est redirige vers l'ecran de selection client.
 
+## Convention templates
+
+Le projet utilise deux `base.html` conceptuellement differents:
+
+- `facture/templates/layouts/app_base.html`: layout principal des pages applicatives (`facture`, `compte`, `tenancy`, `registration`).
+- `facture/templates/admin/base.html`: surcharge du layout de l'admin Django pour afficher des elements specifiques admin (ex: client actif).
+
+Pourquoi cette separation:
+
+- l'admin Django attend ses propres blocs/templates,
+- les pages applicatives utilisent un layout independant (navbar, scripts, structure metier).
+
 ## Recuperation admin (phase 3)
 
 Pour recreer/mettre a jour un admin fiable sur la base centrale:
