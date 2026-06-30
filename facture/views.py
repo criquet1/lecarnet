@@ -806,41 +806,42 @@ def balance_de_verification(request):
     })
 
 
-def compte_a_payer(request):
-    settings_instance = get_setting()
-    cap_compte_id = settings_instance.cap_id if settings_instance else None
-    cap_compagnies = Compagnie.objects.filter(
-        cap_ou_car=Compagnie.MODE_CAP,
-    ).order_by('nom')
+def _build_compte_mode_context(mode, settings_instance):
+    if mode not in {Compagnie.MODE_CAP, Compagnie.MODE_CAR}:
+        raise ValueError("Mode invalide pour compte mode")
+
+    is_cap = mode == Compagnie.MODE_CAP
+    compte_id = settings_instance.cap_id if (settings_instance and is_cap) else settings_instance.car_id if settings_instance else None
+    compagnies = Compagnie.objects.filter(cap_ou_car=mode).order_by('nom')
 
     report_date = Tr_desc.objects.filter(
-        compagnie__cap_ou_car=Compagnie.MODE_CAP,
+        compagnie__cap_ou_car=mode,
     ).order_by('-date').values_list('date', flat=True).first()
     report_year_label = _closing_date_label(report_date, settings_instance)
 
-    cap_solde_grand_livre = Decimal('0')
+    compte_solde_grand_livre = Decimal('0')
     blocks = []
     total_des_soldes = Decimal('0')
 
-    if cap_compte_id:
+    if compte_id:
         try:
-            cap_solde_grand_livre = _fetch_compte_solde_from_balance_view(cap_compte_id)
+            compte_solde_grand_livre = _fetch_compte_solde_from_balance_view(compte_id)
             blocks, total_des_soldes = _fetch_compte_mode_blocks_from_sql_view(
-                Compagnie.MODE_CAP,
-                cap_compte_id,
-                cap_compagnies,
+                mode,
+                compte_id,
+                compagnies,
             )
         except DatabaseError:
-            cap_solde_grand_livre = Tr_detail.objects.filter(
-                compte_id=cap_compte_id,
+            compte_solde_grand_livre = Tr_detail.objects.filter(
+                compte_id=compte_id,
             ).aggregate(total=Sum('montant')).get('total') or Decimal('0')
 
             details = Tr_detail.objects.select_related(
                 'tr_desc__compagnie',
                 'tr_desc__source',
             ).filter(
-                tr_desc__compagnie__cap_ou_car=Compagnie.MODE_CAP,
-                compte_id=cap_compte_id,
+                tr_desc__compagnie__cap_ou_car=mode,
+                compte_id=compte_id,
             ).order_by(
                 'tr_desc__compagnie__nom',
                 'tr_desc__date',
@@ -848,8 +849,8 @@ def compte_a_payer(request):
                 'id',
             )
 
-            rows_by_company = {compagnie.id: [] for compagnie in cap_compagnies}
-            soldes_by_company = {compagnie.id: Decimal('0') for compagnie in cap_compagnies}
+            rows_by_company = {compagnie.id: [] for compagnie in compagnies}
+            soldes_by_company = {compagnie.id: Decimal('0') for compagnie in compagnies}
 
             for detail in details:
                 compagnie_id = detail.tr_desc.compagnie_id
@@ -871,7 +872,7 @@ def compte_a_payer(request):
                     'solde': soldes_by_company[compagnie_id],
                 })
 
-            for compagnie in cap_compagnies:
+            for compagnie in compagnies:
                 company_solde = soldes_by_company.get(compagnie.id, Decimal('0'))
                 total_des_soldes += company_solde
                 blocks.append({
@@ -880,106 +881,33 @@ def compte_a_payer(request):
                     'solde_final': company_solde,
                 })
 
-    ecart_solde_cap = total_des_soldes - cap_solde_grand_livre
+    ecart_solde = total_des_soldes - compte_solde_grand_livre
+    mode_code = 'CAP' if is_cap else 'CAR'
 
-    return render(request, "facture/compte_a_payer.html", {
-        'title': "Comptes à payer",
+    return {
         'blocks': blocks,
         'total_des_soldes': total_des_soldes,
-        'cap_solde_grand_livre': cap_solde_grand_livre,
-        'ecart_solde_cap': ecart_solde_cap,
-        'is_solde_cap_coherent': ecart_solde_cap == Decimal('0'),
-        'cap_compte': settings_instance.cap if settings_instance else None,
+        'compte_solde_grand_livre': compte_solde_grand_livre,
+        'ecart_solde': ecart_solde,
+        'is_solde_coherent': ecart_solde == Decimal('0'),
+        'mode_compte': settings_instance.cap if (settings_instance and is_cap) else settings_instance.car if settings_instance else None,
+        'mode_code': mode_code,
         'report_year_label': report_year_label,
-    })
+    }
+
+
+def compte_a_payer(request):
+    settings_instance = get_setting()
+    context = _build_compte_mode_context(Compagnie.MODE_CAP, settings_instance)
+    context['title'] = "Comptes à payer"
+    return render(request, "facture/compte_mode.html", context)
 
 
 def compte_a_recevoir(request):
     settings_instance = get_setting()
-    car_compte_id = settings_instance.car_id if settings_instance else None
-    car_compagnies = Compagnie.objects.filter(
-        cap_ou_car=Compagnie.MODE_CAR,
-    ).order_by('nom')
-
-    report_date = Tr_desc.objects.filter(
-        compagnie__cap_ou_car=Compagnie.MODE_CAR,
-    ).order_by('-date').values_list('date', flat=True).first()
-    report_year_label = _closing_date_label(report_date, settings_instance)
-
-    car_solde_grand_livre = Decimal('0')
-    blocks = []
-    total_des_soldes = Decimal('0')
-
-    if car_compte_id:
-        try:
-            car_solde_grand_livre = _fetch_compte_solde_from_balance_view(car_compte_id)
-            blocks, total_des_soldes = _fetch_compte_mode_blocks_from_sql_view(
-                Compagnie.MODE_CAR,
-                car_compte_id,
-                car_compagnies,
-            )
-        except DatabaseError:
-            car_solde_grand_livre = Tr_detail.objects.filter(
-                compte_id=car_compte_id,
-            ).aggregate(total=Sum('montant')).get('total') or Decimal('0')
-
-            details = Tr_detail.objects.select_related(
-                'tr_desc__compagnie',
-                'tr_desc__source',
-            ).filter(
-                tr_desc__compagnie__cap_ou_car=Compagnie.MODE_CAR,
-                compte_id=car_compte_id,
-            ).order_by(
-                'tr_desc__compagnie__nom',
-                'tr_desc__date',
-                'tr_desc_id',
-                'id',
-            )
-
-            rows_by_company = {compagnie.id: [] for compagnie in car_compagnies}
-            soldes_by_company = {compagnie.id: Decimal('0') for compagnie in car_compagnies}
-
-            for detail in details:
-                compagnie_id = detail.tr_desc.compagnie_id
-                if compagnie_id not in rows_by_company:
-                    continue
-
-                montant = detail.montant or Decimal('0')
-                debit = montant if montant >= 0 else Decimal('0')
-                credit = abs(montant) if montant < 0 else Decimal('0')
-
-                soldes_by_company[compagnie_id] += montant
-
-                rows_by_company[compagnie_id].append({
-                    'date': detail.tr_desc.date,
-                    'source': detail.tr_desc.source,
-                    'description': detail.tr_desc.description,
-                    'debit': debit,
-                    'credit': credit,
-                    'solde': soldes_by_company[compagnie_id],
-                })
-
-            for compagnie in car_compagnies:
-                company_solde = soldes_by_company.get(compagnie.id, Decimal('0'))
-                total_des_soldes += company_solde
-                blocks.append({
-                    'compagnie': compagnie,
-                    'rows': rows_by_company.get(compagnie.id, []),
-                    'solde_final': company_solde,
-                })
-
-    ecart_solde_car = total_des_soldes - car_solde_grand_livre
-
-    return render(request, "facture/compte_a_recevoir.html", {
-        'title': "Comptes à recevoir",
-        'blocks': blocks,
-        'total_des_soldes': total_des_soldes,
-        'car_solde_grand_livre': car_solde_grand_livre,
-        'ecart_solde_car': ecart_solde_car,
-        'is_solde_car_coherent': ecart_solde_car == Decimal('0'),
-        'car_compte': settings_instance.car if settings_instance else None,
-        'report_year_label': report_year_label,
-    })
+    context = _build_compte_mode_context(Compagnie.MODE_CAR, settings_instance)
+    context['title'] = "Comptes à recevoir"
+    return render(request, "facture/compte_mode.html", context)
 
 
 def rapport_de_taxes(request):

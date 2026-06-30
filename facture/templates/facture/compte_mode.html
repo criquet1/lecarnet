@@ -10,23 +10,23 @@
 
 <div class="mx-auto w-100" style="max-width: 980px;">
     <div class="d-flex flex-column gap-3">
-        {% if car_compte %}
+        {% if mode_compte %}
             <div class="border rounded p-3">
                 <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center">
                     <div>
-                        <div class="fw-semibold">Compte CAR (grand-livre / balance)</div>
-                        <div class="text-muted small">{{ car_compte.numero }} - {{ car_compte.libelle }}</div>
+                        <div class="fw-semibold">Compte {{ mode_code }} (grand-livre / balance)</div>
+                        <div class="text-muted small">{{ mode_compte.numero }} - {{ mode_compte.libelle }}</div>
                     </div>
                     <div class="text-end">
-                        <div class="small text-muted">Solde du compte CAR</div>
-                        <div class="font-monospace fw-semibold">{{ car_solde_grand_livre|floatformat:2 }}</div>
+                        <div class="small text-muted">Solde du compte {{ mode_code }}</div>
+                        <div class="font-monospace fw-semibold">{{ compte_solde_grand_livre|floatformat:2 }}</div>
                     </div>
                 </div>
-                <div class="mt-2 small {% if is_solde_car_coherent %}text-success{% else %}text-danger{% endif %}">
-                    {% if is_solde_car_coherent %}
-                        Le solde CAR correspond au total des soldes affichés.
+                <div class="mt-2 small {% if is_solde_coherent %}text-success{% else %}text-danger{% endif %}">
+                    {% if is_solde_coherent %}
+                        Le solde {{ mode_code }} correspond au total des soldes affichés.
                     {% else %}
-                        Écart détecté entre le total des soldes et le solde global CAR : {{ ecart_solde_car|floatformat:2 }}.
+                        Écart détecté entre le total des soldes et le solde global {{ mode_code }} : {{ ecart_solde|floatformat:2 }}.
                     {% endif %}
                 </div>
             </div>
@@ -75,7 +75,7 @@
                 </div>
             </div>
         {% empty %}
-            <div class="alert alert-info mb-0">Aucune compagnie CAR trouvée.</div>
+            <div class="alert alert-info mb-0">Aucune compagnie {{ mode_code }} trouvée.</div>
         {% endfor %}
 
         {% if blocks %}
