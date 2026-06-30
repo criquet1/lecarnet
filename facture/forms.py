@@ -1,12 +1,11 @@
 import calendar
 from datetime import date
-from pathlib import Path
 
 from django import forms
-from django.conf import settings
 from django.forms import formset_factory
 
 from .models import Compagnie, Setting, Tr_desc
+from .utils import get_available_logos
 
 
 class CompagnieForm(forms.ModelForm):
@@ -18,19 +17,7 @@ class CompagnieForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        logos_dir = Path(settings.BASE_DIR) / 'static' / 'images' / 'logos'
-        allowed_ext = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg'}
-
-        logo_files = []
-        if logos_dir.exists():
-            logo_files = sorted(
-                p.name for p in logos_dir.iterdir()
-                if p.is_file() and p.suffix.lower() in allowed_ext
-            )
-
-        if not logo_files:
-            logo_files = ['images.png']
+        logo_files = get_available_logos()
 
         self.fields['logo'].choices = [(name, name) for name in logo_files]
         self.fields['logo'].help_text = "Fichier pris depuis static/images/logos"
@@ -96,19 +83,7 @@ class SettingForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        logos_dir = Path(settings.BASE_DIR) / 'static' / 'images' / 'logos'
-        allowed_ext = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg'}
-
-        logo_files = []
-        if logos_dir.exists():
-            logo_files = sorted(
-                p.name for p in logos_dir.iterdir()
-                if p.is_file() and p.suffix.lower() in allowed_ext
-            )
-
-        if not logo_files:
-            logo_files = ['images.png']
+        logo_files = get_available_logos()
 
         self.fields['logo'].choices = [(name, name) for name in logo_files]
         self.fields['logo'].help_text = "Fichier pris depuis static/images/logos"

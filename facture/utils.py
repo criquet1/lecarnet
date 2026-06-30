@@ -1,8 +1,10 @@
 import csv
 import io
+from pathlib import Path
 from decimal import Decimal, InvalidOperation
 from functools import wraps
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 
@@ -10,6 +12,21 @@ from django.db.utils import OperationalError, ProgrammingError
 from django.utils.connection import ConnectionDoesNotExist
 
 from facture.models import Setting
+
+
+def get_available_logos():
+	logos_dir = Path(settings.BASE_DIR) / 'static' / 'images' / 'logos'
+	allowed_ext = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg'}
+
+	if logos_dir.exists():
+		logo_files = sorted(
+			p.name for p in logos_dir.iterdir()
+			if p.is_file() and p.suffix.lower() in allowed_ext
+		)
+		if logo_files:
+			return logo_files
+
+	return ['images.png']
 
 
 def is_expert(user):
