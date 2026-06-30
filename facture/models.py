@@ -134,8 +134,20 @@ class Tr_detail(models.Model):
             models.Index(fields=['tr_desc', 'id'], name='facture_trd_trd_id_idx'),
         ]
 
-    def _tax_account_ids(self):
-        settings_instance = Setting.objects.first()
+    def _tenant_db_alias(self, db_alias=None):
+        if db_alias:
+            return db_alias
+        if self._state.db:
+            return self._state.db
+        tr_desc = self._state.fields_cache.get('tr_desc') if hasattr(self._state, 'fields_cache') else None
+        if tr_desc is not None and getattr(tr_desc._state, 'db', None):
+            return tr_desc._state.db
+        return None
+
+    def _tax_account_ids(self, db_alias=None):
+        db_alias = self._tenant_db_alias(db_alias)
+        settings_qs = Setting.objects.using(db_alias) if db_alias else Setting.objects
+        settings_instance = settings_qs.first()
         if not settings_instance:
             return set()
         return {
@@ -147,15 +159,19 @@ class Tr_detail(models.Model):
             ] if account_id
         }
 
-    def is_tax_line(self):
+    def is_tax_line(self, db_alias=None):
         if not self.compte_id:
             return False
-        return self.compte_id in self._tax_account_ids()
+        return self.compte_id in self._tax_account_ids(db_alias=db_alias)
 
     def clean(self):
         super().clean()
 
-        if self.rapport_taxes_id and not self.is_tax_line():
+        db_alias = self._tenant_db_alias()
+        rapport_qs = RapportTaxes.objects.using(db_alias) if db_alias else RapportTaxes.objects
+        detail_qs = Tr_detail.objects.using(db_alias) if db_alias else Tr_detail.objects
+
+        if self.rapport_taxes_id and not self.is_tax_line(db_alias=db_alias):
             raise ValidationError("Seules les lignes de taxes peuvent etre rattachees a un rapport de taxes.")
 
         if self.rapport_taxes and self.rapport_taxes.est_transmis:
@@ -172,18 +188,19 @@ class Tr_detail(models.Model):
         if not self.pk:
             return
 
-        previous_rapport_id = Tr_detail.objects.filter(pk=self.pk).values_list('rapport_taxes_id', flat=True).first()
+        previous_rapport_id = detail_qs.filter(pk=self.pk).values_list('rapport_taxes_id', flat=True).first()
         if not previous_rapport_id:
             return
 
-        previous_rapport = RapportTaxes.objects.filter(pk=previous_rapport_id).first()
+        previous_rapport = rapport_qs.filter(pk=previous_rapport_id).first()
         if previous_rapport and previous_rapport.est_transmis:
             raise ValidationError("Cette ligne appartient deja a un rapport de taxes transmis et est verrouillee.")
 
-    def _auto_assign_open_report(self):
+    def _auto_assign_open_report(self, db_alias=None):
         if self.rapport_taxes_id:
             return
-        if not self.is_tax_line():
+        db_alias = self._tenant_db_alias(db_alias)
+        if not self.is_tax_line(db_alias=db_alias):
             return
         if not self.tr_desc_id:
             return
@@ -192,13 +209,15 @@ class Tr_detail(models.Model):
         if not tr_date:
             return
 
-        matching_report = RapportTaxes.objects.filter(
+        rapport_qs = RapportTaxes.objects.using(db_alias) if db_alias else RapportTaxes.objects
+
+        matching_report = rapport_qs.filter(
             annee=tr_date.year,
             mois=tr_date.month,
         ).first()
 
         if not matching_report:
-            matching_report = RapportTaxes.objects.create(
+            matching_report = rapport_qs.create(
                 annee=tr_date.year,
                 mois=tr_date.month,
             )
@@ -207,8 +226,26 @@ class Tr_detail(models.Model):
             self.rapport_taxes = matching_report
 
     def save(self, *args, **kwargs):
-        self._auto_assign_open_report()
-        self.full_clean()
+        db_alias = kwargs.get('using')
+        if db_alias and not self._state.db:
+            self._state.db = db_alias
+
+        tenant_alias = self._tenant_db_alias(db_alias)
+
+        if self.tr_desc_id and tenant_alias:
+            if not Tr_desc.objects.using(tenant_alias).filter(pk=self.tr_desc_id).exists():
+                raise ValidationError({'tr_desc': "Facture introuvable sur la base client active."})
+
+        if self.compte_id and tenant_alias:
+            if not Compte.objects.using(tenant_alias).filter(pk=self.compte_id).exists():
+                raise ValidationError({'compte': "Compte introuvable sur la base client active."})
+
+        if self.rapport_taxes_id and tenant_alias:
+            if not RapportTaxes.objects.using(tenant_alias).filter(pk=self.rapport_taxes_id).exists():
+                raise ValidationError({'rapport_taxes': "Rapport de taxes introuvable sur la base client active."})
+
+        self._auto_assign_open_report(db_alias=db_alias)
+        self.full_clean(exclude=['tr_desc', 'compte', 'rapport_taxes'])
         return super().save(*args, **kwargs)
 
 

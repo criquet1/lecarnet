@@ -748,6 +748,11 @@ def facture(request):
         'all_comptes_json': json.dumps(all_comptes),
         'companies_comptes_json': json.dumps(companies_comptes),
         'companies_factures_json': json.dumps(companies_factures),
+        'compte_tps_percue_id': settings_instance.compte_tps_percue_id if settings_instance and settings_instance.compte_tps_percue_id else 0,
+        'compte_tvq_percue_id': settings_instance.compte_tvq_percue_id if settings_instance and settings_instance.compte_tvq_percue_id else 0,
+        'compte_tps_payee_id': settings_instance.compte_tps_payee_id if settings_instance and settings_instance.compte_tps_payee_id else 0,
+        'compte_tvq_payee_id': settings_instance.compte_tvq_payee_id if settings_instance and settings_instance.compte_tvq_payee_id else 0,
+        'compte_fr_retard_id': settings_instance.compte_fr_retard_id if settings_instance and settings_instance.compte_fr_retard_id else 0,
     })
 
 

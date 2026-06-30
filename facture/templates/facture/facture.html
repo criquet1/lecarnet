@@ -229,15 +229,16 @@
             var trDescDescriptionInput = invoiceForm ? invoiceForm.querySelector('input[name="trdesc-description"]') : null;
             var allComptesRaw = '{{ all_comptes_json|escapejs }}';
             var allComptes = allComptesRaw ? JSON.parse(allComptesRaw) : [];
-            var compteTpsPercueId = Number('{{ request.session.compte_tps|default:"0" }}');
-            var compteTvqPercueId = Number('{{ request.session.compte_tvq|default:"0" }}');
-            var compteTpsPayeeId = Number('{{ request.session.compte_tps_payee|default:"0" }}');
-            var compteTvqPayeeId = Number('{{ request.session.compte_tvq_payee|default:"0" }}');
-            var compteFrRetardId = Number('{{ request.session.compte_fr_retard|default:"0" }}');
+            var compteTpsPercueId = Number('{{ compte_tps_percue_id|default:"0" }}');
+            var compteTvqPercueId = Number('{{ compte_tvq_percue_id|default:"0" }}');
+            var compteTpsPayeeId = Number('{{ compte_tps_payee_id|default:"0" }}');
+            var compteTvqPayeeId = Number('{{ compte_tvq_payee_id|default:"0" }}');
+            var compteFrRetardId = Number('{{ compte_fr_retard_id|default:"0" }}');
             var TPS_RATE = 0.05;
             var TVQ_RATE = 0.09975;
             var activeCompteTpsId = 0;
             var activeCompteTvqId = 0;
+            var activeCompteFrRetardId = 0;
             var activeCompanyComptes = [];
             var editedInvoiceId = null;
 
@@ -293,7 +294,7 @@
                     return;
                 }
 
-                var frRetardInput = findMontantInputByCompteId(compteFrRetardId);
+                var frRetardInput = findMontantInputByCompteId(activeCompteFrRetardId || compteFrRetardId);
                 var frRetardAmount = frRetardInput ? parseAmount(frRetardInput.value) : 0;
                 var taxableTotal = total - frRetardAmount;
 
@@ -310,7 +311,7 @@
             }
 
             function bindFrRetardListener() {
-                var frRetardInput = findMontantInputByCompteId(compteFrRetardId);
+                var frRetardInput = findMontantInputByCompteId(activeCompteFrRetardId || compteFrRetardId);
                 if (!frRetardInput || frRetardInput.dataset.taxListenerBound === '1') {
                     return;
                 }
@@ -332,6 +333,103 @@
                     option.textContent = comptes[i].label;
                     select.appendChild(option);
                 }
+            }
+
+            function findCompteById(compteId) {
+                if (!compteId) {
+                    return null;
+                }
+
+                for (var i = 0; i < allComptes.length; i++) {
+                    if (Number(allComptes[i].id) === Number(compteId)) {
+                        return allComptes[i];
+                    }
+                }
+
+                return null;
+            }
+
+            function findCompteIdByLabelPatterns(patterns) {
+                for (var i = 0; i < allComptes.length; i++) {
+                    var label = String(allComptes[i].label || '').toUpperCase();
+                    for (var j = 0; j < patterns.length; j++) {
+                        if (label.indexOf(patterns[j]) !== -1) {
+                            return Number(allComptes[i].id || 0);
+                        }
+                    }
+                }
+
+                return 0;
+            }
+
+            function findCompteIdByLabelPatternsInList(comptes, patterns) {
+                if (!Array.isArray(comptes)) {
+                    return 0;
+                }
+
+                for (var i = 0; i < comptes.length; i++) {
+                    var label = String(comptes[i].label || '').toUpperCase();
+                    for (var j = 0; j < patterns.length; j++) {
+                        if (label.indexOf(patterns[j]) !== -1) {
+                            return Number(comptes[i].id || 0);
+                        }
+                    }
+                }
+
+                return 0;
+            }
+
+            function resolveTaxAccountIds(mode) {
+                if (mode === 'CAP') {
+                    activeCompteTpsId = activeCompteTpsId || findCompteIdByLabelPatterns(['TPS', 'GST']);
+                    activeCompteTvqId = activeCompteTvqId || findCompteIdByLabelPatterns(['TVQ', 'QST']);
+                } else if (mode === 'CAR') {
+                    activeCompteTpsId = activeCompteTpsId || findCompteIdByLabelPatterns(['TPS', 'GST']);
+                    activeCompteTvqId = activeCompteTvqId || findCompteIdByLabelPatterns(['TVQ', 'QST']);
+                }
+
+                activeCompteFrRetardId = compteFrRetardId || findCompteIdByLabelPatterns(['RETARD', 'INTERET', 'LATE', 'PENAL', 'FRAIS FIN']);
+            }
+
+            function ensureRequiredComptes(comptes) {
+                var result = Array.isArray(comptes) ? comptes.slice() : [];
+                var existingIds = {};
+
+                for (var i = 0; i < result.length; i++) {
+                    existingIds[String(result[i].id)] = true;
+                }
+
+                var requiredSpecs = [
+                    { id: activeCompteTpsId, fallbackLabel: 'TPS (selectionner un compte)' },
+                    { id: activeCompteTvqId, fallbackLabel: 'TVQ (selectionner un compte)' },
+                    { id: activeCompteFrRetardId, fallbackLabel: 'Frais de retard (selectionner un compte)' },
+                ];
+
+                for (var j = 0; j < requiredSpecs.length; j++) {
+                    var requiredId = Number(requiredSpecs[j].id || 0);
+                    if (requiredId && existingIds[String(requiredId)]) {
+                        continue;
+                    }
+
+                    if (requiredId) {
+                        var compte = findCompteById(requiredId);
+                        if (compte) {
+                            result.push({
+                                id: compte.id,
+                                label: compte.label,
+                            });
+                            existingIds[String(requiredId)] = true;
+                            continue;
+                        }
+                    }
+
+                    result.push({
+                        id: '',
+                        label: requiredSpecs[j].fallbackLabel,
+                    });
+                }
+
+                return result;
             }
 
             function syncHiddenCompteFromSelect(row) {
@@ -396,6 +494,7 @@
                         }
 
                         if (label) {
+                            label.style.display = '';
                             label.textContent = d.compteLabel || '\u00a0';
                         }
 
@@ -416,6 +515,7 @@
                         }
 
                         if (label) {
+                            label.style.display = '';
                             label.innerHTML = '&nbsp;';
                         }
 
@@ -501,6 +601,7 @@
                 editedInvoiceId = null;
                 activeCompteTpsId = 0;
                 activeCompteTvqId = 0;
+                activeCompteFrRetardId = 0;
                 activeCompanyComptes = [];
 
                 if (invoiceModalLabel) {
@@ -577,6 +678,7 @@
                         activeCompteTpsId = 0;
                         activeCompteTvqId = 0;
                     }
+                    resolveTaxAccountIds(companyMode);
 
                     var companyLogoImg = document.getElementById('company-logo');
                     var companyHeader = document.getElementById('company-header');
@@ -680,7 +782,14 @@
                     var companiesComptesRaw = '{{ companies_comptes_json|escapejs }}';
                     var companiesComptes = companiesComptesRaw ? JSON.parse(companiesComptesRaw) : {};
 
-                    var comptes = companiesComptes[companyId] || [];
+                    if (!activeCompteFrRetardId) {
+                        activeCompteFrRetardId = findCompteIdByLabelPatternsInList(
+                            companiesComptes[companyId] || [],
+                            ['RETARD', 'INTERET', 'LATE', 'PENAL', 'FRAIS FIN']
+                        );
+                    }
+
+                    var comptes = ensureRequiredComptes(companiesComptes[companyId] || []);
                     activeCompanyComptes = comptes;
                     var compteHiddenInputs = document.querySelectorAll('input[type="hidden"][name$="-compte"]');
                     var compteSelects = document.querySelectorAll('.compte-select');
@@ -698,21 +807,26 @@
                         }
 
                         var label = compteLabels[i];
+                        var rowConfig = comptes[i] || null;
 
-                        if (comptes[i]) {
-                            input.value = comptes[i].id;
+                        if (rowConfig) {
+                            input.value = rowConfig.id || '';
                             if (select) {
-                                select.value = String(comptes[i].id);
+                                select.style.display = 'none';
+                                select.value = String(rowConfig.id || '');
                             }
                             if (label) {
-                                label.textContent = comptes[i].label;
+                                label.style.display = '';
+                                label.textContent = rowConfig.label;
                             }
                         } else {
                             input.value = '';
                             if (select) {
+                                select.style.display = 'none';
                                 select.value = '';
                             }
                             if (label) {
+                                label.style.display = '';
                                 label.innerHTML = '&nbsp;';
                             }
                         }
