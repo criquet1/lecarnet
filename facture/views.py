@@ -310,8 +310,14 @@ def journal_general(request):
         'compagnie',
         'source'
     ).prefetch_related(
-        Prefetch('details', queryset=details_queryset)
+        Prefetch('details', queryset=details_queryset),
+        'releves_sources',
     ))
+
+    for entry in journal_entries:
+        releve_source = entry.releves_sources.all().first()
+        if releve_source and releve_source.desc_ctb:
+            entry.description = releve_source.desc_ctb
 
     def no_ej_sort_value(entry):
         match = re.match(r'^EJ(\d+)$', entry.no_ej or '')
@@ -898,13 +904,15 @@ def _build_compte_mode_context(mode, settings_instance):
                 montant = detail.montant or Decimal('0')
                 debit = montant if montant >= 0 else Decimal('0')
                 credit = abs(montant) if montant < 0 else Decimal('0')
+                releve_source = detail.tr_desc.releves_sources.all().first()
+                description = releve_source.desc_ctb if releve_source and releve_source.desc_ctb else detail.tr_desc.description
 
                 soldes_by_company[compagnie_id] += montant
 
                 rows_by_company[compagnie_id].append({
                     'date': detail.tr_desc.date,
                     'source': detail.tr_desc.source,
-                    'description': detail.tr_desc.description,
+                    'description': description,
                     'debit': debit,
                     'credit': credit,
                     'solde': soldes_by_company[compagnie_id],
@@ -1531,8 +1539,8 @@ def _find_releve_counterpart(current_releve, compte_cible, montant_cible):
 
     scored = []
     for candidate in candidates:
-        score_from_current_desc = _description_alias_score(current_releve.description, target_aliases)
-        score_from_candidate_desc = _description_alias_score(candidate.description, source_aliases)
+        score_from_current_desc = _description_alias_score(current_releve.desc_releve, target_aliases)
+        score_from_candidate_desc = _description_alias_score(candidate.desc_releve, source_aliases)
         combined_score = max(score_from_current_desc, score_from_candidate_desc)
         scored.append((combined_score, 0 if not candidate.ecriture_creee else 1, candidate.id, candidate))
 
@@ -1589,9 +1597,9 @@ def _import_releve_csv(csv_file):
             no_compte, nom_institut, type_compte = _detecter_compte_csv(row)
             date_str = row[3].strip() if len(row) > 3 else ''
             no_ligne = row[4].strip() if len(row) > 4 else ''
-            description = row[5].strip() if len(row) > 5 else ''
+            desc_releve = row[5].strip() if len(row) > 5 else ''
 
-            if not all([no_compte, date_str, no_ligne, description]):
+            if not all([no_compte, date_str, no_ligne, desc_releve]):
                 errors.append(f"Ligne {row_num}: Données manquantes")
                 continue
 
@@ -1626,7 +1634,8 @@ def _import_releve_csv(csv_file):
                 'type_compte': type_compte,
                 'date': date_obj,
                 'no_ligne': no_ligne,
-                'description': description,
+                'desc_releve': desc_releve,
+                'desc_ctb': desc_releve,
                 'retrait': retrait,
                 'depot': depot,
                 'solde': solde,
@@ -1768,6 +1777,8 @@ def releve_bancaire(request):
                                 tr_desc.compagnie = compagnie_ecriture
                                 tr_desc.save()
 
+                                releve.desc_ctb = tr_desc.description or releve.desc_releve
+
                                 Tr_detail.objects.filter(tr_desc=tr_desc).delete()
 
                                 Tr_detail.objects.create(
@@ -1789,7 +1800,7 @@ def releve_bancaire(request):
 
                                 releve.ecriture_creee = True
                                 releve.ecriture_tr_desc = tr_desc
-                                releve.save(update_fields=['ecriture_creee', 'ecriture_tr_desc'])
+                                releve.save(update_fields=['desc_ctb', 'ecriture_creee', 'ecriture_tr_desc'])
 
                                 lignes_liees = []
                                 for compte, montant in detail_rows:

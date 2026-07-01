@@ -42,9 +42,9 @@ class RapportTaxesAdmin(admin.ModelAdmin):
     ordering = ('-annee', '-mois', '-id')
 
 class ReleveBancaireAdmin(admin.ModelAdmin):
-    list_display = ('id', 'fichier_source', 'nom_institut', 'no_compte', 'type_compte', 'date', 'no_ligne', 'description', )
+    list_display = ('id', 'fichier_source', 'nom_institut', 'no_compte', 'type_compte', 'date', 'no_ligne', 'desc_releve', 'desc_ctb')
     list_filter = ('nom_institut', 'date')
-    search_fields = ('nom_institut',)
+    search_fields = ('nom_institut', 'desc_releve', 'desc_ctb')
 
 
 class CompteReleveAdmin(admin.ModelAdmin):

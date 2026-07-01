@@ -8,7 +8,46 @@
 <h2 class="fw-bold text-center mb-4">{{ report_year_label }}</h2>
 {% endif %}
 
-<div class="mx-auto w-100" style="max-width: 1180px;">
+<style>
+    .grand-livre-table {
+        table-layout: fixed;
+        width: 100%;
+    }
+
+    .grand-livre-table th,
+    .grand-livre-table td {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: middle;
+    }
+
+    .grand-livre-table .col-num {
+        width: 95px;
+    }
+
+    .grand-livre-table .col-ej {
+        width: 90px;
+    }
+
+    .grand-livre-table .col-date {
+        width: 110px;
+    }
+
+    .grand-livre-table .col-compagnie {
+        width: 180px;
+    }
+
+    .grand-livre-table .col-description {
+        width: 40ch;
+    }
+
+    .grand-livre-table .col-source {
+        width: 110px;
+    }
+</style>
+
+<div class="mx-auto w-100" style="max-width: 1500px; overflow-x: auto;">
 <div class="d-flex flex-column gap-3">
     {% for bloc in comptes %}
         <div class="border rounded p-3">
@@ -22,16 +61,16 @@
             </div>
 
             <div>
-                <table class="table table-sm table-striped align-middle mb-0" style="table-layout: fixed; width: 100%;">
+                <table class="table table-sm table-striped align-middle mb-0 grand-livre-table">
                     <colgroup>
-                        <col style="width: 80px;">
-                        <col style="width: 120px;">
-                        <col style="width: 140px;">
-                        <col>
-                        <col style="width: 105px;">
-                        <col style="width: 120px;">
-                        <col style="width: 120px;">
-                        <col style="width: 120px;">
+                        <col class="col-ej">
+                        <col class="col-date">
+                        <col class="col-compagnie">
+                        <col class="col-description">
+                        <col class="col-source">
+                        <col class="col-num">
+                        <col class="col-num">
+                        <col class="col-num">
                     </colgroup>
                     <thead>
                         <tr>
@@ -49,13 +88,13 @@
                         {% for row in bloc.entries %}
                             <tr>
                                 <td>{{ row.no_ej }}</td>
-                                <td class="text-nowrap">{{ row.date|date:"Y-m-d" }}</td>
-                                <td class="text-nowrap">{% if row.compagnie %}{{ row.compagnie.nom }}{% endif %}</td>
-                                <td class="text-wrap" style="word-break: break-word;">{{ row.description }}</td>
-                                <td class="text-wrap" style="word-break: break-word;">{% if row.source %}{{ row.source.nom }}{% endif %}</td>
-                                <td class="text-end text-nowrap font-monospace">{% if row.debit %}{{ row.debit|floatformat:2 }}{% endif %}</td>
-                                <td class="text-end text-nowrap font-monospace">{% if row.credit %}{{ row.credit|floatformat:2 }}{% endif %}</td>
-                                <td class="text-end text-nowrap font-monospace">{{ row.solde|floatformat:2 }}</td>
+                                <td>{{ row.date|date:"Y-m-d" }}</td>
+                                <td>{% if row.compagnie %}{{ row.compagnie.nom }}{% endif %}</td>
+                                <td>{{ row.description }}</td>
+                                <td>{% if row.source %}{% if row.source.nom == 'Rapport de taxes' %}Rapp de tx{% else %}{{ row.source.nom }}{% endif %}{% endif %}</td>
+                                <td class="text-end font-monospace">{% if row.debit %}{{ row.debit|floatformat:2 }}{% endif %}</td>
+                                <td class="text-end font-monospace">{% if row.credit %}{{ row.credit|floatformat:2 }}{% endif %}</td>
+                                <td class="text-end font-monospace">{{ row.solde|floatformat:2 }}</td>
                             </tr>
                         {% empty %}
                             <tr>
@@ -74,16 +113,16 @@
 <div class="border rounded p-3 mt-4">
     <h5 class="mb-3">Totaux generaux</h5>
     <div>
-        <table class="table table-sm align-middle mb-0" style="table-layout: fixed; width: 100%;">
+        <table class="table table-sm align-middle mb-0 grand-livre-table">
             <colgroup>
-                <col style="width: 80px;">
-                <col style="width: 120px;">
-                <col style="width: 140px;">
-                <col>
-                <col style="width: 105px;">
-                <col style="width: 120px;">
-                <col style="width: 120px;">
-                <col style="width: 120px;">
+                <col class="col-ej">
+                <col class="col-date">
+                <col class="col-compagnie">
+                <col class="col-description">
+                <col class="col-source">
+                <col class="col-num">
+                <col class="col-num">
+                <col class="col-num">
             </colgroup>
             <tbody>
                 <tr>

@@ -47,7 +47,7 @@ class Tr_desc(models.Model):
     no_ej = models.CharField(max_length=10, blank=False, null=False)
     compagnie = models.ForeignKey(Compagnie, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
     date = models.DateField()
-    description = models.CharField(max_length=100, blank=True, null=True)
+    description = models.CharField(max_length=40, blank=True, null=True)
     note_de_credit = models.BooleanField(default=False)
     source = models.ForeignKey(Source, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
 
@@ -419,7 +419,8 @@ class Releve(models.Model):
     type_compte = models.CharField(max_length=10, blank=True, null=False, default='')
     date = models.DateField()
     no_ligne = models.CharField(max_length=30, blank=False, null=False)
-    description = models.CharField(max_length=255, blank=False, null=False)
+    desc_releve = models.CharField(max_length=255, blank=False, null=False)
+    desc_ctb = models.CharField(max_length=40, blank=True, null=False, default='')
     frais = models.CharField(max_length=20, blank=True, null=False, default='')
     retrait = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     depot = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)

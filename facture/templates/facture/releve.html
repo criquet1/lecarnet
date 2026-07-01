@@ -103,7 +103,7 @@
                                     <tr>
                                         <th>Date</th>
                                         <th>No ligne</th>
-                                        <th>Description</th>
+                                        <th>Description relevé</th>
                                         <th class="text-end">Retrait</th>
                                         <th class="text-end">Dépôt</th>
                                         <th class="text-end">Solde</th>
@@ -121,7 +121,8 @@
                                         data-suggested-montant="{% if r.suggested_montant is not None %}{{ r.suggested_montant }}{% endif %}"
                                         data-date="{{ r.date|date:'Y-m-d' }}"
                                         data-no-ligne="{{ r.no_ligne|escape }}"
-                                        data-description="{{ r.description|escape }}"
+                                        data-desc-releve="{{ r.desc_releve|escape }}"
+                                        data-desc-ctb="{{ r.desc_ctb|default:''|escape }}"
                                         data-retrait="{% if r.retrait is not None %}{{ r.retrait|unlocalize }}{% endif %}"
                                         data-depot="{% if r.depot is not None %}{{ r.depot|unlocalize }}{% endif %}"
                                         data-debit="{% if r.retrait is not None %}{{ r.retrait|unlocalize }}{% endif %}"
@@ -135,7 +136,7 @@
                                         data-ecriture-details="{{ r.ecriture_details_json|default:'[]'|escape }}">
                                         <td>{{ r.date }}</td>
                                         <td>{{ r.no_ligne }}</td>
-                                        <td>{{ r.description }}</td>
+                                        <td>{{ r.desc_releve }}</td>
                                         <td class="text-end">{% if r.retrait %}{{ r.retrait }}{% endif %}</td>
                                         <td class="text-end">{% if r.depot %}{{ r.depot }}{% endif %}</td>
                                         <td class="text-end">{{ r.solde }}</td>
@@ -184,6 +185,9 @@
                         <dt class="col-sm-4">Compte</dt>
                         <dd class="col-sm-8" id="modal-compte"></dd>
 
+                        <dt class="col-sm-4">Description relevé</dt>
+                        <dd class="col-sm-8" id="modal-desc-releve"></dd>
+
                         <dt class="col-sm-4">Statut écriture</dt>
                         <dd class="col-sm-8" id="modal-statut-ecriture"></dd>
 
@@ -207,11 +211,12 @@
                                     {% endif %}
                                 </div>
                                 <div class="col-12">
-                                    {{ tr_desc_form.description.label_tag }}
+                                    <label for="{{ tr_desc_form.description.id_for_label }}" class="form-label">Description ctb</label>
                                     {{ tr_desc_form.description }}
                                     {% if tr_desc_form.description.errors %}
                                         <div class="text-danger small mt-1">{{ tr_desc_form.description.errors|join:", " }}</div>
                                     {% endif %}
+                                    <div class="form-text">La valeur est initialisée depuis la description relevé.</div>
                                 </div>
                                 <div class="col-12">
                                     <label for="id_compagnie_id" class="form-label">Compagnie (optionnelle)</label>
@@ -368,6 +373,8 @@
             var trDate = getField('id_trdesc_releve-date');
             var trDescription = getField('id_trdesc_releve-description');
             var ecritureExiste = row.dataset.ecritureCreee === '1';
+            var descReleve = row.dataset.descReleve || '';
+            var descCtb = row.dataset.descCtb || '';
 
             if (compagnieSelect) {
                 compagnieSelect.value = '';
@@ -377,7 +384,7 @@
                 trDate.value = ecritureExiste ? (row.dataset.ecritureDate || '') : (row.dataset.date || '');
             }
             if (trDescription) {
-                trDescription.value = ecritureExiste ? (row.dataset.ecritureDescription || '') : (row.dataset.description || '');
+                trDescription.value = ecritureExiste ? (row.dataset.ecritureDescription || '') : (descCtb || descReleve);
             }
             if (compagnieSelect && ecritureExiste) {
                 compagnieSelect.value = row.dataset.ecritureCompagnieId || '';
@@ -439,6 +446,7 @@
 
         function openDetail(row, preserveFormValues) {
             setText('modal-compte', row.dataset.compte);
+            setText('modal-desc-releve', row.dataset.descReleve || '');
 
             var ecritureExiste = row.dataset.ecritureCreee === '1';
             var noEj = row.dataset.noEj || '';
