@@ -11,7 +11,15 @@ from django.core.exceptions import PermissionDenied
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils.connection import ConnectionDoesNotExist
 
-from facture.models import Setting
+from facture.models import Compagnie, Setting
+
+
+TAX_AUTHORITY_COMPANY_TPS = 'Revenu Canada TPS'
+TAX_AUTHORITY_COMPANY_TVQ = 'Revenu Quebec TVQ'
+TAX_AUTHORITY_COMPANY_NAMES = [
+	TAX_AUTHORITY_COMPANY_TPS,
+	TAX_AUTHORITY_COMPANY_TVQ,
+]
 
 
 def get_available_logos():
@@ -82,6 +90,29 @@ def get_setting(*select_related_fields):
 	if select_related_fields:
 		queryset = queryset.select_related(*select_related_fields)
 	return queryset.first()
+
+
+def tax_target_mode_from_setting(settings_instance):
+	if not settings_instance or settings_instance.taxes_mode == Setting.TAX_MODE_RECLAMER:
+		return Compagnie.MODE_CAR
+	return Compagnie.MODE_CAP
+
+
+def ensure_tax_authority_companies(settings_instance=None):
+	settings_instance = settings_instance or get_setting()
+	target_mode = tax_target_mode_from_setting(settings_instance)
+
+	for company_name in TAX_AUTHORITY_COMPANY_NAMES:
+		compagnie, created = Compagnie.objects.get_or_create(
+			nom=company_name,
+			defaults={
+				'logo': 'images.png',
+				'cap_ou_car': target_mode,
+			},
+		)
+		if not created and compagnie.cap_ou_car != target_mode:
+			compagnie.cap_ou_car = target_mode
+			compagnie.save(update_fields=['cap_ou_car'])
 
 
 def decode_csv_bytes(raw_bytes):

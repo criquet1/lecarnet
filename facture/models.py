@@ -48,6 +48,7 @@ class Tr_desc(models.Model):
     compagnie = models.ForeignKey(Compagnie, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
     date = models.DateField()
     description = models.CharField(max_length=100, blank=True, null=True)
+    note_de_credit = models.BooleanField(default=False)
     source = models.ForeignKey(Source, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
 
     class Meta:
@@ -180,9 +181,11 @@ class Tr_detail(models.Model):
         if self.rapport_taxes and self.tr_desc_id and self.tr_desc and self.tr_desc.date:
             line_year = self.tr_desc.date.year
             line_month = self.tr_desc.date.month
-            if line_year != self.rapport_taxes.annee or line_month != self.rapport_taxes.mois:
+            report_period = (self.rapport_taxes.annee, self.rapport_taxes.mois)
+            line_period = (line_year, line_month)
+            if report_period < line_period:
                 raise ValidationError(
-                    "La ligne de taxes doit appartenir au meme mois et a la meme annee que le rapport."
+                    "La ligne de taxes doit etre rattachee a un rapport du meme mois ou d'un mois ulterieur."
                 )
 
         if not self.pk:
@@ -205,6 +208,11 @@ class Tr_detail(models.Model):
         if not self.tr_desc_id:
             return
 
+        # Ne pas rattacher les ecritures de transmission du rapport de taxes
+        # au rapport mensuel source; elles doivent rester hors du bloc de calcul.
+        if self.tr_desc and self.tr_desc.source and self.tr_desc.source.nom == 'Rapport de taxes':
+            return
+
         tr_date = getattr(self.tr_desc, 'date', None)
         if not tr_date:
             return
@@ -224,6 +232,36 @@ class Tr_detail(models.Model):
 
         if matching_report and not matching_report.est_transmis:
             self.rapport_taxes = matching_report
+            return
+
+        # Rattrapage: si le mois d'origine est transmis, rattacher au premier
+        # rapport non transmis qui suit ce mois (ex: mai transmis -> juin brouillon).
+        next_open_report = rapport_qs.filter(
+            transmis_le__isnull=True,
+        ).filter(
+            Q(annee__gt=tr_date.year) |
+            (Q(annee=tr_date.year) & Q(mois__gt=tr_date.month))
+        ).order_by('annee', 'mois').first()
+        if next_open_report:
+            self.rapport_taxes = next_open_report
+            return
+
+        year = tr_date.year
+        month = tr_date.month
+        # Cree le prochain mois ouvert s'il n'existe pas deja.
+        for _ in range(120):
+            month += 1
+            if month > 12:
+                month = 1
+                year += 1
+
+            candidate, _ = rapport_qs.get_or_create(
+                annee=year,
+                mois=month,
+            )
+            if not candidate.est_transmis:
+                self.rapport_taxes = candidate
+                return
 
     def save(self, *args, **kwargs):
         db_alias = kwargs.get('using')
@@ -250,6 +288,13 @@ class Tr_detail(models.Model):
 
 
 class Setting(models.Model):
+    TAX_MODE_RECLAMER = 'RECLAMER'
+    TAX_MODE_PAYER = 'PAYER'
+    TAX_MODE_CHOICES = [
+        (TAX_MODE_RECLAMER, 'Les taxes sont generalement a reclamer'),
+        (TAX_MODE_PAYER, 'Les taxes sont generalement a payer'),
+    ]
+
     nom = models.CharField(max_length=60, blank=False, null=False)
     logo = models.CharField(
         max_length=100,
@@ -300,6 +345,11 @@ class Setting(models.Model):
         related_name='settings_tvq_payee'
     )
     compte_fr_retard = models.ForeignKey(Compte, on_delete=models.SET_NULL, null=True, blank=True, related_name='settings_fr_retard')
+    taxes_mode = models.CharField(
+        max_length=16,
+        choices=TAX_MODE_CHOICES,
+        default=TAX_MODE_RECLAMER,
+    )
 
     def __str__(self):
         return self.nom

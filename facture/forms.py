@@ -51,6 +51,7 @@ class SettingForm(forms.ModelForm):
             'compte_tvq_percue',
             'compte_tvq_payee',
             'compte_fr_retard',
+            'taxes_mode',
         ]
         widgets = {
             'nom': forms.TextInput(attrs={'class': 'form-control'}),
@@ -67,6 +68,7 @@ class SettingForm(forms.ModelForm):
             'compte_tvq_percue': forms.Select(attrs={'class': 'form-select'}),
             'compte_tvq_payee': forms.Select(attrs={'class': 'form-select'}),
             'compte_fr_retard': forms.Select(attrs={'class': 'form-select'}),
+            'taxes_mode': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -112,9 +114,10 @@ class SettingForm(forms.ModelForm):
 class TrDescForm(forms.ModelForm):
     class Meta:
         model = Tr_desc
-        fields = ['date', 'description']
+        fields = ['date', 'description', 'note_de_credit']
         widgets = {
             'date': forms.DateInput(attrs={'type': 'date'}),
+            'note_de_credit': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
 

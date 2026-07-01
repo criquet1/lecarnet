@@ -110,6 +110,15 @@
                     {{ form.compte_fr_retard }}
                     {{ form.compte_fr_retard.errors }}
                 </div>
+            </div>
+
+            <div class="row g-3 mt-1">
+                <div class="col-12">
+                    <label class="form-label" for="{{ form.taxes_mode.id_for_label }}">Traitement général des taxes</label>
+                    {{ form.taxes_mode }}
+                    {{ form.taxes_mode.errors }}
+                    <div class="form-text">À réclamer => CAR. À payer => CAP.</div>
+                </div>
                 <div class="col-md-6 col-xl-3">
                     <label class="form-label" for="{{ form.compte_tps_percue.id_for_label }}">TPS perçue</label>
                     {{ form.compte_tps_percue }}

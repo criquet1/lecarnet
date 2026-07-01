@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.shortcuts import redirect, render
 
 from facture.models import Compagnie, CompagnieSoldeDepart, CompteReleve
-from facture.utils import expert_required, get_settings, parse_decimal, read_csv_rows
+from facture.utils import ensure_tax_authority_companies, expert_required, get_settings, parse_decimal, read_csv_rows
 
 from .forms import CompteCsvImportForm, CompteForm, SettingForm
 from .models import Compte, SoldeAuxLivres, Total
@@ -314,7 +314,8 @@ def settings_page(request):
 	if request.method == 'POST':
 		form = SettingForm(request.POST, instance=settings_instance)
 		if form.is_valid():
-			form.save()
+			settings_instance = form.save()
+			ensure_tax_authority_companies(settings_instance)
 			return redirect('settings')
 	else:
 		form = SettingForm(instance=settings_instance)

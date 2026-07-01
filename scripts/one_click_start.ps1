@@ -45,6 +45,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if (-not $NoRunServer) {
-    Write-Host "Serveur sur http://127.0.0.1:8000" -ForegroundColor Green
-    & $python manage.py runserver
+    $port = if ($config.serverPort) { $config.serverPort } else { "8000" }
+    Write-Host "Serveur sur http://lecarnet.io:$port (ou http://127.0.0.1:$port)" -ForegroundColor Green
+    & $python manage.py runserver "0.0.0.0:$port"
 }

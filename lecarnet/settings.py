@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-4yu1pvs&-g1oz$+skhpve!8*+45_efkzq752#!u15h+nj^&kp=
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['lecarnet.io', '127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['lecarnet.io', 'www.lecarnet.io', '127.0.0.1', 'localhost']
 
 
 # Application definition

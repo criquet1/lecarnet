@@ -87,6 +87,7 @@ class SettingForm(forms.ModelForm):
             'compte_tvq_percue',
             'compte_tvq_payee',
             'compte_fr_retard',
+            'taxes_mode',
         ]
         widgets = {
             'nom': forms.TextInput(attrs={'class': 'form-control'}),
@@ -103,6 +104,7 @@ class SettingForm(forms.ModelForm):
             'compte_tvq_percue': forms.Select(attrs={'class': 'form-select'}),
             'compte_tvq_payee': forms.Select(attrs={'class': 'form-select'}),
             'compte_fr_retard': forms.Select(attrs={'class': 'form-select'}),
+            'taxes_mode': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):

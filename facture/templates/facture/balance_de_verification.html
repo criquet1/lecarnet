@@ -24,8 +24,8 @@
                 <tr>
                     <td>{{ row.compte.numero }}</td>
                     <td>{{ row.compte.libelle }}</td>
-                    <td class="text-end">{% if row.debit %}{{ row.debit }}{% endif %}</td>
-                    <td class="text-end">{% if row.credit %}{{ row.credit }}{% endif %}</td>
+                    <td class="text-end">{% if row.debit %}{{ row.debit|floatformat:2 }}{% endif %}</td>
+                    <td class="text-end">{% if row.credit %}{{ row.credit|floatformat:2 }}{% endif %}</td>
                 </tr>
             {% empty %}
                 <tr>
@@ -36,8 +36,8 @@
         <tfoot>
             <tr>
                 <th colspan="2" class="text-end">Totaux</th>
-                <th class="text-end">{{ total_debit }}</th>
-                <th class="text-end">{{ total_credit }}</th>
+                <th class="text-end">{{ total_debit|floatformat:2 }}</th>
+                <th class="text-end">{{ total_credit|floatformat:2 }}</th>
             </tr>
         </tfoot>
     </table>

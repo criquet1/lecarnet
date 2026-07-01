@@ -101,6 +101,10 @@
                 {{ tr_desc_form.date.label_tag }}
                 {{ tr_desc_form.date }}
             </div>
+            <div class="form-check mb-3">
+                {{ tr_desc_form.note_de_credit }}
+                <label class="form-check-label" for="{{ tr_desc_form.note_de_credit.id_for_label }}">Note de crédit</label>
+            </div>
             <div class="mb-3">
                 <label for="id_facture_total" class="form-label">Total</label>
                 <input type="number" step="0.01" class="form-control form-control-sm w-auto text-end" style="max-width: 180px;" id="id_facture_total" name="facture_total" placeholder="0.00">
@@ -227,8 +231,11 @@
             var totalInput = document.getElementById('id_facture_total');
             var trDescDateInput = invoiceForm ? invoiceForm.querySelector('input[name="trdesc-date"]') : null;
             var trDescDescriptionInput = invoiceForm ? invoiceForm.querySelector('input[name="trdesc-description"]') : null;
+            var trDescNoteDeCreditInput = invoiceForm ? invoiceForm.querySelector('input[name="trdesc-note_de_credit"]') : null;
             var allComptesRaw = '{{ all_comptes_json|escapejs }}';
             var allComptes = allComptesRaw ? JSON.parse(allComptesRaw) : [];
+            var compteCapId = Number('{{ compte_cap_id|default:"0" }}');
+            var compteCarId = Number('{{ compte_car_id|default:"0" }}');
             var compteTpsPercueId = Number('{{ compte_tps_percue_id|default:"0" }}');
             var compteTvqPercueId = Number('{{ compte_tvq_percue_id|default:"0" }}');
             var compteTpsPayeeId = Number('{{ compte_tps_payee_id|default:"0" }}');
@@ -236,6 +243,7 @@
             var compteFrRetardId = Number('{{ compte_fr_retard_id|default:"0" }}');
             var TPS_RATE = 0.05;
             var TVQ_RATE = 0.09975;
+            var activeCompanyMode = '';
             var activeCompteTpsId = 0;
             var activeCompteTvqId = 0;
             var activeCompteFrRetardId = 0;
@@ -250,6 +258,18 @@
                 var normalized = String(value).replace(/\s/g, '').replace(',', '.');
                 var amount = parseFloat(normalized);
                 return isNaN(amount) ? 0 : amount;
+            }
+
+            function roundCurrency(amount) {
+                return Math.round((Number(amount) || 0) * 100) / 100;
+            }
+
+            function toCents(amount) {
+                return Math.round((Number(amount) || 0) * 100);
+            }
+
+            function fromCents(cents) {
+                return (Number(cents) || 0) / 100;
             }
 
             function findMontantInputByCompteId(compteId) {
@@ -276,6 +296,40 @@
                 return null;
             }
 
+            function isNoteDeCreditSelected() {
+                return !!(trDescNoteDeCreditInput && trDescNoteDeCreditInput.checked);
+            }
+
+            function formatSignedAmount(amount, sign) {
+                if (!amount) {
+                    return '';
+                }
+                return roundCurrency(amount * sign).toFixed(2);
+            }
+
+            function syncDocumentSignDisplay() {
+                if (!invoiceForm) {
+                    return;
+                }
+
+                var sign = isNoteDeCreditSelected() ? -1 : 1;
+
+                if (totalInput && totalInput.value.trim()) {
+                    totalInput.value = formatSignedAmount(Math.abs(parseAmount(totalInput.value)), sign);
+                }
+
+                var montantInputs = invoiceForm.querySelectorAll('input[name$="-montant"]');
+                for (var i = 0; i < montantInputs.length; i++) {
+                    var input = montantInputs[i];
+                    if (!input.value.trim()) {
+                        continue;
+                    }
+                    input.value = formatSignedAmount(Math.abs(parseAmount(input.value)), sign);
+                }
+
+                recalculateInvertedTaxes();
+            }
+
             function recalculateInvertedTaxes() {
                 if (!totalInput || !activeCompteTpsId || !activeCompteTvqId) {
                     return;
@@ -287,27 +341,31 @@
                     return;
                 }
 
-                var total = parseAmount(totalInput.value);
-                if (total <= 0) {
+                var sign = isNoteDeCreditSelected() ? -1 : 1;
+                var totalCents = toCents(Math.abs(parseAmount(totalInput.value)));
+                if (totalCents <= 0) {
                     tpsInput.value = '';
                     tvqInput.value = '';
                     return;
                 }
 
                 var frRetardInput = findMontantInputByCompteId(activeCompteFrRetardId || compteFrRetardId);
-                var frRetardAmount = frRetardInput ? parseAmount(frRetardInput.value) : 0;
-                var taxableTotal = total - frRetardAmount;
+                var frRetardCents = frRetardInput ? toCents(Math.abs(parseAmount(frRetardInput.value))) : 0;
+                var taxableTotalCents = totalCents - frRetardCents;
 
-                if (taxableTotal < 0) {
-                    taxableTotal = 0;
+                if (taxableTotalCents < 0) {
+                    taxableTotalCents = 0;
                 }
 
-                var taxableSubtotal = taxableTotal / (1 + TPS_RATE + TVQ_RATE);
-                var tpsAmount = taxableSubtotal * TPS_RATE;
-                var tvqAmount = taxableTotal - taxableSubtotal - tpsAmount;
+                var subtotalCents = Math.round(taxableTotalCents / (1 + TPS_RATE + TVQ_RATE));
+                var tpsCents = Math.round(subtotalCents * TPS_RATE);
+                var tvqCents = taxableTotalCents - subtotalCents - tpsCents;
 
-                tpsInput.value = tpsAmount.toFixed(2);
-                tvqInput.value = tvqAmount.toFixed(2);
+                var tpsAmount = fromCents(tpsCents);
+                var tvqAmount = fromCents(tvqCents);
+
+                tpsInput.value = formatSignedAmount(tpsAmount, sign);
+                tvqInput.value = formatSignedAmount(tvqAmount, sign);
             }
 
             function bindFrRetardListener() {
@@ -319,6 +377,18 @@
                 frRetardInput.addEventListener('input', recalculateInvertedTaxes);
                 frRetardInput.addEventListener('change', recalculateInvertedTaxes);
                 frRetardInput.dataset.taxListenerBound = '1';
+            }
+
+            function getForcedCompteIdForActiveCompany() {
+                if (activeCompanyMode === 'CAP') {
+                    return compteCapId;
+                }
+
+                if (activeCompanyMode === 'CAR') {
+                    return compteCarId;
+                }
+
+                return 0;
             }
 
             function fillCompteSelect(select, comptes) {
@@ -454,21 +524,75 @@
                 var items = invoiceModal.querySelectorAll('#factures-list li[data-invoice-id]');
                 for (var i = 0; i < items.length; i++) {
                     var item = items[i];
+                    var buttons = item.querySelectorAll('button');
                     if (editedInvoiceId && String(item.getAttribute('data-invoice-id')) === String(editedInvoiceId)) {
                         item.classList.add('active');
+                        for (var j = 0; j < buttons.length; j++) {
+                            buttons[j].classList.remove('text-body');
+                            buttons[j].classList.add('text-white');
+                        }
                     } else {
                         item.classList.remove('active');
+                        for (var k = 0; k < buttons.length; k++) {
+                            buttons[k].classList.remove('text-white');
+                            if (k === 0) {
+                                buttons[k].classList.add('text-body');
+                            }
+                        }
                     }
                 }
             }
 
-            function applyInvoiceDetailsToForm(invoice) {
+            function formatCopiedMontant(rawMontant, options) {
+                var amount = Math.abs(parseAmount(rawMontant));
+                if (!amount) {
+                    return '';
+                }
+
+                var sign = options && options.noteDeCredit ? -1 : 1;
+                return formatSignedAmount(amount, sign);
+            }
+
+            function formatCopiedTotal(rawTotal, options) {
+                var amount = Math.abs(parseAmount(rawTotal));
+                if (!amount) {
+                    return '';
+                }
+
+                var sign = options && options.noteDeCredit ? -1 : 1;
+                return formatSignedAmount(amount, sign);
+            }
+
+            function applyInvoiceDetailsToForm(invoice, options) {
                 if (!invoice || !invoice.details || !invoiceModal) {
                     return;
                 }
 
-                var details = invoice.details;
+                var applyOptions = options || {};
+                applyOptions.noteDeCredit = !!invoice.noteDeCredit;
+                var details = Array.isArray(invoice.details) ? invoice.details : [];
                 var rows = invoiceModal.querySelectorAll('.invoice-detail-row');
+                var detailsByCompteId = {};
+                var overflowDetails = [];
+                var availableOverflowRows = [];
+                var forcedCompteId = Number(getForcedCompteIdForActiveCompany() || 0);
+
+                for (var detailIndex = 0; detailIndex < details.length; detailIndex++) {
+                    var detail = details[detailIndex] || {};
+                    var detailCompteId = String(detail.compteId || '');
+                    if (!detailCompteId) {
+                        continue;
+                    }
+
+                    if (applyOptions.excludeForcedCompte && forcedCompteId && Number(detailCompteId) === forcedCompteId) {
+                        continue;
+                    }
+
+                    if (!detailsByCompteId[detailCompteId]) {
+                        detailsByCompteId[detailCompteId] = [];
+                    }
+                    detailsByCompteId[detailCompteId].push(detail);
+                }
 
                 for (var i = 0; i < rows.length; i++) {
                     var row = rows[i];
@@ -476,37 +600,37 @@
                     var select = row.querySelector('.compte-select');
                     var label = row.querySelector('.compte-label');
                     var montant = row.querySelector('input[name$="-montant"]');
+                    var rowCompteId = hiddenCompte ? String(hiddenCompte.value || '') : '';
+                    var matchedDetails = rowCompteId ? detailsByCompteId[rowCompteId] : null;
+                    var matchedDetail = matchedDetails && matchedDetails.length ? matchedDetails.shift() : null;
 
-                    if (i < details.length) {
-                        var d = details[i] || {};
-                        var compteId = String(d.compteId || '');
-
+                    if (matchedDetail) {
                         row.style.display = '';
-
-                        if (hiddenCompte) {
-                            hiddenCompte.value = compteId;
-                        }
 
                         if (select) {
                             fillCompteSelect(select, allComptes);
                             select.style.display = 'none';
-                            select.value = compteId;
+                            select.value = rowCompteId;
                         }
 
-                        if (label) {
+                        if (label && !label.textContent.trim()) {
                             label.style.display = '';
-                            label.textContent = d.compteLabel || '\u00a0';
+                            label.textContent = matchedDetail.compteLabel || '\u00a0';
                         }
 
                         if (montant) {
-                            montant.value = d.montant || '';
+                            montant.value = formatCopiedMontant(matchedDetail.montant, applyOptions);
                         }
-                    } else {
-                        row.style.display = 'none';
 
-                        if (hiddenCompte) {
-                            hiddenCompte.value = '';
-                        }
+                        continue;
+                    }
+
+                    if (montant) {
+                        montant.value = '';
+                    }
+
+                    if (!rowCompteId) {
+                        row.style.display = 'none';
 
                         if (select) {
                             fillCompteSelect(select, allComptes);
@@ -519,14 +643,58 @@
                             label.innerHTML = '&nbsp;';
                         }
 
-                        if (montant) {
-                            montant.value = '';
-                        }
+                        availableOverflowRows.push(row);
+                    }
+                }
+
+                for (var compteId in detailsByCompteId) {
+                    if (!Object.prototype.hasOwnProperty.call(detailsByCompteId, compteId)) {
+                        continue;
+                    }
+
+                    var remainingDetails = detailsByCompteId[compteId] || [];
+                    for (var remainingIndex = 0; remainingIndex < remainingDetails.length; remainingIndex++) {
+                        overflowDetails.push(remainingDetails[remainingIndex]);
+                    }
+                }
+
+                for (var overflowIndex = 0; overflowIndex < overflowDetails.length && overflowIndex < availableOverflowRows.length; overflowIndex++) {
+                    var overflowRow = availableOverflowRows[overflowIndex];
+                    var overflowDetail = overflowDetails[overflowIndex] || {};
+                    var overflowCompteId = String(overflowDetail.compteId || '');
+                    var overflowHiddenCompte = overflowRow.querySelector('input[type="hidden"][name$="-compte"]');
+                    var overflowSelect = overflowRow.querySelector('.compte-select');
+                    var overflowLabel = overflowRow.querySelector('.compte-label');
+                    var overflowMontant = overflowRow.querySelector('input[name$="-montant"]');
+
+                    overflowRow.style.display = '';
+
+                    if (overflowHiddenCompte) {
+                        overflowHiddenCompte.value = overflowCompteId;
+                    }
+
+                    if (overflowSelect) {
+                        fillCompteSelect(overflowSelect, allComptes);
+                        overflowSelect.style.display = 'none';
+                        overflowSelect.value = overflowCompteId;
+                    }
+
+                    if (overflowLabel) {
+                        overflowLabel.style.display = '';
+                        overflowLabel.textContent = overflowDetail.compteLabel || '\u00a0';
+                    }
+
+                    if (overflowMontant) {
+                        overflowMontant.value = formatCopiedMontant(overflowDetail.montant, applyOptions);
                     }
                 }
 
                 if (totalInput) {
-                    totalInput.value = Number(invoice.total || 0).toFixed(2);
+                    totalInput.value = formatCopiedTotal(invoice.total, applyOptions);
+                }
+
+                if (applyOptions.forNewInvoice) {
+                    recalculateInvertedTaxes();
                 }
             }
 
@@ -547,6 +715,10 @@
                     trDescDescriptionInput.value = invoice.numero || '';
                 }
 
+                if (trDescNoteDeCreditInput) {
+                    trDescNoteDeCreditInput.checked = !!invoice.noteDeCredit;
+                }
+
                 if (invoiceModalLabel) {
                     invoiceModalLabel.textContent = 'Modifier la facture';
                 }
@@ -558,7 +730,7 @@
                 editedInvoiceId = String(invoice.id || '');
                 highlightEditedInvoiceLine();
 
-                applyInvoiceDetailsToForm(invoice);
+                applyInvoiceDetailsToForm(invoice, { excludeForcedCompte: true });
             }
 
             function firstDayFromSelectedPeriod() {
@@ -597,6 +769,9 @@
                 }
                 if (editingTrDescInput) {
                     editingTrDescInput.value = '';
+                }
+                if (trDescNoteDeCreditInput) {
+                    trDescNoteDeCreditInput.checked = false;
                 }
                 editedInvoiceId = null;
                 activeCompteTpsId = 0;
@@ -667,6 +842,7 @@
                     var companyName = button.getAttribute('data-company-name');
                     var companyMode = (button.getAttribute('data-company-mode') || '').toUpperCase();
                     var companyLogo = button.getAttribute('data-company-logo');
+                    activeCompanyMode = companyMode;
 
                     if (companyMode === 'CAP') {
                         activeCompteTpsId = compteTpsPayeeId;
@@ -698,6 +874,9 @@
                     }
                     if (editingTrDescInput) {
                         editingTrDescInput.value = '';
+                    }
+                    if (trDescNoteDeCreditInput) {
+                        trDescNoteDeCreditInput.checked = false;
                     }
                     editedInvoiceId = null;
 
@@ -757,9 +936,12 @@
                                     if (saveInvoiceBtn) {
                                         saveInvoiceBtn.textContent = 'Enregistrer la facture';
                                     }
+                                    if (trDescNoteDeCreditInput) {
+                                        trDescNoteDeCreditInput.checked = !!invoiceData.noteDeCredit;
+                                    }
                                     editedInvoiceId = null;
                                     highlightEditedInvoiceLine();
-                                    applyInvoiceDetailsToForm(invoiceData);
+                                    applyInvoiceDetailsToForm(invoiceData, { forNewInvoice: true, excludeForcedCompte: true });
                                 };
                             }(f));
 
@@ -918,6 +1100,10 @@
             if (totalInput) {
                 totalInput.addEventListener('input', recalculateInvertedTaxes);
                 totalInput.addEventListener('change', recalculateInvertedTaxes);
+            }
+
+            if (trDescNoteDeCreditInput) {
+                trDescNoteDeCreditInput.addEventListener('change', syncDocumentSignDisplay);
             }
 
             // Nettoyer les lignes non-remplies avant soumission

@@ -5,7 +5,7 @@ from django.db import transaction, connections, DatabaseError
 from django.db.models import Prefetch, Sum, Value, DecimalField, Case, When, IntegerField, F
 from django.db.models.functions import Coalesce
 from django.utils import timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from calendar import monthrange
 from types import SimpleNamespace
 import re
@@ -13,13 +13,25 @@ import csv
 import json
 from io import TextIOWrapper
 import chardet
-from datetime import datetime
+from datetime import date, datetime
 from facture.constants import MONTH_LABELS_FR
-from facture.models import Compagnie, Tr_desc, Tr_detail, Source, Setting, Releve, RapportTaxes, CompteReleve
+from facture.models import Compagnie, Tr_desc, Tr_detail, Source, Setting, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart
 from facture.context_processors import build_fiscal_period_options
 from facture.forms import CompagnieForm, TrDescForm, TrDetailFormSet
-from facture.utils import expert_required, get_setting, parse_decimal, split_debit_credit
+from facture.utils import (
+    TAX_AUTHORITY_COMPANY_NAMES,
+    ensure_tax_authority_companies,
+    expert_required,
+    get_setting,
+    parse_decimal,
+    split_debit_credit,
+    tax_target_mode_from_setting,
+)
 from compte.models import Compte, SoldeAuxLivres
+
+
+def _money(value):
+    return (value or Decimal('0')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
 def _solde_depart_par_compte():
@@ -53,6 +65,14 @@ def _ledger_db_alias():
     return Tr_detail.objects.all().db
 
 
+def _coerce_decimal(value):
+    if value is None or value == '':
+        return Decimal('0')
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
+
+
 def _fetch_balance_rows_from_sql_view():
     db_alias = _ledger_db_alias()
     query = """
@@ -77,9 +97,9 @@ def _fetch_balance_rows_from_sql_view():
                     numero=compte_numero,
                     libelle=compte_libelle,
                 ),
-                'debit': debit or Decimal('0'),
-                'credit': credit or Decimal('0'),
-                'solde_depart': solde_depart or Decimal('0'),
+                'debit': _coerce_decimal(debit),
+                'credit': _coerce_decimal(credit),
+                'solde_depart': _coerce_decimal(solde_depart),
             })
 
     total_debit = sum((row['debit'] for row in rows), Decimal('0'))
@@ -146,9 +166,9 @@ def _fetch_grand_livre_from_sql_view():
                     'solde': Decimal('0'),
                 }
 
-            debit = debit or Decimal('0')
-            credit = credit or Decimal('0')
-            solde = solde or Decimal('0')
+            debit = _coerce_decimal(debit)
+            credit = _coerce_decimal(credit)
+            solde = _coerce_decimal(solde)
 
             current_block['entries'].append({
                 'date': tr_date,
@@ -190,7 +210,7 @@ def _fetch_compte_solde_from_balance_view(compte_id):
         cursor.execute(query, [compte_id])
         row = cursor.fetchone()
 
-    return (row[0] or Decimal('0')) if row else Decimal('0')
+    return _coerce_decimal(row[0]) if row else Decimal('0')
 
 
 def _fetch_compte_mode_blocks_from_sql_view(mode, compte_id, compagnies):
@@ -232,11 +252,11 @@ def _fetch_compte_mode_blocks_from_sql_view(mode, compte_id, compagnies):
                 'date': tr_date,
                 'source': SimpleNamespace(nom=source_nom) if source_nom else None,
                 'description': tr_description,
-                'debit': debit or Decimal('0'),
-                'credit': credit or Decimal('0'),
-                'solde': solde_compagnie or Decimal('0'),
+                'debit': _coerce_decimal(debit),
+                'credit': _coerce_decimal(credit),
+                'solde': _coerce_decimal(solde_compagnie),
             })
-            soldes_by_company[compagnie_id] = solde_compagnie or Decimal('0')
+            soldes_by_company[compagnie_id] = _coerce_decimal(solde_compagnie)
 
     blocks = []
     total_des_soldes = Decimal('0')
@@ -459,18 +479,24 @@ def _serialize_invoice(tr):
         })
 
     display_total = forced_amount if forced_amount is not None else max_abs_amount
+    if tr.note_de_credit:
+        display_total = -display_total
 
     return {
         'id': str(tr.id),
         'date': tr.date.isoformat() if tr.date else '',
         'numero': tr.description or '',
+        'noteDeCredit': bool(tr.note_de_credit),
         'total': f"{display_total:.2f}",
         'details': details,
     }
 
 
 def _parse_facture_total(raw_value):
-    return parse_decimal(raw_value, strip_spaces=True)
+    value = parse_decimal(raw_value, strip_spaces=True)
+    if value is None:
+        return None
+    return _money(value)
 
 
 def company_invoices_api(request, company_id):
@@ -505,7 +531,7 @@ def facture(request):
                 )
             ).prefetch_related('details__compte').order_by('-date', '-id')
         )
-    ).all()
+    ).exclude(nom__in=TAX_AUTHORITY_COMPANY_NAMES).all()
     comptes_queryset = Compte.objects.all()
 
     all_comptes = [
@@ -576,6 +602,7 @@ def facture(request):
                 'no_ej': tr.no_ej,
                 'numero': tr.description or '',
                 'date': tr.date.isoformat() if tr.date else '',
+                'noteDeCredit': serialized['noteDeCredit'],
                 'total': float(serialized['total']),
                 'details': serialized['details'],
             })
@@ -670,6 +697,7 @@ def facture(request):
                 with transaction.atomic():
                     tr_desc = tr_desc_form.save(commit=False)
                     source_facture, _ = Source.objects.get_or_create(nom='Facture')
+                    sign_multiplier = -1 if tr_desc.note_de_credit else 1
                     tr_desc.compagnie = selected_company
                     if not tr_desc.no_ej:
                         tr_desc.no_ej = _next_no_ej()
@@ -693,16 +721,16 @@ def facture(request):
                     # En mode CAP/CAR, le compte de contrepartie vient toujours de Setting.
                     if forced_compte:
                         filtered_rows = [
-                            (compte, montant)
+                            (compte, abs(montant))
                             for (compte, montant) in detail_rows
                             if compte.pk != forced_compte.pk
                         ]
 
-                        if company_mode == 'CAR':
-                            filtered_rows = [
-                                (compte, -abs(montant))
-                                for (compte, montant) in filtered_rows
-                            ]
+                        detail_sign = -1 if company_mode == 'CAR' else 1
+                        filtered_rows = [
+                            (compte, detail_sign * sign_multiplier * abs(montant))
+                            for (compte, montant) in filtered_rows
+                        ]
 
                         for compte, montant in filtered_rows:
                             Tr_detail.objects.create(
@@ -711,10 +739,8 @@ def facture(request):
                                 montant=montant,
                             )
 
-                        if company_mode == 'CAP':
-                            forced_amount = -abs(facture_total_value)
-                        else:
-                            forced_amount = facture_total_value
+                        forced_sign = -1 if company_mode == 'CAP' else 1
+                        forced_amount = forced_sign * sign_multiplier * abs(facture_total_value)
 
                         Tr_detail.objects.create(
                             tr_desc=tr_desc,
@@ -726,7 +752,7 @@ def facture(request):
                             Tr_detail.objects.create(
                                 tr_desc=tr_desc,
                                 compte=compte,
-                                montant=montant,
+                                montant=sign_multiplier * abs(montant),
                             )
                 return redirect('facture')
 
@@ -748,6 +774,8 @@ def facture(request):
         'all_comptes_json': json.dumps(all_comptes),
         'companies_comptes_json': json.dumps(companies_comptes),
         'companies_factures_json': json.dumps(companies_factures),
+        'compte_cap_id': settings_instance.cap_id if settings_instance and settings_instance.cap_id else 0,
+        'compte_car_id': settings_instance.car_id if settings_instance and settings_instance.car_id else 0,
         'compte_tps_percue_id': settings_instance.compte_tps_percue_id if settings_instance and settings_instance.compte_tps_percue_id else 0,
         'compte_tvq_percue_id': settings_instance.compte_tvq_percue_id if settings_instance and settings_instance.compte_tvq_percue_id else 0,
         'compte_tps_payee_id': settings_instance.compte_tps_payee_id if settings_instance and settings_instance.compte_tps_payee_id else 0,
@@ -800,7 +828,7 @@ def balance_de_verification(request):
             total_debit += debit
             total_credit += credit
 
-    is_balanced = total_debit == total_credit
+    is_balanced = total_debit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) == total_credit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
     return render(request, "facture/balance_de_verification.html", {
         'title': "Balance de vérification",
@@ -828,6 +856,10 @@ def _build_compte_mode_context(mode, settings_instance):
     compte_solde_grand_livre = Decimal('0')
     blocks = []
     total_des_soldes = Decimal('0')
+    soldes_reportes_map = {
+        row.compagnie_id: (row.montant or Decimal('0'))
+        for row in CompagnieSoldeDepart.objects.filter(compagnie__cap_ou_car=mode)
+    }
 
     if compte_id:
         try:
@@ -887,7 +919,33 @@ def _build_compte_mode_context(mode, settings_instance):
                     'solde_final': company_solde,
                 })
 
-    ecart_solde = total_des_soldes - compte_solde_grand_livre
+    # Les soldes reportes (repartition CAP/CAR) doivent apparaitre dans les soldes par compagnie.
+    for block in blocks:
+        compagnie_id = block['compagnie'].id
+        solde_reporte = soldes_reportes_map.get(compagnie_id, Decimal('0'))
+        rows = block.get('rows', [])
+
+        if solde_reporte != Decimal('0'):
+            for row in rows:
+                row['solde'] = (row.get('solde') or Decimal('0')) + solde_reporte
+
+            rows.insert(0, {
+                'date': None,
+                'source': None,
+                'description': 'Solde reporté',
+                'debit': solde_reporte if solde_reporte >= 0 else Decimal('0'),
+                'credit': abs(solde_reporte) if solde_reporte < 0 else Decimal('0'),
+                'solde': solde_reporte,
+            })
+
+        block['solde_reporte'] = solde_reporte
+        block['solde_final'] = (block.get('solde_final') or Decimal('0')) + solde_reporte
+
+    total_des_soldes = sum((block.get('solde_final') or Decimal('0') for block in blocks), Decimal('0'))
+
+    total_des_soldes = _money(total_des_soldes)
+    compte_solde_grand_livre = _money(compte_solde_grand_livre)
+    ecart_solde = _money(total_des_soldes - compte_solde_grand_livre)
     mode_code = 'CAP' if is_cap else 'CAR'
 
     return {
@@ -895,7 +953,7 @@ def _build_compte_mode_context(mode, settings_instance):
         'total_des_soldes': total_des_soldes,
         'compte_solde_grand_livre': compte_solde_grand_livre,
         'ecart_solde': ecart_solde,
-        'is_solde_coherent': ecart_solde == Decimal('0'),
+        'is_solde_coherent': ecart_solde == Decimal('0.00'),
         'mode_compte': settings_instance.cap if (settings_instance and is_cap) else settings_instance.car if settings_instance else None,
         'mode_code': mode_code,
         'report_year_label': report_year_label,
@@ -972,31 +1030,32 @@ def rapport_de_taxes(request):
             percue = None
             percue_signee = None
             payee = None
+            amount = _money(detail.montant)
 
             if detail.compte_id == tps_percue_id:
                 tax_type = 'TPS'
-                percue_signee = detail.montant
-                percue = abs(detail.montant)
+                percue_signee = amount
+                percue = _money(abs(amount))
             elif detail.compte_id == tps_payee_id:
                 tax_type = 'TPS'
-                payee = detail.montant
+                payee = amount
             elif detail.compte_id == tvq_percue_id:
                 tax_type = 'TVQ'
-                percue_signee = detail.montant
-                percue = abs(detail.montant)
+                percue_signee = amount
+                percue = _money(abs(amount))
             elif detail.compte_id == tvq_payee_id:
                 tax_type = 'TVQ'
-                payee = detail.montant
+                payee = amount
 
             if not tax_type:
                 continue
 
             if percue is not None:
-                blocks[tax_type]['total_percue'] += percue
+                blocks[tax_type]['total_percue'] = _money(blocks[tax_type]['total_percue'] + percue)
             if percue_signee is not None:
-                blocks[tax_type]['total_percue_signee'] += percue_signee
+                blocks[tax_type]['total_percue_signee'] = _money(blocks[tax_type]['total_percue_signee'] + percue_signee)
             if payee is not None:
-                blocks[tax_type]['total_payee'] += payee
+                blocks[tax_type]['total_payee'] = _money(blocks[tax_type]['total_payee'] + payee)
 
             blocks[tax_type]['rows'].append({
                 'id': detail.id,
@@ -1008,7 +1067,7 @@ def rapport_de_taxes(request):
             })
 
         for tax_type in ('TPS', 'TVQ'):
-            blocks[tax_type]['solde_a_reclamer'] = (
+            blocks[tax_type]['solde_a_reclamer'] = _money(
                 blocks[tax_type]['total_percue_signee'] + blocks[tax_type]['total_payee']
             )
 
@@ -1093,9 +1152,150 @@ def rapport_de_taxes(request):
                 if not has_lines:
                     error_messages.append("Impossible de transmettre un rapport sans ligne de taxes.")
                 else:
-                    report.transmis_le = timezone.now()
-                    report.save(update_fields=['transmis_le'])
-                    feedback.append("Rapport transmis. Il est maintenant verrouille.")
+                    tax_mode = tax_target_mode_from_setting(settings_instance)
+                    mode_label = "CAR" if tax_mode == Compagnie.MODE_CAR else "CAP"
+                    target_compte = settings_instance.car if tax_mode == Compagnie.MODE_CAR and settings_instance else settings_instance.cap if settings_instance else None
+
+                    if not target_compte:
+                        error_messages.append(
+                            f"Compte {mode_label} non configure dans Setting. Configure ce compte avant de transmettre le rapport."
+                        )
+                    else:
+                        tax_account_map = {
+                            'TPS': {
+                                'percue': settings_instance.compte_tps_percue,
+                                'payee': settings_instance.compte_tps_payee,
+                            },
+                            'TVQ': {
+                                'percue': settings_instance.compte_tvq_percue,
+                                'payee': settings_instance.compte_tvq_payee,
+                            },
+                        }
+
+                        missing_accounts = [
+                            f"{tax_name} {line_name}"
+                            for tax_name, accounts in tax_account_map.items()
+                            for line_name, account in accounts.items()
+                            if account is None
+                        ]
+                        if missing_accounts:
+                            error_messages.append(
+                                "Comptes taxes manquants dans Setting pour la transmission: " + ", ".join(missing_accounts) + "."
+                            )
+                        else:
+                            ensure_tax_authority_companies(settings_instance)
+                            tax_companies = {
+                                'TPS': Compagnie.objects.filter(nom='Revenu Canada TPS').first(),
+                                'TVQ': Compagnie.objects.filter(nom='Revenu Quebec TVQ').first(),
+                            }
+                            if not tax_companies['TPS'] or not tax_companies['TVQ']:
+                                error_messages.append("Impossible de preparer les compagnies fiscales TPS/TVQ.")
+                            else:
+                                report_rows = base_tax_details.filter(rapport_taxes=report)
+                                tax_blocks = build_tax_blocks(report_rows)
+                                source_rapport, _ = Source.objects.get_or_create(nom='Rapport de taxes')
+                                report_date = date(report.annee, report.mois, monthrange(report.annee, report.mois)[1])
+                                posted_count = 0
+
+                                with transaction.atomic():
+                                    for tax_name in ('TPS', 'TVQ'):
+                                        percue_compte = tax_account_map[tax_name]['percue']
+                                        payee_compte = tax_account_map[tax_name]['payee']
+                                        compagnie_fiscale = tax_companies[tax_name]
+
+                                        # Solde reel a la fin du mois: on poste l'inverse pour ramener
+                                        # chaque compte de taxe a zero apres transmission.
+                                        percue_balance = Tr_detail.objects.filter(
+                                            compte=percue_compte,
+                                            tr_desc__date__lte=report_date,
+                                        ).aggregate(total=Sum('montant')).get('total') or Decimal('0')
+                                        payee_balance = Tr_detail.objects.filter(
+                                            compte=payee_compte,
+                                            tr_desc__date__lte=report_date,
+                                        ).aggregate(total=Sum('montant')).get('total') or Decimal('0')
+
+                                        percue_amount = _money(-percue_balance)
+                                        payee_amount = _money(-payee_balance)
+                                        target_line_amount = _money(-(percue_amount + payee_amount))
+
+                                        if percue_amount == Decimal('0') and payee_amount == Decimal('0') and target_line_amount == Decimal('0'):
+                                            continue
+
+                                        tr_desc = Tr_desc.objects.create(
+                                            no_ej=_next_no_ej(),
+                                            compagnie=compagnie_fiscale,
+                                            date=report_date,
+                                            description=f"Rapport de taxes {tax_name} {report.annee}-{report.mois:02d}",
+                                            source=source_rapport,
+                                        )
+
+                                        if percue_amount != Decimal('0'):
+                                            Tr_detail.objects.create(
+                                                tr_desc=tr_desc,
+                                                compte=percue_compte,
+                                                montant=percue_amount,
+                                            )
+                                        if payee_amount != Decimal('0'):
+                                            Tr_detail.objects.create(
+                                                tr_desc=tr_desc,
+                                                compte=payee_compte,
+                                                montant=payee_amount,
+                                            )
+                                        if target_line_amount != Decimal('0'):
+                                            Tr_detail.objects.create(
+                                                tr_desc=tr_desc,
+                                                compte=target_compte,
+                                                montant=target_line_amount,
+                                            )
+                                        posted_count += 1
+
+                                    report.transmis_le = timezone.now()
+                                    report.save(update_fields=['transmis_le'])
+
+                                if posted_count:
+                                    feedback.append(
+                                        f"Rapport transmis. {posted_count} ecriture(s) de report creee(s) vers {mode_label}."
+                                    )
+                                else:
+                                    feedback.append(
+                                        "Rapport transmis. Aucun montant net TPS/TVQ a reporter pour cette periode."
+                                    )
+
+        elif action == 'undo_transmit_report':
+            report_id = request.POST.get('report_id')
+            report = RapportTaxes.objects.filter(pk=report_id).first()
+
+            if not report:
+                error_messages.append("Rapport de taxes introuvable.")
+            elif not report.est_transmis:
+                error_messages.append("Ce rapport est deja en brouillon.")
+            else:
+                report_date = date(report.annee, report.mois, monthrange(report.annee, report.mois)[1])
+                expected_descriptions = [
+                    f"Rapport de taxes TPS {report.annee}-{report.mois:02d}",
+                    f"Rapport de taxes TVQ {report.annee}-{report.mois:02d}",
+                ]
+
+                with transaction.atomic():
+                    source_rapport = Source.objects.filter(nom='Rapport de taxes').first()
+                    transmission_entries = Tr_desc.objects.none()
+                    if source_rapport:
+                        transmission_entries = Tr_desc.objects.filter(
+                            source=source_rapport,
+                            date=report_date,
+                            description__in=expected_descriptions,
+                            compagnie__nom__in=TAX_AUTHORITY_COMPANY_NAMES,
+                        )
+
+                    deleted_entries = transmission_entries.count()
+                    if deleted_entries:
+                        transmission_entries.delete()
+
+                    RapportTaxes.objects.filter(pk=report.pk).update(transmis_le=None)
+
+                feedback.append(
+                    f"Transmission annulee. Rapport remis en brouillon ({deleted_entries} ecriture(s) supprimee(s))."
+                )
 
         elif action:
             error_messages.append("Action inconnue sur le rapport de taxes.")
