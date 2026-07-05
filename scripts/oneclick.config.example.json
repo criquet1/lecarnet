@@ -8,14 +8,6 @@
     "port": "5432"
   },
   "tenants": {
-    "Anonymus": {
-      "ENGINE": "django.db.backends.postgresql",
-      "NAME": "lecarnet_anonymus",
-      "USER": "postgres",
-      "PASSWORD": "CHANGE_ME",
-      "HOST": "127.0.0.1",
-      "PORT": "5432"
-    },
     "client_alpha": {
       "ENGINE": "django.db.backends.postgresql",
       "NAME": "lecarnet_alpha",

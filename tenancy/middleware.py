@@ -53,23 +53,27 @@ class ActiveClientMiddleware:
             else:
                 clear_active_client_on_session(request)
 
-        exempt_paths = {
+        password_exempt_paths = {
             reverse('login'),
             reverse('logout'),
             reverse('select_client'),
             reverse('set_active_client'),
             reverse('force_password_change'),
             reverse('user_password_change'),
+            reverse('manage_societes'),
         }
 
+        client_exempt_paths = set(password_exempt_paths)
+        client_exempt_paths.add(reverse('creer_tenant'))
+
         if request.user.is_authenticated and user_must_change_password(request.user):
-            if request.path not in exempt_paths and not request.path.startswith('/admin/'):
+            if request.path not in password_exempt_paths and not request.path.startswith('/admin/'):
                 if token is not None:
                     reset_current_tenant_alias(token)
                 return redirect('force_password_change')
 
         if request.user.is_authenticated and not request.active_client:
-            if request.path not in exempt_paths and not request.path.startswith('/admin/'):
+            if request.path not in client_exempt_paths and not request.path.startswith('/admin/'):
                 response = redirect('select_client')
                 if token is not None:
                     reset_current_tenant_alias(token)

@@ -46,6 +46,19 @@
                 </div>
 
                 <div class="mb-3">
+                    {% if fixed_societe %}
+                        {{ form.societe }}
+                        <label class="form-label">Societe</label>
+                        <input type="text" class="form-control" value="{{ fixed_societe.name }}" readonly>
+                        <div class="form-text">Societe liee a votre utilisateur.</div>
+                    {% else %}
+                        <label class="form-label" for="{{ form.societe.id_for_label }}">Societe</label>
+                        {{ form.societe }}
+                    {% endif %}
+                    {{ form.societe.errors }}
+                </div>
+
+                <div class="mb-3">
                     <label class="form-label" for="{{ form.db_alias.id_for_label }}">Alias de base</label>
                     {{ form.db_alias }}
                     {% if form.db_alias.help_text %}<div class="form-text">{{ form.db_alias.help_text }}</div>{% endif %}

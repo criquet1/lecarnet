@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 
 from compte.models import Setting
 from facture.utils import get_available_logos
+from tenancy.models import Societe
 
 from .models import Compte, SoldeAuxLivres
 
@@ -394,6 +395,12 @@ class CreerTenantForm(forms.Form):
         help_text="Lettres minuscules, chiffres et tirets (ex: client-delta).",
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'client-delta'}),
     )
+    societe = forms.ModelChoiceField(
+        label='Societe',
+        queryset=Societe.objects.none(),
+        empty_label=None,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
     db_alias = forms.CharField(
         label='Alias de base',
         max_length=50,
@@ -419,6 +426,29 @@ class CreerTenantForm(forms.Form):
         help_text='Ce mot de passe sera exige au premier login, puis l utilisateur devra le modifier.',
         widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Mot de passe temporaire'}),
     )
+
+    def __init__(self, *args, **kwargs):
+        societes_qs = kwargs.pop('societes_qs', None)
+        fixed_societe = kwargs.pop('fixed_societe', None)
+        super().__init__(*args, **kwargs)
+        societes = societes_qs if societes_qs is not None else Societe.objects.filter(is_active=True).order_by('name', 'id')
+        self.fields['societe'].queryset = societes
+        self.fixed_societe = fixed_societe
+
+        if self.fixed_societe is not None:
+            self.fields['societe'].queryset = Societe.objects.filter(pk=self.fixed_societe.pk)
+            self.fields['societe'].initial = self.fixed_societe.pk
+            self.fields['societe'].required = False
+            self.fields['societe'].widget = forms.HiddenInput()
+
+    def clean_societe(self):
+        if self.fixed_societe is not None:
+            return self.fixed_societe
+
+        societe = self.cleaned_data.get('societe')
+        if societe is None:
+            raise forms.ValidationError('La societe est requise.')
+        return societe
 
     def clean_slug(self):
         value = (self.cleaned_data.get('slug') or '').strip().lower()

@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 
-from .models import ClientDatabase, UserClientAccess, UserSecurityState
+from .models import ClientDatabase, UserClientAccess, UserSecurityState, UserSocieteAccess
 
 
 SESSION_CLIENT_ID_KEY = 'active_client_id'
@@ -11,10 +11,21 @@ SESSION_CLIENT_ALIAS_KEY = 'active_client_alias'
 def get_user_client_accesses(user):
     if not user.is_authenticated:
         return UserClientAccess.objects.none()
-    return UserClientAccess.objects.select_related('client').filter(
+
+    base_qs = UserClientAccess.objects.select_related('client').filter(
         user=user,
         client__is_active=True,
     )
+
+    if user.is_superuser:
+        return base_qs
+
+    allowed_societe_ids = UserSocieteAccess.objects.filter(
+        user=user,
+        societe__is_active=True,
+    ).values_list('societe_id', flat=True)
+
+    return base_qs.filter(client__societe_id__in=allowed_societe_ids)
 
 
 def pick_default_access(accesses):
@@ -72,27 +83,65 @@ def sync_user_client_accesses(user):
     if not user.is_authenticated:
         return UserClientAccess.objects.none()
 
-    # Ne pas donner automatiquement tous les tenants aux utilisateurs standards.
-    if not user.is_superuser:
+    if user.is_superuser:
+        active_clients = ClientDatabase.objects.filter(is_active=True).order_by('name', 'id')
+        has_default = UserClientAccess.objects.filter(user=user, is_default=True).exists()
+
+        for index, client in enumerate(active_clients):
+            access, created = UserClientAccess.objects.get_or_create(
+                user=user,
+                client=client,
+                defaults={'is_default': (index == 0 and not has_default)},
+            )
+
+            if created and index == 0 and not has_default:
+                has_default = True
+
+            if not created and not has_default and index == 0 and not access.is_default:
+                access.is_default = True
+                access.save(update_fields=['is_default'])
+                has_default = True
+
         return get_user_client_accesses(user)
 
-    active_clients = ClientDatabase.objects.filter(is_active=True).order_by('name', 'id')
-    has_default = UserClientAccess.objects.filter(user=user, is_default=True).exists()
+    allowed_societe_ids = list(UserSocieteAccess.objects.filter(
+        user=user,
+        societe__is_active=True,
+    ).values_list('societe_id', flat=True))
 
-    for index, client in enumerate(active_clients):
-        access, created = UserClientAccess.objects.get_or_create(
+    if not allowed_societe_ids:
+        UserClientAccess.objects.filter(user=user).delete()
+        return UserClientAccess.objects.none()
+
+    active_clients = ClientDatabase.objects.filter(
+        is_active=True,
+        societe_id__in=allowed_societe_ids,
+    ).order_by('name', 'id')
+    allowed_client_ids = list(active_clients.values_list('id', flat=True))
+
+    UserClientAccess.objects.filter(user=user).exclude(client_id__in=allowed_client_ids).delete()
+
+    for client in active_clients:
+        UserClientAccess.objects.get_or_create(
             user=user,
             client=client,
-            defaults={'is_default': (index == 0 and not has_default)},
+            defaults={'is_default': False},
         )
 
-        if created and index == 0 and not has_default:
-            has_default = True
+    accesses = UserClientAccess.objects.filter(
+        user=user,
+        client_id__in=allowed_client_ids,
+    ).order_by('client__name', 'id')
 
-        if not created and not has_default and index == 0 and not access.is_default:
-            access.is_default = True
-            access.save(update_fields=['is_default'])
-            has_default = True
+    default_access = accesses.filter(is_default=True).first()
+    if not default_access:
+        default_access = accesses.first()
+        if default_access:
+            default_access.is_default = True
+            default_access.save(update_fields=['is_default'])
+
+    if default_access:
+        accesses.exclude(id=default_access.id).filter(is_default=True).update(is_default=False)
 
     return get_user_client_accesses(user)
 
@@ -100,6 +149,11 @@ def sync_user_client_accesses(user):
 def ensure_default_client_access(user):
     if not user.is_authenticated:
         return None
+
+    if not user.is_superuser:
+        sync_user_client_accesses(user)
+        accesses = get_user_client_accesses(user)
+        return pick_default_access(accesses)
 
     accesses = get_user_client_accesses(user)
     if accesses.exists():

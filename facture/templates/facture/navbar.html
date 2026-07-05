@@ -52,6 +52,9 @@
       </ul>
       <div class="ms-auto d-flex align-items-center gap-2">
         {% if request.user.is_authenticated %}
+          {% if request.user.is_superuser %}
+            <a class="btn btn-warning btn-sm {% if current_url == 'manage_societes' %}active{% endif %}" href="{% url 'manage_societes' %}">Gestion des societes</a>
+          {% endif %}
           {% if active_client_accesses|length > 1 %}
             <button
               type="button"

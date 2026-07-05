@@ -16,7 +16,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from facture.models import Compagnie, CompagnieSoldeDepart, CompteReleve
 from facture.utils import ensure_tax_authority_companies, expert_required, get_settings, parse_decimal, read_csv_rows
-from tenancy.models import ClientDatabase, UserClientAccess
+from tenancy.models import ClientDatabase, Societe, UserClientAccess, UserSocieteAccess
 from tenancy.services import mark_user_must_change_password, set_active_client_on_session, sync_user_client_accesses, user_must_change_password
 
 from .forms import BulletinPaieForm, CompteCsvImportForm, CompteForm, CreerTenantForm, ImpQuebecForm, SettingForm
@@ -497,21 +497,80 @@ def _persist_tenant_config(alias, db_config):
 		json.dump(data, fh, indent=2)
 
 
+def _configured_tenant_aliases():
+	tenant_json = (os.environ.get('TENANT_DATABASES_JSON') or '').strip()
+	if tenant_json:
+		try:
+			payload = json.loads(tenant_json)
+			if isinstance(payload, dict):
+				return set(payload.keys())
+		except ValueError:
+			return set()
+		return set()
+
+	config_path = settings.BASE_DIR / 'scripts' / 'oneclick.config.json'
+	if not config_path.exists():
+		return set()
+
+	try:
+		with config_path.open('r', encoding='utf-8') as fh:
+			payload = json.load(fh)
+	except (OSError, ValueError):
+		return set()
+
+	tenants = payload.get('tenants') if isinstance(payload, dict) else {}
+	if not isinstance(tenants, dict):
+		return set()
+	return set(tenants.keys())
+
+
 @login_required
 def creer_tenant_page(request):
+	if not Societe.objects.filter(is_active=True).exists():
+		Societe.objects.get_or_create(
+			slug='societe-principale',
+			defaults={'name': 'Societe Principale', 'is_active': True},
+		)
+
+	if request.user.is_superuser:
+		allowed_societes = Societe.objects.filter(is_active=True).order_by('name', 'id')
+	else:
+		allowed_societes = Societe.objects.filter(
+			is_active=True,
+			user_accesses__user=request.user,
+		).order_by('name', 'id').distinct()
+
+	fixed_societe = None
+	if not request.user.is_superuser and allowed_societes.count() == 1:
+		fixed_societe = allowed_societes.first()
+
 	if request.method == 'POST':
-		form = CreerTenantForm(request.POST)
+		form = CreerTenantForm(request.POST, societes_qs=allowed_societes, fixed_societe=fixed_societe)
 		if form.is_valid():
 			name = form.cleaned_data['name'].strip()
 			slug = form.cleaned_data['slug']
+			societe = form.cleaned_data['societe']
 			db_alias = form.cleaned_data['db_alias']
 			db_name = form.cleaned_data['db_name']
 			username = form.cleaned_data['username']
 			temp_password = form.cleaned_data['temp_password']
 
-			if ClientDatabase.objects.filter(slug=slug).exists():
+			alias_exists_in_db = ClientDatabase.objects.filter(db_alias=db_alias).exists()
+			alias_exists_in_settings = db_alias in settings.DATABASES
+
+			# Un alias peut rester en memoire dans le process Django apres suppression;
+			# on retire ces aliases runtime non persistes avant de valider le conflit.
+			if alias_exists_in_settings and not alias_exists_in_db:
+				persisted_aliases = _configured_tenant_aliases()
+				if db_alias not in persisted_aliases:
+					_rollback_runtime_tenant_db(db_alias)
+					alias_exists_in_settings = db_alias in settings.DATABASES
+
+			if not allowed_societes.filter(pk=societe.pk).exists():
+				form.add_error('societe', 'Vous ne pouvez pas creer de tenant pour cette societe.')
+			elif ClientDatabase.objects.filter(slug=slug).exists():
 				form.add_error('slug', 'Ce slug est deja utilise.')
-			elif ClientDatabase.objects.filter(db_alias=db_alias).exists() or db_alias in settings.DATABASES:
+			elif alias_exists_in_db or alias_exists_in_settings:
 				form.add_error('db_alias', 'Cet alias est deja utilise.')
 			else:
 				tenant_user = None
@@ -532,7 +591,19 @@ def creer_tenant_page(request):
 						slug=slug,
 						name=name,
 						db_alias=db_alias,
+						societe=societe,
 						is_active=True,
+					)
+
+					UserSocieteAccess.objects.get_or_create(
+						user=request.user,
+						societe=societe,
+						defaults={'is_default': not UserSocieteAccess.objects.filter(user=request.user, is_default=True).exists()},
+					)
+					UserSocieteAccess.objects.update_or_create(
+						user=tenant_user,
+						societe=societe,
+						defaults={'is_default': True},
 					)
 
 					has_default = UserClientAccess.objects.filter(user=request.user, is_default=True).exists()
@@ -574,11 +645,12 @@ def creer_tenant_page(request):
 					messages.error(request, f"Creation impossible ({exc.__class__.__name__}): {error_message}")
 					form.add_error(None, f"Creation impossible ({exc.__class__.__name__}): {error_message}")
 	else:
-		form = CreerTenantForm()
+		form = CreerTenantForm(societes_qs=allowed_societes, fixed_societe=fixed_societe)
 
 	return render(request, 'compte/creer_tenant.html', {
 		'title': 'Creer un tenant',
 		'form': form,
+		'fixed_societe': fixed_societe,
 	})
 
 

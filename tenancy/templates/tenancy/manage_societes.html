@@ -1,0 +1,264 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block body %}
+<div class="row g-4">
+    <div class="col-12">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags|default:'info' }} mb-0" role="alert">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    </div>
+
+    <div class="col-12 col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="h5 mb-3">
+                    {% if societe_to_edit %}
+                        Modifier une societe
+                    {% else %}
+                        Nouvelle societe
+                    {% endif %}
+                </h2>
+
+                <div class="alert alert-info small">
+                    Le slug sert d identifiant technique stable (URL, scripts, references internes) meme si le nom affiche change.
+                </div>
+
+                <form method="post" class="d-grid gap-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="save_societe">
+                    {% if societe_to_edit %}
+                        <input type="hidden" name="societe_id" value="{{ societe_to_edit.id }}">
+                    {% endif %}
+
+                    <div>
+                        <label class="form-label" for="{{ societe_form.name.id_for_label }}">Nom</label>
+                        {{ societe_form.name }}
+                        {{ societe_form.name.errors }}
+                    </div>
+                    <div>
+                        <label class="form-label" for="{{ societe_form.slug.id_for_label }}">Slug</label>
+                        {{ societe_form.slug }}
+                        {{ societe_form.slug.errors }}
+                    </div>
+                    <div>
+                        <label class="form-label" for="{{ societe_form.adresse.id_for_label }}">Adresse</label>
+                        {{ societe_form.adresse }}
+                        {{ societe_form.adresse.errors }}
+                    </div>
+                    <div>
+                        <label class="form-label" for="{{ societe_form.telephone.id_for_label }}">No. tel.</label>
+                        {{ societe_form.telephone }}
+                        {{ societe_form.telephone.errors }}
+                    </div>
+                    <div>
+                        <label class="form-label" for="{{ societe_form.email.id_for_label }}">Email</label>
+                        {{ societe_form.email }}
+                        {{ societe_form.email.errors }}
+                    </div>
+                    <div>
+                        <label class="form-label" for="{{ societe_form.personne_ressource.id_for_label }}">Personne ressource</label>
+                        {{ societe_form.personne_ressource }}
+                        {{ societe_form.personne_ressource.errors }}
+                    </div>
+                    <div>
+                        <label class="form-label" for="{{ societe_form.site_web.id_for_label }}">Site web</label>
+                        {{ societe_form.site_web }}
+                        {{ societe_form.site_web.errors }}
+                    </div>
+                    <div>
+                        <label class="form-label" for="{{ societe_form.notes.id_for_label }}">Notes</label>
+                        {{ societe_form.notes }}
+                        {{ societe_form.notes.errors }}
+                    </div>
+                    <div class="form-check">
+                        {{ societe_form.is_active }}
+                        <label class="form-check-label" for="{{ societe_form.is_active.id_for_label }}">Societe active</label>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Enregistrer</button>
+                        {% if societe_to_edit %}
+                            <a href="{% url 'manage_societes' %}" class="btn btn-outline-secondary">Annuler</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-7">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h2 class="h5 mb-3">Creer un utilisateur et l associer</h2>
+                <form method="post" class="row g-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="create_societe_user">
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="{{ user_form.societe.id_for_label }}">Societe</label>
+                        {{ user_form.societe }}
+                        {{ user_form.societe.errors }}
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="{{ user_form.username.id_for_label }}">Nom d utilisateur</label>
+                        {{ user_form.username }}
+                        {{ user_form.username.errors }}
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="{{ user_form.email.id_for_label }}">Email</label>
+                        {{ user_form.email }}
+                        {{ user_form.email.errors }}
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="{{ user_form.temp_password.id_for_label }}">Mot de passe temporaire</label>
+                        {{ user_form.temp_password }}
+                        {{ user_form.temp_password.errors }}
+                        {% if user_form.temp_password.help_text %}
+                            <div class="form-text">{{ user_form.temp_password.help_text }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            {{ user_form.is_default }}
+                            <label class="form-check-label" for="{{ user_form.is_default.id_for_label }}">Societe par defaut pour cet utilisateur</label>
+                        </div>
+                        {{ user_form.is_default.errors }}
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            {{ user_form.is_expert }}
+                            <label class="form-check-label" for="{{ user_form.is_expert.id_for_label }}">Role Expert (coche = attribuer, decoche = retirer)</label>
+                        </div>
+                        {{ user_form.is_expert.errors }}
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary">Creer l utilisateur</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h2 class="h5 mb-3">Ajouter un utilisateur existant a une societe</h2>
+                <form method="post" class="row g-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="assign_existing_user">
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="{{ user_assign_form.user.id_for_label }}">Utilisateur existant</label>
+                        {{ user_assign_form.user }}
+                        {{ user_assign_form.user.errors }}
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label" for="{{ user_assign_form.societe.id_for_label }}">Societe</label>
+                        {{ user_assign_form.societe }}
+                        {{ user_assign_form.societe.errors }}
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            {{ user_assign_form.is_default }}
+                            <label class="form-check-label" for="{{ user_assign_form.is_default.id_for_label }}">Societe par defaut pour cet utilisateur</label>
+                        </div>
+                        {{ user_assign_form.is_default.errors }}
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            {{ user_assign_form.is_expert }}
+                            <label class="form-check-label" for="{{ user_assign_form.is_expert.id_for_label }}">Role Expert (coche = attribuer, decoche = retirer)</label>
+                        </div>
+                        {{ user_assign_form.is_expert.errors }}
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-outline-primary">Associer l utilisateur</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="h5 mb-3">Societes existantes</h2>
+                {% if societes %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Nom</th>
+                                    <th>Slug</th>
+                                    <th>Personne ressource</th>
+                                    <th>Email</th>
+                                    <th>Etat</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for societe in societes %}
+                                    <tr>
+                                        <td>{{ societe.name }}</td>
+                                        <td><code>{{ societe.slug }}</code></td>
+                                        <td>{{ societe.personne_ressource|default:'-' }}</td>
+                                        <td>{{ societe.email|default:'-' }}</td>
+                                        <td>
+                                            {% if societe.is_active %}
+                                                <span class="badge text-bg-success">Active</span>
+                                            {% else %}
+                                                <span class="badge text-bg-secondary">Inactive</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="{% url 'manage_societes' %}?edit={{ societe.id }}" class="btn btn-sm btn-outline-primary">Modifier</a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning mb-0">Aucune societe definie.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card shadow-sm mt-4">
+            <div class="card-body">
+                <h2 class="h5 mb-3">Affectations utilisateurs / societes</h2>
+                {% if user_societe_accesses %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Utilisateur</th>
+                                    <th>Societe</th>
+                                    <th>Defaut</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for access in user_societe_accesses %}
+                                    <tr>
+                                        <td>{{ access.user.username }}</td>
+                                        <td>{{ access.societe.name }}</td>
+                                        <td>
+                                            {% if access.is_default %}
+                                                <span class="badge text-bg-primary">Oui</span>
+                                            {% else %}
+                                                <span class="text-muted">Non</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-warning mb-0">Aucune affectation definie.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
