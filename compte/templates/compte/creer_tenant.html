@@ -1,0 +1,85 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block body %}
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-8">
+        <h2 class="fw-bold mb-4">{{ title }}</h2>
+
+        <div class="alert alert-info">
+            Cree un nouveau client tenant, prepare sa base de donnees, applique les migrations et active ce client pour la session en cours.
+        </div>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
+        {% if form.errors %}
+            <div class="alert alert-warning" role="alert">
+                Verifie les champs du formulaire ci-dessous.
+            </div>
+        {% endif %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger" role="alert">
+                {{ form.non_field_errors }}
+            </div>
+        {% endif %}
+
+        <form method="post" class="card shadow-sm">
+            {% csrf_token %}
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Nom du client</label>
+                    {{ form.name }}
+                    {{ form.name.errors }}
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="{{ form.slug.id_for_label }}">Slug</label>
+                    {{ form.slug }}
+                    {% if form.slug.help_text %}<div class="form-text">{{ form.slug.help_text }}</div>{% endif %}
+                    {{ form.slug.errors }}
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="{{ form.db_alias.id_for_label }}">Alias de base</label>
+                    {{ form.db_alias }}
+                    {% if form.db_alias.help_text %}<div class="form-text">{{ form.db_alias.help_text }}</div>{% endif %}
+                    {{ form.db_alias.errors }}
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="{{ form.db_name.id_for_label }}">Nom de la base</label>
+                    {{ form.db_name }}
+                    {% if form.db_name.help_text %}<div class="form-text">{{ form.db_name.help_text }}</div>{% endif %}
+                    {{ form.db_name.errors }}
+                </div>
+
+                <hr>
+
+                <div class="mb-3">
+                    <label class="form-label" for="{{ form.username.id_for_label }}">Nom d utilisateur</label>
+                    {{ form.username }}
+                    {% if form.username.help_text %}<div class="form-text">{{ form.username.help_text }}</div>{% endif %}
+                    {{ form.username.errors }}
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="{{ form.temp_password.id_for_label }}">Mot de passe temporaire</label>
+                    {{ form.temp_password }}
+                    {% if form.temp_password.help_text %}<div class="form-text">{{ form.temp_password.help_text }}</div>{% endif %}
+                    {{ form.temp_password.errors }}
+                </div>
+            </div>
+            <div class="card-footer d-flex justify-content-between">
+                <a href="{% url 'settings' %}" class="btn btn-outline-secondary">Annuler</a>
+                <button type="submit" class="btn btn-primary">Creer le tenant</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block body %}
+
+
+<h1>Bulletin de Paie de {{ paie.employe_nom }}</h1>
+
+<table border="1">
+    <tr>
+        <td><strong>Salaire Brut :</strong></td>
+        <td>{{ paie.salaire_brut }} $</td>
+    </tr>
+    <tr>
+        <td>Retenue RQAP :</td>
+        <td>- {{ paie.rqap }} $</td>
+    </tr>
+    <tr>
+        <td>Retenue RRQ :</td>
+        <td>- {{ paie.rrq }} $</td>
+    </tr>
+    <tr>
+        <td>Retenue Assurance-Emploi :</td>
+        <td>- {{ paie.ae }} $</td>
+    </tr>
+    <tr>
+        <td>Impôt Fédéral :</td>
+        <td>- {{ paie.impot_federal }} $</td>
+    </tr>
+    <tr>
+        <td>Impôt Provincial :</td>
+        <td>- {{ paie.impot_provincial }} $</td>
+    </tr>
+    <tr>
+        <td><strong>Salaire Net :</strong></td>
+        <td><strong>{{ paie.salaire_net }} $</strong></td>
+    </tr>
+</table>
+
+
+{% endblock %}

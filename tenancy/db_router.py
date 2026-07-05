@@ -4,7 +4,7 @@ from .db_context import get_current_tenant_alias
 class TenantDatabaseRouter:
     """Route les apps metier vers la base du client actif."""
 
-    tenant_app_labels = {'compte', 'facture'}
+    tenant_app_labels = {'compte', 'facture', 'paie'}
     central_app_labels = {'auth', 'admin', 'contenttypes', 'sessions', 'tenancy'}
 
     def db_for_read(self, model, **hints):

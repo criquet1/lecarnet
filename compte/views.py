@@ -1,14 +1,65 @@
 from decimal import Decimal
+import json
+import logging
+import os
+from types import SimpleNamespace
 
-from django.db import transaction
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import get_user_model, update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm
+from django.contrib.auth.decorators import login_required
+from django.core.management import call_command
+from django.db import connections, transaction
 from django.http import JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 
 from facture.models import Compagnie, CompagnieSoldeDepart, CompteReleve
 from facture.utils import ensure_tax_authority_companies, expert_required, get_settings, parse_decimal, read_csv_rows
+from tenancy.models import ClientDatabase, UserClientAccess
+from tenancy.services import mark_user_must_change_password, set_active_client_on_session, sync_user_client_accesses, user_must_change_password
 
-from .forms import CompteCsvImportForm, CompteForm, SettingForm
+from .forms import BulletinPaieForm, CompteCsvImportForm, CompteForm, CreerTenantForm, ImpQuebecForm, SettingForm
 from .models import Compte, SoldeAuxLivres, Total
+
+
+logger = logging.getLogger(__name__)
+
+
+def _fetch_totaux_rows():
+	db_alias = Compte.objects.all().db
+	query = """
+		SELECT
+			c.numero AS compte_id,
+			c.numero AS compte_numero,
+			c.libelle AS compte_libelle,
+			COALESCE(v.solde_depart, 0) AS solde_depart,
+			COALESCE(v.debit, 0) AS debit,
+			COALESCE(v.credit, 0) AS credit
+		FROM compte_compte c
+		LEFT JOIN facture_v_balance_verification v ON v.compte_id = c.numero
+		ORDER BY c.numero
+	"""
+
+	rows = []
+	with connections[db_alias].cursor() as cursor:
+		cursor.execute(query)
+		for compte_id, compte_numero, compte_libelle, solde_depart, debit, credit in cursor.fetchall():
+			rows.append({
+				'compte': SimpleNamespace(
+					pk=compte_id,
+					numero=compte_numero,
+					libelle=compte_libelle,
+				),
+				'debit': Decimal(str(debit)) if debit not in (None, '') else Decimal('0'),
+				'credit': Decimal(str(credit)) if credit not in (None, '') else Decimal('0'),
+				'solde_depart': Decimal(str(solde_depart)) if solde_depart not in (None, '') else Decimal('0'),
+			})
+
+	total_debit = sum((row['debit'] for row in rows), Decimal('0'))
+	total_credit = sum((row['credit'] for row in rows), Decimal('0'))
+	is_balanced = total_debit == total_credit
+	return rows, total_debit, total_credit, is_balanced
 
 
 def _import_comptes_csv(csv_file):
@@ -119,6 +170,7 @@ def _import_comptes_csv(csv_file):
 			SoldeAuxLivres.objects.bulk_create(missing_solde_ids)
 
 	return report
+
 def _build_repartition_state():
 	settings_instance = get_settings()
 	cap_total = Decimal('0')
@@ -309,6 +361,7 @@ def compte_page(request):
 
 @expert_required
 def settings_page(request):
+	from paie.models import FrequencePaie
 	settings_instance = get_settings()
 
 	if request.method == 'POST':
@@ -324,4 +377,301 @@ def settings_page(request):
 		'title': 'Paramètres',
 		'form': form,
 		'settings_instance': settings_instance,
+		'frequences_paie': FrequencePaie.objects.all(),
 	})
+
+
+def _build_tenant_db_config(db_alias, db_name):
+	default_db = settings.DATABASES.get('default', {})
+	base_runtime_db = dict(connections.databases.get('default', default_db))
+	engine = default_db.get('ENGINE', '')
+
+	if 'postgresql' in engine:
+		resolved_name = db_name or f'lecarnet_{db_alias}'
+		config = dict(base_runtime_db)
+		config.update({
+			'ENGINE': default_db.get('ENGINE', 'django.db.backends.postgresql'),
+			'NAME': resolved_name,
+			'USER': default_db.get('USER', config.get('USER', '')),
+			'PASSWORD': default_db.get('PASSWORD', config.get('PASSWORD', '')),
+			'HOST': default_db.get('HOST', config.get('HOST', '127.0.0.1')),
+			'PORT': default_db.get('PORT', config.get('PORT', '5432')),
+			'OPTIONS': default_db.get('OPTIONS', config.get('OPTIONS', {})),
+		})
+		return config
+
+	if 'sqlite3' in engine:
+		filename = db_name or f'tenant_{db_alias}.sqlite3'
+		if not filename.lower().endswith('.sqlite3'):
+			filename = f'{filename}.sqlite3'
+		config = dict(base_runtime_db)
+		config.update({
+			'ENGINE': 'django.db.backends.sqlite3',
+			'NAME': str(settings.BASE_DIR / filename),
+			'OPTIONS': default_db.get('OPTIONS', config.get('OPTIONS', {})),
+		})
+		return config
+
+	raise ValueError('Moteur de base non supporte pour creation automatique de tenant.')
+
+
+def _register_runtime_tenant_db(alias, db_config):
+	settings.DATABASES[alias] = db_config
+	connections.databases[alias] = db_config
+
+
+def _rollback_runtime_tenant_db(alias):
+	try:
+		if alias in connections:
+			connections[alias].close()
+	except Exception:
+		pass
+
+	settings.DATABASES.pop(alias, None)
+	connections.databases.pop(alias, None)
+
+
+def _create_physical_tenant_db(db_config):
+	engine = db_config.get('ENGINE', '')
+	if 'postgresql' in engine:
+		db_name = db_config['NAME']
+		default_conn = connections['default']
+		autocommit_before = default_conn.get_autocommit()
+		default_conn.set_autocommit(True)
+		try:
+			with default_conn.cursor() as cursor:
+				cursor.execute('SELECT 1 FROM pg_database WHERE datname = %s', [db_name])
+				if cursor.fetchone():
+					raise ValueError(f"La base '{db_name}' existe deja.")
+				cursor.execute(f'CREATE DATABASE "{db_name}"')
+		finally:
+			default_conn.set_autocommit(autocommit_before)
+		return
+
+	if 'sqlite3' in engine:
+		return
+
+	raise ValueError('Moteur de base non supporte pour creation automatique de tenant.')
+
+
+def _drop_physical_tenant_db(db_config):
+	engine = db_config.get('ENGINE', '')
+	if 'postgresql' in engine:
+		db_name = db_config['NAME']
+		default_conn = connections['default']
+		autocommit_before = default_conn.get_autocommit()
+		default_conn.set_autocommit(True)
+		try:
+			with default_conn.cursor() as cursor:
+				cursor.execute('SELECT 1 FROM pg_database WHERE datname = %s', [db_name])
+				if cursor.fetchone():
+					cursor.execute('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s', [db_name])
+					cursor.execute(f'DROP DATABASE "{db_name}"')
+		finally:
+			default_conn.set_autocommit(autocommit_before)
+		return
+
+	if 'sqlite3' in engine:
+		path = db_config.get('NAME')
+		if path and os.path.exists(path):
+			os.remove(path)
+		return
+
+
+def _persist_tenant_config(alias, db_config):
+	config_path = settings.BASE_DIR / 'scripts' / 'oneclick.config.json'
+	data = {}
+
+	if config_path.exists():
+		with config_path.open('r', encoding='utf-8') as fh:
+			data = json.load(fh)
+
+	tenants = data.get('tenants') if isinstance(data, dict) else None
+	if not isinstance(tenants, dict):
+		tenants = {}
+
+	tenants[alias] = db_config
+	data['tenants'] = tenants
+
+	with config_path.open('w', encoding='utf-8') as fh:
+		json.dump(data, fh, indent=2)
+
+
+@login_required
+def creer_tenant_page(request):
+	if request.method == 'POST':
+		form = CreerTenantForm(request.POST)
+		if form.is_valid():
+			name = form.cleaned_data['name'].strip()
+			slug = form.cleaned_data['slug']
+			db_alias = form.cleaned_data['db_alias']
+			db_name = form.cleaned_data['db_name']
+			username = form.cleaned_data['username']
+			temp_password = form.cleaned_data['temp_password']
+
+			if ClientDatabase.objects.filter(slug=slug).exists():
+				form.add_error('slug', 'Ce slug est deja utilise.')
+			elif ClientDatabase.objects.filter(db_alias=db_alias).exists() or db_alias in settings.DATABASES:
+				form.add_error('db_alias', 'Cet alias est deja utilise.')
+			else:
+				tenant_user = None
+				db_config = None
+				physical_db_created = False
+				try:
+					db_config = _build_tenant_db_config(db_alias, db_name)
+					_register_runtime_tenant_db(db_alias, db_config)
+					_create_physical_tenant_db(db_config)
+					physical_db_created = True
+					call_command('migrate', database=db_alias, interactive=False, verbosity=0)
+					_persist_tenant_config(db_alias, db_config)
+
+					user_model = get_user_model()
+					tenant_user = user_model.objects.create_user(username=username, password=temp_password)
+
+					client = ClientDatabase.objects.create(
+						slug=slug,
+						name=name,
+						db_alias=db_alias,
+						is_active=True,
+					)
+
+					has_default = UserClientAccess.objects.filter(user=request.user, is_default=True).exists()
+					access, _ = UserClientAccess.objects.update_or_create(
+						user=request.user,
+						client=client,
+						defaults={'is_default': not has_default},
+					)
+					UserClientAccess.objects.update_or_create(
+						user=tenant_user,
+						client=client,
+						defaults={'is_default': True},
+					)
+					UserClientAccess.objects.filter(user=tenant_user).exclude(client=client).delete()
+					security_state = mark_user_must_change_password(tenant_user, True)
+					if security_state is None:
+						raise RuntimeError('Impossible d activer le changement obligatoire de mot de passe pour le nouvel utilisateur.')
+					set_active_client_on_session(request, access)
+					sync_user_client_accesses(request.user)
+
+					messages.success(request, f"Le tenant '{name}' a ete cree et active. Utilisateur cree: {username}")
+					if (os.environ.get('TENANT_DATABASES_JSON') or '').strip():
+						messages.warning(request, 'TENANT_DATABASES_JSON est defini: ajoute aussi ce tenant dans cette variable pour le prochain redemarrage.')
+					return redirect('settings')
+				except Exception as exc:
+					if tenant_user is not None:
+						try:
+							tenant_user.delete()
+						except Exception:
+							pass
+					_rollback_runtime_tenant_db(db_alias)
+					if physical_db_created and db_config is not None:
+						try:
+							_drop_physical_tenant_db(db_config)
+						except Exception:
+							pass
+					error_message = str(exc).strip() or 'Erreur inconnue'
+					logger.exception('Echec creation tenant alias=%s name=%s username=%s', db_alias, name, username)
+					messages.error(request, f"Creation impossible ({exc.__class__.__name__}): {error_message}")
+					form.add_error(None, f"Creation impossible ({exc.__class__.__name__}): {error_message}")
+	else:
+		form = CreerTenantForm()
+
+	return render(request, 'compte/creer_tenant.html', {
+		'title': 'Creer un tenant',
+		'form': form,
+	})
+
+
+@login_required
+def force_password_change_page(request):
+	if not user_must_change_password(request.user):
+		return redirect('accueil')
+
+	if request.method == 'POST':
+		form = PasswordChangeForm(request.user, request.POST)
+		if form.is_valid():
+			user = form.save()
+			mark_user_must_change_password(user, False)
+			update_session_auth_hash(request, user)
+			messages.success(request, 'Mot de passe mis a jour.')
+			return redirect('accueil')
+	else:
+		form = PasswordChangeForm(request.user)
+
+	return render(request, 'tenancy/force_password_change.html', {
+		'title': 'Modifier votre mot de passe',
+		'form': form,
+	})
+
+
+@login_required
+def user_password_change_page(request):
+	if user_must_change_password(request.user):
+		return redirect('force_password_change')
+
+	if request.method == 'POST':
+		form = PasswordChangeForm(request.user, request.POST)
+		if form.is_valid():
+			user = form.save()
+			update_session_auth_hash(request, user)
+			messages.success(request, 'Mot de passe mis a jour.')
+			return redirect('accueil')
+	else:
+		form = PasswordChangeForm(request.user)
+
+	return render(request, 'tenancy/user_password_change.html', {
+		'title': 'Modifier votre mot de passe',
+		'form': form,
+	})
+
+
+@expert_required
+def totaux_page(request):
+	rows, total_debit, total_credit, is_balanced = _fetch_totaux_rows()
+	return render(request, 'compte/totaux.html', {
+		'title': 'Totaux',
+		'rows': rows,
+		'total_debit': total_debit,
+		'total_credit': total_credit,
+		'is_balanced': is_balanced,
+	})
+
+
+@expert_required
+def imp_quebec_page(request):
+	if request.method == 'POST':
+		form = ImpQuebecForm(request.POST)
+		if form.is_valid():
+			return render(request, 'compte/imp_quebec.html', {
+				'title': 'Impôt Québec',
+				'form': form,
+				'saved': True,
+			})
+	else:
+		form = ImpQuebecForm()
+
+	return render(request, 'compte/imp_quebec.html', {
+		'title': 'Impôt Québec',
+		'form': form,
+		'saved': False,
+	})
+
+
+def feuille_de_travail_page(request):
+	return render(request, 'compte/feuille_de_travail.html', {
+		'title': 'Feuille de travail',
+	})
+
+
+def creer_bulletin_paie(request):
+    if request.method == 'POST':
+        form = BulletinPaieForm(request.POST)
+        if form.is_valid():
+            # Sauvegarde l'objet. La méthode save() du modèle effectuera automatiquement 
+            # tous les calculs de taxes compliqués juste avant l'écriture finale.
+            bulletin = form.save()
+            return redirect('compte')
+    else:
+        form = BulletinPaieForm()
+        
+    return render(request, 'compte/creer_paie.html', {'form': form, 'title': 'Créer un bulletin de paie'})

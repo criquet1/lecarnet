@@ -37,3 +37,19 @@ class UserClientAccess(models.Model):
 
     def __str__(self):
         return f"{self.user} -> {self.client}"
+
+
+class UserSecurityState(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='security_state',
+    )
+    must_change_password = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = 'Etat securite utilisateur'
+        verbose_name_plural = 'Etats securite utilisateurs'
+
+    def __str__(self):
+        return f"{self.user} | must_change_password={self.must_change_password}"

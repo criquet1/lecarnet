@@ -1,0 +1,208 @@
+{% extends "layouts/app_base.html" %}
+{% load facture_extras %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block body %}
+<div class="container-lg py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1>Créer un bulletin de paie</h1>
+            <p class="text-muted">Tous les calculs de retenues se font automatiquement lors de la sauvegarde</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12 col-lg-8">
+            <div class="card p-4 mb-4">
+                <h5 class="card-title mb-3">Informations du bulletin</h5>
+                
+                <form method="post" class="needs-validation" novalidate>
+                    {% csrf_token %}
+                    
+                    <!-- Informations de base -->
+                    <h6 class="mb-3 text-secondary border-bottom pb-2">Employé</h6>
+                    <div class="mb-3">
+                        <label for="{{ form.employe_nom.id_for_label }}" class="form-label">{{ form.employe_nom.label }}</label>
+                        {{ form.employe_nom }}
+                        {% if form.employe_nom.errors %}
+                            <div class="invalid-feedback d-block">{{ form.employe_nom.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Salaire -->
+                    <h6 class="mb-3 mt-4 text-secondary border-bottom pb-2">Données de la paie</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.heures_travaillees.id_for_label }}" class="form-label">{{ form.heures_travaillees.label }}</label>
+                                {{ form.heures_travaillees }}
+                                {% if form.heures_travaillees.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.heures_travaillees.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.taux_horaire.id_for_label }}" class="form-label">{{ form.taux_horaire.label }}</label>
+                                {{ form.taux_horaire }}
+                                {% if form.taux_horaire.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.taux_horaire.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="{{ form.periodes_par_annee.id_for_label }}" class="form-label">{{ form.periodes_par_annee.label }}</label>
+                        {{ form.periodes_par_annee }}
+                        {% if form.periodes_par_annee.errors %}
+                            <div class="invalid-feedback d-block">{{ form.periodes_par_annee.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Crédits personnels -->
+                    <h6 class="mb-3 mt-4 text-secondary border-bottom pb-2">Crédits personnels (laissez 0 pour montants par défaut)</h6>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.montant_personnel_federal_td1.id_for_label }}" class="form-label">{{ form.montant_personnel_federal_td1.label }}</label>
+                                {{ form.montant_personnel_federal_td1 }}
+                                <small class="form-text text-muted">Défaut: 16 452 $</small>
+                                {% if form.montant_personnel_federal_td1.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.montant_personnel_federal_td1.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.montant_personnel_quebec_tp1015.id_for_label }}" class="form-label">{{ form.montant_personnel_quebec_tp1015.label }}</label>
+                                {{ form.montant_personnel_quebec_tp1015 }}
+                                <small class="form-text text-muted">Défaut: 18 952 $</small>
+                                {% if form.montant_personnel_quebec_tp1015.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.montant_personnel_quebec_tp1015.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cumuls annuels -->
+                    <h6 class="mb-3 mt-4 text-secondary border-bottom pb-2">Cumuls depuis le début de l'année (excluant cette paie)</h6>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.cumul_brut_annee.id_for_label }}" class="form-label">{{ form.cumul_brut_annee.label }}</label>
+                                {{ form.cumul_brut_annee }}
+                                {% if form.cumul_brut_annee.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.cumul_brut_annee.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.cumul_rrq_annee.id_for_label }}" class="form-label">{{ form.cumul_rrq_annee.label }}</label>
+                                {{ form.cumul_rrq_annee }}
+                                {% if form.cumul_rrq_annee.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.cumul_rrq_annee.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.cumul_rqap_annee.id_for_label }}" class="form-label">{{ form.cumul_rqap_annee.label }}</label>
+                                {{ form.cumul_rqap_annee }}
+                                {% if form.cumul_rqap_annee.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.cumul_rqap_annee.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.cumul_ae_annee.id_for_label }}" class="form-label">{{ form.cumul_ae_annee.label }}</label>
+                                {{ form.cumul_ae_annee }}
+                                {% if form.cumul_ae_annee.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.cumul_ae_annee.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Boutons -->
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg">Enregistrer la paie</button>
+                        <a href="{% url 'compte' %}" class="btn btn-secondary btn-lg">Annuler</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-4">
+            <div class="card bg-info-light p-4 mb-4">
+                <h5 class="card-title text-info">ℹ️ Information</h5>
+                <p class="small mb-0">
+                    Tous les calculs de retenues (RRQ, RQAP, AE, impôts fédéral et provincial) 
+                    sont effectués automatiquement lors de la sauvegarde du bulletin selon 
+                    les formules officielles 2026.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+    const inputCumulRrq = document.getElementById("id_cumul_rrq_annee");
+    const inputCumulRqap = document.getElementById("id_cumul_rqap_annee");
+    const inputCumulAe = document.getElementById("id_cumul_ae_annee");
+
+    // Fonction utilitaire pour le calcul d'impôt par tranches
+    function calculerImpotTranches(revenuAnnuel, tranches) {
+        let impotTotal = 0;
+        let limitePrecedente = 0;
+
+        for (let i = 0; i < tranches.length; i++) {
+            let limiteMax = tranches[i][0];
+            let taux = tranches[i][1];
+
+            if (revenuAnnuel > limitePrecedente) {
+                let portionImposable = 0;
+                if (limiteMax === null || revenuAnnuel <= limiteMax) {
+                    portionImposable = revenuAnnuel - limitePrecedente;
+                } else {
+                    portionImposable = limiteMax - limitePrecedente;
+                }
+                impotTotal += portionImposable * taux;
+                limitePrecedente = limiteMax;
+            } else {
+                break;
+            }
+        }
+        return impotTotal;
+    }
+
+    function actualiserCalculs() {
+        // Extraction et sécurisation des valeurs numériques des inputs
+        const heures = parseFloat(inputHeures.value) || 0;
+        const taux = parseFloat(inputTaux.value) || 0;
+        const periodes = parseInt(inputPeriodes.value) || 26;
+        
+        const td1 = parseFloat(inputTd1.value) || 0;
+        const tp1015 = parseFloat(inputTp1015.value) || 0;
+
+        const cumulRrq = parseFloat(inputCumulRrq.value) || 0;
+        const cumulRqap = parseFloat(inputCumulRqap.value) || 0;
+        const cumulAe = parseFloat(inputCumulAe.value) || 0;
+
+        // 1. Calcul du Salaire Brut
+        const brutPeriode = heures * taux;
+        const salaireAnnuelEstime = brutPeriode * periodes;
+
+        // 2. Calcul des cotisations et plafonds
+        // RQAP
+        const maxRqap = 424.31;
+        let rqap = Math.min(brutPeriode * 0.00430, maxRqap - cumulRqap);
+        rqap = Math.max(0, rqap);
+

@@ -1,0 +1,410 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block body %}
+<h2 class="fw-bold text-center mb-2">{{ title }}</h2>
+
+<style>
+    .totaux-table {
+        table-layout: fixed;
+        width: 100%;
+    }
+
+    .totaux-table th,
+    .totaux-table td {
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+
+    .totaux-table .col-select {
+        width: 44px;
+    }
+
+    .totaux-table .col-compte {
+        width: 110px;
+    }
+
+    .totaux-table .col-libelle {
+        width: auto;
+    }
+
+    .totaux-table .col-money {
+        width: 110px;
+    }
+
+    .totaux-table .col-total {
+        width: 120px;
+    }
+
+    .totaux-table .amount-cell {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .totaux-row-selected {
+        --bs-table-accent-bg: rgba(13, 110, 253, 0.10);
+    }
+
+    .totaux-active-row {
+        background: rgba(255, 193, 7, 0.18);
+        font-weight: 600;
+    }
+
+    .totaux-final-row {
+        background: rgba(13, 110, 253, 0.08);
+    }
+
+    .totaux-final-row td,
+    .totaux-active-row td {
+        vertical-align: middle;
+    }
+
+    .totaux-row-locked {
+        opacity: 0.58;
+    }
+
+    .totaux-inline-summary input {
+        min-width: 220px;
+    }
+
+    .totaux-inline-summary .totaux-summary-commit {
+        white-space: nowrap;
+    }
+</style>
+
+<div class="mx-auto w-100" style="max-width: 1180px;">
+    <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle mb-0 totaux-table" id="totaux-table">
+            <colgroup>
+                <col class="col-select">
+                <col class="col-compte">
+                <col class="col-libelle">
+                <col class="col-money">
+                <col class="col-money">
+                <col class="col-total">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Compte</th>
+                    <th>Libellé</th>
+                    <th class="text-end">Débit</th>
+                    <th class="text-end">Crédit</th>
+                    <th class="text-end">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr data-row-index="{{ forloop.counter0 }}" data-debit="{{ row.debit|floatformat:2 }}" data-credit="{{ row.credit|floatformat:2 }}">
+                        <td class="text-center">
+                            <input class="form-check-input totaux-row-check" type="checkbox" aria-label="Sélectionner la ligne {{ row.compte.numero }}">
+                        </td>
+                        <td>{{ row.compte.numero }}</td>
+                        <td>{{ row.compte.libelle }}</td>
+                        <td class="amount-cell">{% if row.debit %}{{ row.debit|floatformat:2 }}{% endif %}</td>
+                        <td class="amount-cell">{% if row.credit %}{{ row.credit|floatformat:2 }}{% endif %}</td>
+                        <td class="amount-cell text-muted">—</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-muted">Aucune donnée pour les totaux.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th colspan="3" class="text-end">Totaux généraux</th>
+                    <th class="amount-cell">{{ total_debit|floatformat:2 }}</th>
+                    <th class="amount-cell">{{ total_credit|floatformat:2 }}</th>
+                    <th class="amount-cell">{{ total_debit|floatformat:2 }}</th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <div class="d-flex justify-content-end mt-3">
+        <button type="button" class="btn btn-outline-primary btn-sm" id="totaux-clear-selection">Effacer la sélection</button>
+    </div>
+</div>
+
+<div class="mt-3 text-center {% if is_balanced %}text-success{% else %}text-danger{% endif %}">
+    {% if is_balanced %}
+        Les totaux sont équilibrés.
+    {% else %}
+        Les totaux ne sont pas équilibrés.
+    {% endif %}
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var table = document.getElementById('totaux-table');
+        if (!table) {
+            return;
+        }
+
+        var checks = Array.from(table.querySelectorAll('.totaux-row-check'));
+        var clearBtn = document.getElementById('totaux-clear-selection');
+        var tbody = table.querySelector('tbody');
+        var originalRows = Array.from(tbody.querySelectorAll('tr[data-row-index]'));
+        var finalizedItems = [];
+        var activeDescriptions = {};
+
+        function parseAmount(raw) {
+            var value = String(raw || '').trim();
+            if (!value) {
+                return 0;
+            }
+            return parseFloat(value.replace(',', '.')) || 0;
+        }
+
+        function formatAmount(value) {
+            return value.toFixed(2);
+        }
+
+        function escapeAttr(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function getSelectedRows() {
+            var lockedEndIndex = finalizedItems.reduce(function (maxIndex, item) {
+                return Math.max(maxIndex, item.endIndex);
+            }, -1);
+
+            return originalRows.filter(function (row) {
+                var checkbox = row.querySelector('.totaux-row-check');
+                var rowIndex = parseInt(row.dataset.rowIndex || '0', 10);
+                return checkbox && checkbox.checked && rowIndex > lockedEndIndex;
+            });
+        }
+
+        function getBlocksFromSelection() {
+            var blocks = [];
+            var currentBlock = null;
+            var selectedRows = getSelectedRows();
+            selectedRows.forEach(function (row) {
+                var index = parseInt(row.dataset.rowIndex || '0', 10);
+                if (!currentBlock || index !== currentBlock.endIndex + 1) {
+                    if (currentBlock) {
+                        blocks.push(currentBlock);
+                    }
+                    currentBlock = {
+                        startIndex: index,
+                        endIndex: index,
+                        totalDebit: 0,
+                        totalCredit: 0,
+                        rows: [],
+                    };
+                }
+                currentBlock.endIndex = index;
+                currentBlock.rows.push(row);
+                currentBlock.totalDebit += parseAmount(row.dataset.debit);
+                currentBlock.totalCredit += parseAmount(row.dataset.credit);
+            });
+
+            if (currentBlock) {
+                blocks.push(currentBlock);
+            }
+
+            return blocks;
+        }
+
+        function collectDescriptionsFromDom() {
+            Array.from(tbody.querySelectorAll('tr.totaux-inline-summary')).forEach(function (row) {
+                var key = row.dataset.summaryKey || '';
+                var descriptionInput = row.querySelector('.totaux-summary-description');
+                if (key && descriptionInput && row.dataset.finalized !== '1') {
+                    activeDescriptions[key] = descriptionInput.value || '';
+                }
+            });
+        }
+
+        function removeAllSummaryRows() {
+            Array.from(tbody.querySelectorAll('tr.totaux-inline-summary')).forEach(function (row) {
+                row.remove();
+            });
+        }
+
+        function buildSummaryRow(block, isFinalized, descriptionValue, displayIndex) {
+            var summaryRow = document.createElement('tr');
+            summaryRow.className = 'totaux-inline-summary ' + (isFinalized ? 'totaux-final-row' : 'totaux-active-row');
+            summaryRow.dataset.summaryKey = block.startIndex + '-' + block.endIndex;
+            summaryRow.dataset.startIndex = String(block.startIndex);
+            summaryRow.dataset.endIndex = String(block.endIndex);
+            summaryRow.dataset.finalized = isFinalized ? '1' : '0';
+            summaryRow.innerHTML = ''
+                + '<td class="text-center"><span class="text-muted">∑</span></td>'
+                + '<td>' + (isFinalized ? 'Sous-total validé' : 'Sous-total') + '</td>'
+                + '<td>'
+                + '  <div class="d-flex flex-wrap align-items-center gap-2">'
+                + '    <input type="text" class="form-control form-control-sm totaux-summary-description" placeholder="Description" value="' + escapeAttr(descriptionValue || '') + '"' + (isFinalized ? ' readonly' : '') + '>'
+                + '    ' + (isFinalized ? '' : '<button type="button" class="btn btn-outline-primary btn-sm totaux-summary-commit">Valider</button>')
+                + '  </div>'
+                + '</td>'
+                + '<td class="amount-cell">' + formatAmount(block.totalDebit) + '</td>'
+                + '<td class="amount-cell">' + formatAmount(block.totalCredit) + '</td>'
+                + '<td class="amount-cell fw-semibold">' + formatAmount(block.totalDebit - block.totalCredit) + '</td>';
+
+            var descriptionInput = summaryRow.querySelector('.totaux-summary-description');
+            var commitButton = summaryRow.querySelector('.totaux-summary-commit');
+            if (descriptionInput && !isFinalized) {
+                descriptionInput.addEventListener('input', function () {
+                    activeDescriptions[summaryRow.dataset.summaryKey] = descriptionInput.value || '';
+                });
+                descriptionInput.addEventListener('keydown', function (event) {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        finalizeBlock(block, descriptionInput.value || '', displayIndex);
+                    }
+                });
+                descriptionInput.addEventListener('click', function (event) {
+                    event.stopPropagation();
+                });
+            }
+
+            if (commitButton) {
+                commitButton.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    finalizeBlock(block, descriptionInput ? descriptionInput.value || '' : '', displayIndex);
+                });
+            }
+
+            return summaryRow;
+        }
+
+        function finalizeBlock(block, description, displayIndex) {
+            var key = block.startIndex + '-' + block.endIndex;
+            var existingIndex = finalizedItems.findIndex(function (item) {
+                return item.key === key;
+            });
+            var item = {
+                key: key,
+                startIndex: block.startIndex,
+                endIndex: block.endIndex,
+                description: description,
+                totalDebit: block.totalDebit,
+                totalCredit: block.totalCredit,
+                displayIndex: displayIndex,
+            };
+
+            if (existingIndex >= 0) {
+                finalizedItems[existingIndex] = item;
+            } else {
+                finalizedItems.push(item);
+            }
+
+            block.rows.forEach(function (row) {
+                var checkbox = row.querySelector('.totaux-row-check');
+                if (checkbox) {
+                    checkbox.checked = false;
+                }
+            });
+
+            delete activeDescriptions[key];
+            renderTable();
+            focusNextUncheckedAfter(block.endIndex);
+        }
+
+        function focusNextUncheckedAfter(index) {
+            for (var i = index + 1; i < checks.length; i++) {
+                if (checks[i] && !checks[i].checked) {
+                    checks[i].focus();
+                    var row = checks[i].closest('tr');
+                    if (row) {
+                        row.scrollIntoView({ block: 'nearest' });
+                    }
+                    return;
+                }
+            }
+        }
+
+        function renderTable() {
+            collectDescriptionsFromDom();
+
+            var activeBlocks = getBlocksFromSelection();
+            var lockedEndIndex = finalizedItems.reduce(function (maxIndex, item) {
+                return Math.max(maxIndex, item.endIndex);
+            }, -1);
+
+            finalizedItems.sort(function (left, right) {
+                if (left.endIndex !== right.endIndex) {
+                    return left.endIndex - right.endIndex;
+                }
+                return left.startIndex - right.startIndex;
+            });
+
+            tbody.innerHTML = '';
+
+            for (var i = 0; i < originalRows.length; i++) {
+                var originalRow = originalRows[i];
+                var rowCheckbox = originalRow.querySelector('.totaux-row-check');
+                var isLocked = i <= lockedEndIndex;
+
+                originalRow.classList.toggle('totaux-row-locked', isLocked);
+                if (rowCheckbox) {
+                    rowCheckbox.disabled = isLocked;
+                    if (isLocked) {
+                        rowCheckbox.checked = false;
+                    }
+                }
+
+                tbody.appendChild(originalRow);
+
+                finalizedItems.forEach(function (item) {
+                    if (item.endIndex === i) {
+                        tbody.appendChild(buildSummaryRow(item, true, item.description, item.displayIndex));
+                    }
+                });
+
+                activeBlocks.forEach(function (block, index) {
+                    if (block.endIndex === i) {
+                        var key = block.startIndex + '-' + block.endIndex;
+                        var descriptionValue = activeDescriptions[key] || '';
+                        tbody.appendChild(buildSummaryRow(block, false, descriptionValue, index + 1));
+                    }
+                });
+            }
+
+            var selectedCount = activeBlocks.length;
+            checks = Array.from(table.querySelectorAll('.totaux-row-check'));
+
+            if (clearBtn) {
+                clearBtn.disabled = selectedCount === 0 && finalizedItems.length === 0;
+            }
+        }
+
+        function updateSummary() {
+            renderTable();
+        }
+
+        checks.forEach(function (checkbox) {
+            checkbox.addEventListener('change', updateSummary);
+            checkbox.closest('tr').addEventListener('click', function (event) {
+                if (event.target && (event.target.tagName === 'INPUT' || event.target.closest('.totaux-inline-summary'))) {
+                    return;
+                }
+                checkbox.checked = !checkbox.checked;
+                updateSummary();
+            });
+        });
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function () {
+                checks.forEach(function (checkbox) {
+                    checkbox.checked = false;
+                });
+                finalizedItems = [];
+                activeDescriptions = {};
+                updateSummary();
+            });
+        }
+
+        updateSummary();
+    });
+</script>
+{% endblock %}

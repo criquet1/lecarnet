@@ -11,7 +11,8 @@ from django.core.exceptions import PermissionDenied
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils.connection import ConnectionDoesNotExist
 
-from facture.models import Compagnie, Setting
+from facture.models import Compagnie
+from compte.models import Setting
 
 
 TAX_AUTHORITY_COMPANY_TPS = 'Revenu Canada TPS'

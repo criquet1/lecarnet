@@ -5,7 +5,7 @@ from django.db.utils import OperationalError, ProgrammingError
 from django.utils.connection import ConnectionDoesNotExist
 
 from facture.constants import MONTH_LABELS_FR
-from facture.models import Setting
+from compte.models import Setting
 
 
 def _add_months(source_date, months):
@@ -26,8 +26,8 @@ def build_fiscal_period_options(settings_instance=None, months_count=12, today=N
     reference_date = today or date.today()
     year_end_month = 12
 
-    if settings_instance and settings_instance.annee_financiere:
-        year_end_month = settings_instance.annee_financiere.month
+    if settings_instance and settings_instance.fin_annee_mois:
+        year_end_month = settings_instance.fin_annee_mois
 
     # Trouver la fin de l'exercice courant selon le mois de cloture.
     end_year = reference_date.year

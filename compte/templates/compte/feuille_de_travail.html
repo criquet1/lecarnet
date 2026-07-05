@@ -1,0 +1,488 @@
+{% extends "layouts/app_base.html" %}
+{% load facture_extras %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block body %}
+
+<div class="mb-3">
+    <label for="E_prov" class="form-label">E_prov - Crédits d'impôt personnel au Québec</label>
+    <input type="number" step="0.01" name="E_prov" id="E_prov" class="form-control" value="18952">
+</div>
+
+<div class="mb-3">
+    <label for="E_can" class="form-label">E_can - Crédits d'impôt personnel au Canada</label>
+    <input type="number" step="0.01" name="E_can" id="E_can" class="form-control" value="16452">
+</div>
+
+<div class="mb-3">
+    <label for="L" class="form-label">L - Retenue supplémentaire d'impôt demandée par le particulier</label>
+    <input type="number" step="0.01" name="L" id="L" class="form-control" value="0">
+</div>
+
+<div class="mb-3">
+    <label for="P" class="form-label">Nombre de périodes de paie (P)</label>
+    <input type="number" step="0.01" name="P" id="P" class="form-control">
+</div>
+
+<div class="mb-3">
+    <label for="nb_h" class="form-label">Heures de travail</label>
+    <input type="number" step="0.01" name="nb_h" id="nb_h" class="form-control">
+</div>
+
+<div class="mb-3">
+    <label for="sal_h" class="form-label">Salaire horaire</label>
+    <input type="number" step="0.01" name="sal_h" id="sal_h" class="form-control">
+</div>
+
+<div class="mb-3">
+    <strong>Rémunération brute (G) :</strong> <span id="G" class="js-g-output">0.00</span>
+</div>
+
+<div class="mb-3">
+    <strong>Impôt par période :</strong>
+    <span id="A_periode">0.00</span>
+    <small class="text-muted">= (Y ÷ P) + L, minimum 0</small>
+</div>
+
+
+
+
+
+<!--  I  = revenu imposable annuel
+         = P × (G – F – H – CSA) – J – J1 › Si le résultat est négatif, inscrivez 0. -->
+<table class="table table-striped">
+
+        <tr>
+            <td>I</td>
+            <td> = </td>
+            <td><span id="I">0.00</span> revenu imposable annuel</td>
+            <td></td>
+        </tr>
+
+        <tr>
+            <td>T</td>
+            <td> = </td>
+            <td><span id="T">0.1400</span> taux d'impôt du Québec appliqué</td>
+            <td></td>
+        </tr>
+
+        <tr>
+            <td>Y</td>
+            <td> = </td>
+            <td><span id="Y">0.00</span> impôt pour l'année = (T × I) - (0,14 × E_prov)</td>
+            <td></td>
+        </tr>
+
+
+        <tr>
+            <td>P</td>
+            <td> = </td>
+            <td><span id="P_table">0.00</span> nombre de périodes de paie</td>
+            <td></td>
+        </tr>
+    
+        <tr>
+            <td>G</td>
+            <td> = </td>
+            <td><span id="G_table" class="js-g-output">0.00</span> Rémunération brute</td>
+            <td></td>
+        </tr>
+
+        <tr>
+            <td>F</td>
+            <td> = </td>
+            <td><span id="F">0.00</span> Total des sommes suivantes pour la période de paie :</td>
+            <td></td>
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FA" class="form-label">la cotisation à un RPA</label>
+                <input type="number" step="0.01" name="FA" id="FA" class="form-control">
+            </td>
+            <td></td>
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FB" class="form-label">la cotisation à un RVER ou à un RPAC</label>
+                <input type="number" step="0.01" name="FB" id="FB" class="form-control">
+            </td>
+            <td></td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FC" class="form-label">la cotisation à un CELIAPP</label>
+                <input type="number" step="0.01" name="FC" id="FC" class="form-control">
+            </td>
+            <td></td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FD" class="form-label">la cotisation versée pour l’employée ou l’employé à une convention de retraite</label>
+                <input type="number" step="0.01" name="FD" id="FD" class="form-control">
+            </td>
+            <td></td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FE" class="form-label">la déduction relative au RIC, soit la somme retenue sur la rémunération de l’employée ou de l’employé pour lui permettre d’acquérir un titre admissible au RIC</label>
+                <input type="number" step="0.01" name="FE" id="FE" class="form-control">
+            </td>
+            <td></td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FF" class="form-label">la déduction relative aux voyages pour particulier habitant une région éloignée reconnue</label>
+                <input type="number" step="0.01" name="FF" id="FF" class="form-control">
+            </td>
+            <td></td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FG" class="form-label">la déduction pour option d’achat de titres</label>
+                <input type="number" step="0.01" name="FG" id="FG" class="form-control">
+            </td>
+            <td></td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td><span id="FH"></span><label for="FH"> la partie de la rémunération qui donne droit à l’une des déductions suivantes :</label></td>
+            <td></td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FH1" class="form-label">déduction pour revenus « situés » dans une réserve</label>
+                <input type="number" step="0.01" name="FH1" id="FH1" class="form-control">
+            </td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FH2" class="form-label">déduction pour spécialiste étranger</label>
+                <input type="number" step="0.01" name="FH2" id="FH2" class="form-control">
+            </td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FH3" class="form-label">la déduction pour chercheur étranger</label>
+                <input type="number" step="0.01" name="FH3" id="FH3" class="form-control">
+            </td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FH4" class="form-label">déduction pour chercheur étranger en stage postdoctoral</label>
+                <input type="number" step="0.01" name="FH4" id="FH4" class="form-control">
+            </td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FH5" class="form-label">déduction pour expert étranger</label>
+                <input type="number" step="0.01" name="FH5" id="FH5" class="form-control">
+            </td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FH6" class="form-label">déduction pour professeur étranger</label>
+                <input type="number" step="0.01" name="FH6" id="FH6" class="form-control">
+            </td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FH7" class="form-label">déduction pour producteur étranger et pour particulier étranger occupant un poste clé dans une production étrangère tournée au Québec</label>
+                <input type="number" step="0.01" name="FH7" id="FH7" class="form-control">
+            </td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FH8" class="form-label">déduction pour travailleur agricole étranger</label>
+                <input type="number" step="0.01" name="FH8" id="FH8" class="form-control">
+            </td>        
+        </tr>
+
+        <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>
+                <label for="FH9" class="form-label">déduction pour le personnel des Forces canadiennes et des forces policières</label>
+                <input type="number" step="0.01" name="FH9" id="FH9" class="form-control">
+            </td>        
+        </tr>
+
+        <tr>
+            <td>H</td>
+            <td> = </td>
+            <td>
+                <label class="form-label">Déduction pour travailleur (période) = min(0,06 × G, 1 450 ÷ P)</label>
+                <div><span id="H">0.00</span></div>
+            </td>
+            <td></td>
+        </tr>
+
+        <tr>
+            <td>CSA</td>
+            <td> = </td>
+            <td>
+                <label for="CSA" class="form-label">Cotisations sociales admissibles (période)</label>
+                <input type="number" step="0.01" name="CSA" id="CSA" class="form-control" value="0">
+            </td>
+            <td></td>
+        </tr>
+
+        <tr>
+            <td>J</td>
+            <td> = </td>
+            <td>
+                <label for="J" class="form-label">Déductions TP-1015.3 (période)</label>
+                <input type="number" step="0.01" name="J" id="J" class="form-control" value="0">
+            </td>
+            <td></td>
+        </tr>
+
+        <tr>
+            <td>J1</td>
+            <td> = </td>
+            <td>
+                <label for="J1" class="form-label">Déductions TP-1016 (période)</label>
+                <input type="number" step="0.01" name="J1" id="J1" class="form-control" value="0">
+            </td>
+            <td></td>
+        </tr>
+
+
+</table>
+
+
+
+
+
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    (function () {
+        const eProvInput = document.getElementById('E_prov');
+        const eCanInput = document.getElementById('E_can');
+        const lInput = document.getElementById('L');
+        const pInput = document.getElementById('P');
+        const heuresInput = document.getElementById('nb_h');
+        const salaireInput = document.getElementById('sal_h');
+        const pTableOutput = document.getElementById('P_table');
+        const gOutputs = document.querySelectorAll('.js-g-output');
+        const fOutput = document.getElementById('F');
+        const iOutput = document.getElementById('I');
+        const tOutput = document.getElementById('T');
+        const yOutput = document.getElementById('Y');
+        const aPeriodeOutput = document.getElementById('A_periode');
+
+        const hOutput = document.getElementById('H');
+        const csaInput = document.getElementById('CSA');
+        const jInput = document.getElementById('J');
+        const j1Input = document.getElementById('J1');
+
+        const fInputIds = ['FA', 'FB', 'FC', 'FD', 'FE', 'FF', 'FG', 'FH1', 'FH2', 'FH3', 'FH4', 'FH5', 'FH6', 'FH7', 'FH8', 'FH9'];
+        const fInputs = fInputIds
+            .map(function (id) { return document.getElementById(id); })
+            .filter(function (el) { return !!el; });
+
+        function toNumber(value) {
+            if (!value) {
+                return 0;
+            }
+            return parseFloat(String(value).replace(',', '.')) || 0;
+        }
+
+        function calculerG() {
+            if (!gOutputs.length) {
+                return;
+            }
+            const nbH = toNumber(heuresInput ? heuresInput.value : 0);
+            const salH = toNumber(salaireInput ? salaireInput.value : 0);
+            const total = nbH * salH;
+            gOutputs.forEach(function (gOutput) {
+                gOutput.textContent = total.toFixed(2);
+            });
+
+            return total;
+        }
+
+        function calculerF() {
+            const totalF = fInputs.reduce(function (acc, input) {
+                return acc + toNumber(input.value);
+            }, 0);
+
+            if (fOutput) {
+                fOutput.textContent = totalF.toFixed(2);
+            }
+
+            return totalF;
+        }
+
+        function calculerI() {
+            const p = toNumber(pInput ? pInput.value : 0);
+            const g = calculerG() || 0;
+            const f = calculerF();
+
+            let h = 0;
+            if (p > 0) {
+                h = Math.min(0.06 * g, 1450 / p);
+            }
+            if (hOutput) {
+                hOutput.textContent = h.toFixed(2);
+            }
+
+            const csa = toNumber(csaInput ? csaInput.value : 0);
+            const j = toNumber(jInput ? jInput.value : 0);
+            const j1 = toNumber(j1Input ? j1Input.value : 0);
+
+            if (pTableOutput) {
+                pTableOutput.textContent = p.toFixed(2);
+            }
+
+            const i = Math.max((p * (g - f - h - csa)) - j - j1, 0);
+
+            if (iOutput) {
+                iOutput.textContent = i.toFixed(2);
+            }
+
+            let t = 0.14;
+            if (i <= 54345) {
+                t = 0.14;
+            } else if (i <= 108680) {
+                t = 0.19;
+            } else if (i <= 132245) {
+                t = 0.24;
+            } else {
+                t = 0.2575;
+            }
+
+            if (tOutput) {
+                tOutput.textContent = t.toFixed(4);
+            }
+
+            const eProv = toNumber(eProvInput ? eProvInput.value : 0);
+            const y = Math.max((t * i) - (0.14 * eProv), 0);
+
+            if (yOutput) {
+                yOutput.textContent = y.toFixed(2);
+            }
+
+            const l = toNumber(lInput ? lInput.value : 0);
+            const aPeriode = Math.max((p > 0 ? (y / p) : 0) + l, 0);
+
+            if (aPeriodeOutput) {
+                aPeriodeOutput.textContent = aPeriode.toFixed(2);
+            }
+        }
+
+        if (pInput) {
+            pInput.addEventListener('input', calculerI);
+            pInput.addEventListener('change', calculerI);
+        }
+        if (heuresInput) {
+            heuresInput.addEventListener('input', calculerI);
+            heuresInput.addEventListener('change', calculerI);
+        }
+        if (salaireInput) {
+            salaireInput.addEventListener('input', calculerI);
+            salaireInput.addEventListener('change', calculerI);
+        }
+
+        [eProvInput, eCanInput, lInput].forEach(function (input) {
+            if (!input) {
+                return;
+            }
+            input.addEventListener('input', calculerI);
+            input.addEventListener('change', calculerI);
+        });
+
+        [csaInput, jInput, j1Input].forEach(function (input) {
+            if (!input) {
+                return;
+            }
+            input.addEventListener('input', calculerI);
+            input.addEventListener('change', calculerI);
+        });
+
+        fInputs.forEach(function (input) {
+            input.addEventListener('input', calculerI);
+            input.addEventListener('change', calculerI);
+        });
+
+        const fhOutput = document.getElementById('FH');
+        function calculerFH() {
+            const fhIds = ['FH1', 'FH2', 'FH3', 'FH4', 'FH5', 'FH6', 'FH7', 'FH8', 'FH9'];
+            const totalFH = fhIds.reduce(function (acc, id) {
+                const input = document.getElementById(id);
+                return acc + toNumber(input ? input.value : 0);
+            }, 0);
+            if (fhOutput) {
+                fhOutput.textContent = totalFH.toFixed(2) + ' ';
+            }
+        }
+
+        fInputs.forEach(function (input) {
+            input.addEventListener('input', calculerFH);
+            input.addEventListener('change', calculerFH);
+        });
+
+        calculerFH();
+        calculerI();
+    })();
+</script>
+{% endblock %}

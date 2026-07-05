@@ -19,6 +19,16 @@
 
 <h2 class="fw-bold text-center mb-4">{{ title }}</h2>
 
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="d-flex justify-content-end mb-3">
+    <a href="{% url 'creer_tenant' %}" class="btn btn-outline-primary">Creer un tenant</a>
+</div>
+
 <form method="post" class="row g-4">
     {% csrf_token %}
     {{ form.non_field_errors }}
@@ -33,9 +43,30 @@
             </div>
             <div class="mb-3">
                 <label class="form-label" for="{{ form.logo.id_for_label }}">Logo</label>
-                {{ form.logo }}
-                {% if form.logo.help_text %}<div class="form-text">{{ form.logo.help_text }}</div>{% endif %}
-                {{ form.logo.errors }}
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <select class="form-select" id="{{ form.logo.id_for_label }}" name="logo" onchange="updateLogoPreview()">
+                            <option value="">-- Choisir un logo --</option>
+                            {% for value, label in form.logo.field.choices %}
+                                {% if value %}
+                                    <option value="{{ value }}" {% if form.logo.value == value %}selected{% endif %}>{{ label }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                        {% if form.logo.help_text %}<div class="form-text">{{ form.logo.help_text }}</div>{% endif %}
+                        {{ form.logo.errors }}
+                    </div>
+                    <div class="col-md-4">
+                        <div id="logo_preview">
+                            {% if form.logo.value %}
+                                <img src="/static/images/logos/{{ form.logo.value }}" alt="Logo" class="img-thumbnail" style="max-width: 150px; max-height: 150px;">
+                            {% else %}
+                                <div class="text-muted">Aucun logo sélectionné</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                
+                </div>
             </div>
             <div class="mb-3">
                 <label class="form-label" for="{{ form.email.id_for_label }}">Courriel</label>
@@ -76,12 +107,12 @@
                 </div>
             </div>
             <div class="row g-3">
-                <div class="col-md-4 mb-3">
+                <div class="col-md-6 mb-3">
                     <label class="form-label" for="{{ form.fin_annee_jour.id_for_label }}">Jour de fin d'exercice</label>
                     {{ form.fin_annee_jour }}
                     {{ form.fin_annee_jour.errors }}
                 </div>
-                <div class="col-md-8 mb-3">
+                <div class="col-md-6 mb-3">
                     <label class="form-label" for="{{ form.fin_annee_mois.id_for_label }}">Mois de fin d'exercice</label>
                     {{ form.fin_annee_mois }}
                     {{ form.fin_annee_mois.errors }}
@@ -140,6 +171,18 @@
                     {{ form.compte_tvq_payee.errors }}
                 </div>
             </div>
+
+            <div class="row g-3 mt-3">
+                <div class="col-md-6">
+                    <label class="form-label" for="frequence_paie_select">Fréquence de paie</label>
+                    <select class="form-select" id="frequence_paie_select" name="frequence_paie">
+                        <option value="">-- Sélectionner une fréquence --</option>
+                        {% for freq in frequences_paie %}
+                            <option value="{{ freq.code }}" {% if settings_instance.frequence_paie.code == freq.code %}selected{% endif %}>{{ freq.get_code_display }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -147,4 +190,18 @@
         <button type="submit" class="btn btn-primary">Enregistrer</button>
     </div>
 </form>
+
+<script>
+function updateLogoPreview() {
+    const selectElement = document.getElementById('id_logo');
+    const previewDiv = document.getElementById('logo_preview');
+    const selectedValue = selectElement.value;
+    
+    if (selectedValue) {
+        previewDiv.innerHTML = `<img src="/static/images/logos/${selectedValue}" alt="Logo" class="img-thumbnail" style="max-width: 150px; max-height: 150px;">`;
+    } else {
+        previewDiv.innerHTML = '<div class="text-muted">Aucun logo sélectionné</div>';
+    }
+}
+</script>
 {% endblock %}

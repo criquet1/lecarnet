@@ -3,6 +3,7 @@ from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 from compte.models import Compte
+from paie.models import FrequencePaie
 
 
 class Source(models.Model):
@@ -47,7 +48,7 @@ class Tr_desc(models.Model):
     no_ej = models.CharField(max_length=10, blank=False, null=False)
     compagnie = models.ForeignKey(Compagnie, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
     date = models.DateField()
-    description = models.CharField(max_length=40, blank=True, null=True)
+    desc_ctb = models.CharField(max_length=40, blank=True, null=True)
     note_de_credit = models.BooleanField(default=False)
     source = models.ForeignKey(Source, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
 
@@ -146,6 +147,7 @@ class Tr_detail(models.Model):
         return None
 
     def _tax_account_ids(self, db_alias=None):
+        from compte.models import Setting
         db_alias = self._tenant_db_alias(db_alias)
         settings_qs = Setting.objects.using(db_alias) if db_alias else Setting.objects
         settings_instance = settings_qs.first()
@@ -285,74 +287,6 @@ class Tr_detail(models.Model):
         self._auto_assign_open_report(db_alias=db_alias)
         self.full_clean(exclude=['tr_desc', 'compte', 'rapport_taxes'])
         return super().save(*args, **kwargs)
-
-
-class Setting(models.Model):
-    TAX_MODE_RECLAMER = 'RECLAMER'
-    TAX_MODE_PAYER = 'PAYER'
-    TAX_MODE_CHOICES = [
-        (TAX_MODE_RECLAMER, 'Les taxes sont generalement a reclamer'),
-        (TAX_MODE_PAYER, 'Les taxes sont generalement a payer'),
-    ]
-
-    nom = models.CharField(max_length=60, blank=False, null=False)
-    logo = models.CharField(
-        max_length=100,
-        blank=False,
-        null=False,
-        default='images.png',
-        help_text="Nom du fichier logo dans static/images/logos (ex: images.png)."
-    )
-    adresse = models.CharField(max_length=60, blank=False, null=False)
-    ville = models.CharField(max_length=255, blank=False, null=False)
-    code_postal = models.CharField(max_length=60, blank=False, null=False)
-    pays = models.CharField(max_length=255, blank=False, null=False)
-    phone = models.CharField(max_length=100, blank=False, null=False)
-    email = models.EmailField(blank=False, null=False)
-    annee_financiere = models.DateField(blank=True, null=True)
-
-    # Ajout de related_name uniques pour éviter le conflit
-    car = models.ForeignKey(Compte, on_delete=models.SET_NULL, null=True, blank=True, related_name='settings_car')
-    cap = models.ForeignKey(Compte, on_delete=models.SET_NULL, null=True, blank=True, related_name='settings_cap')
-    
-    compte_tps_percue = models.ForeignKey(
-        Compte, 
-        on_delete=models.SET_NULL, # Remplacez CASCADE par SET_NULL
-        null=True, 
-        blank=True, 
-        related_name='settings_tps_percue'
-    )
-
-    compte_tps_payee = models.ForeignKey(
-            Compte, 
-            on_delete=models.SET_NULL, # Remplacez CASCADE par SET_NULL
-            null=True, 
-            blank=True, 
-            related_name='settings_tps_payee'
-        )
-    compte_tvq_percue = models.ForeignKey(
-            Compte, 
-            on_delete=models.SET_NULL, # Remplacez CASCADE par SET_NULL
-            null=True, 
-            blank=True, 
-            related_name='settings_tvq_percue'
-        )
-    compte_tvq_payee = models.ForeignKey(
-        Compte, 
-        on_delete=models.SET_NULL, # Remplacez CASCADE par SET_NULL
-        null=True, 
-        blank=True, 
-        related_name='settings_tvq_payee'
-    )
-    compte_fr_retard = models.ForeignKey(Compte, on_delete=models.SET_NULL, null=True, blank=True, related_name='settings_fr_retard')
-    taxes_mode = models.CharField(
-        max_length=16,
-        choices=TAX_MODE_CHOICES,
-        default=TAX_MODE_RECLAMER,
-    )
-
-    def __str__(self):
-        return self.nom
 
 
 class CompagnieSoldeDepart(models.Model):

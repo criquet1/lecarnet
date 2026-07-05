@@ -35,11 +35,16 @@
         </li>
         {% if request.user.is_superuser or request.user|in_group:"expert" %}
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {% if current_url == 'compte' or current_url == 'settings' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <a class="nav-link dropdown-toggle {% if current_url == 'compte' or current_url == 'settings' or current_url == 'creer_tenant' or current_url == 'totaux' or current_url == 'imp_quebec' or current_url == 'feuille_de_travail' or current_url == 'creer_paie' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             Administration
           </a>
           <ul class="dropdown-menu dropdown-menu-end">
             <li><a class="dropdown-item {% if current_url == 'compte' %}active{% endif %}" {% if current_url == 'compte' %}aria-current="page"{% endif %} href="{% url 'compte' %}">Comptes</a></li>
+            <li><a class="dropdown-item {% if current_url == 'totaux' %}active{% endif %}" {% if current_url == 'totaux' %}aria-current="page"{% endif %} href="{% url 'totaux' %}">Totaux</a></li>
+            <li><a class="dropdown-item {% if current_url == 'imp_quebec' %}active{% endif %}" {% if current_url == 'imp_quebec' %}aria-current="page"{% endif %} href="{% url 'imp_quebec' %}">Impôt Québec</a></li>
+            <li><a class="dropdown-item {% if current_url == 'feuille_de_travail' %}active{% endif %}" {% if current_url == 'feuille_de_travail' %}aria-current="page"{% endif %} href="{% url 'feuille_de_travail' %}">Feuille de travail</a></li>
+            <li><a class="dropdown-item {% if current_url == 'creer_paie' %}active{% endif %}" {% if current_url == 'creer_paie' %}aria-current="page"{% endif %} href="{% url 'creer_paie' %}">Créer une paie</a></li>
+            <li><a class="dropdown-item {% if current_url == 'creer_tenant' %}active{% endif %}" {% if current_url == 'creer_tenant' %}aria-current="page"{% endif %} href="{% url 'creer_tenant' %}">Créer un tenant</a></li>
             <li><a class="dropdown-item {% if current_url == 'settings' %}active{% endif %}" {% if current_url == 'settings' %}aria-current="page"{% endif %} href="{% url 'settings' %}">Paramètres</a></li>
           </ul>
         </li>
@@ -47,12 +52,30 @@
       </ul>
       <div class="ms-auto d-flex align-items-center gap-2">
         {% if request.user.is_authenticated %}
-          {% if active_client %}
-            <a class="btn btn-outline-light btn-sm" href="{% url 'select_client' %}" title="Changer de client actif">
-              {{ active_client.name }}
-            </a>
+          {% if active_client_accesses|length > 1 %}
+            <button
+              type="button"
+              class="btn btn-outline-light btn-sm"
+              data-bs-toggle="modal"
+              data-bs-target="#activeClientModal"
+              title="Changer de client actif"
+            >
+              {% if active_client %}
+                {{ active_client.name }}
+              {% else %}
+                Choisir un client
+              {% endif %}
+            </button>
+          {% else %}
+            <span class="navbar-text small">
+              {% if active_client %}
+                {{ active_client.name }}
+              {% else %}
+                Client unique
+              {% endif %}
+            </span>
           {% endif %}
-          <span class="navbar-text">{{ request.user.username }}</span>
+          <a class="btn btn-outline-light btn-sm" href="{% url 'user_password_change' %}">{{ request.user.username }}</a>
           <form method="post" action="{% url 'logout' %}" class="m-0">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline-light btn-sm">Logout</button>
@@ -65,3 +88,42 @@
   </div>
   {% endwith %}
 </nav>
+
+{% if active_client_accesses|length > 1 %}
+<div class="modal fade" id="activeClientModal" tabindex="-1" aria-labelledby="activeClientModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="activeClientModalLabel">Choisir le client actif</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+        {% if active_client_accesses %}
+          <div class="list-group">
+            {% for access in active_client_accesses %}
+              <form method="post" action="{% url 'set_active_client' %}" class="list-group-item d-flex justify-content-between align-items-center gap-3">
+                {% csrf_token %}
+                <input type="hidden" name="client_id" value="{{ access.client_id }}">
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <div>
+                  <div class="fw-semibold">{{ access.client.name }}</div>
+                  <small class="text-muted">Alias DB: {{ access.client.db_alias }}</small>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" {% if active_client and active_client.id == access.client_id %}disabled{% endif %}>
+                  {% if active_client and active_client.id == access.client_id %}
+                    Actif
+                  {% else %}
+                    Activer
+                  {% endif %}
+                </button>
+              </form>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="alert alert-warning mb-0">Aucun tenant actif disponible.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}

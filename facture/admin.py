@@ -1,5 +1,6 @@
 from django.contrib import admin
-from facture.models import Compagnie, Setting, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart
+from facture.models import Compagnie, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart
+from compte.models import Setting
 
 
 class SettingAdmin(admin.ModelAdmin):
@@ -23,9 +24,9 @@ class CompagnieAdmin(admin.ModelAdmin):
     get_comptes.short_description = 'Comptes'
 
 class TrDescAdmin(admin.ModelAdmin):
-    list_display = ('id', 'no_ej', 'compagnie', 'date', 'description', 'source')
+    list_display = ('id', 'no_ej', 'compagnie', 'date', 'desc_ctb', 'source')
     list_filter = ('date', 'compagnie')
-    search_fields = ('description',)
+    search_fields = ('desc_ctb',)
     ordering = ('-date',)
 
 

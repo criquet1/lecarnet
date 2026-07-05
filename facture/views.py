@@ -15,7 +15,8 @@ from io import TextIOWrapper
 import chardet
 from datetime import date, datetime
 from facture.constants import MONTH_LABELS_FR
-from facture.models import Compagnie, Tr_desc, Tr_detail, Source, Setting, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart
+from facture.models import Compagnie, Tr_desc, Tr_detail, Source, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart
+from compte.models import Setting
 from facture.context_processors import build_fiscal_period_options
 from facture.forms import CompagnieForm, TrDescForm, TrDetailFormSet
 from facture.utils import (
@@ -278,9 +279,11 @@ def _closing_date_label(reference_date, settings_instance=None):
 
     closing_month = 12
     closing_day = 31
-    if settings_instance and getattr(settings_instance, 'annee_financiere', None):
-        closing_month = settings_instance.annee_financiere.month
-        closing_day = settings_instance.annee_financiere.day
+    if settings_instance:
+        if settings_instance.fin_annee_mois:
+            closing_month = settings_instance.fin_annee_mois
+        if settings_instance.fin_annee_jour:
+            closing_day = settings_instance.fin_annee_jour
 
     closing_year = reference_date.year
     if (reference_date.month, reference_date.day) > (closing_month, closing_day):
@@ -403,7 +406,7 @@ def grand_livre(request):
                 'date': detail.tr_desc.date,
                 'no_ej': detail.tr_desc.no_ej,
                 'compagnie': detail.tr_desc.compagnie,
-                'description': detail.tr_desc.description,
+                'description': detail.tr_desc.desc_ctb,
                 'source': detail.tr_desc.source,
                 'debit': debit,
                 'credit': credit,
@@ -491,7 +494,7 @@ def _serialize_invoice(tr):
     return {
         'id': str(tr.id),
         'date': tr.date.isoformat() if tr.date else '',
-        'numero': tr.description or '',
+        'numero': tr.desc_ctb or '',
         'noteDeCredit': bool(tr.note_de_credit),
         'total': f"{display_total:.2f}",
         'details': details,
@@ -606,7 +609,7 @@ def facture(request):
             company_invoices.append({
                 'id': tr.id,
                 'no_ej': tr.no_ej,
-                'numero': tr.description or '',
+                'numero': tr.desc_ctb or '',
                 'date': tr.date.isoformat() if tr.date else '',
                 'noteDeCredit': serialized['noteDeCredit'],
                 'total': float(serialized['total']),
@@ -905,7 +908,7 @@ def _build_compte_mode_context(mode, settings_instance):
                 debit = montant if montant >= 0 else Decimal('0')
                 credit = abs(montant) if montant < 0 else Decimal('0')
                 releve_source = detail.tr_desc.releves_sources.all().first()
-                description = releve_source.desc_ctb if releve_source and releve_source.desc_ctb else detail.tr_desc.description
+                description = releve_source.desc_ctb if releve_source and releve_source.desc_ctb else detail.tr_desc.desc_ctb
 
                 soldes_by_company[compagnie_id] += montant
 
@@ -1635,7 +1638,7 @@ def _import_releve_csv(csv_file):
                 'date': date_obj,
                 'no_ligne': no_ligne,
                 'desc_releve': desc_releve,
-                'desc_ctb': desc_releve,
+                'desc_ctb': desc_releve[:40],
                 'retrait': retrait,
                 'depot': depot,
                 'solde': solde,
@@ -1650,8 +1653,9 @@ def _import_releve_csv(csv_file):
 
     if releves:
         try:
-            for data in releves:
-                Releve.objects.create(**data)
+            with transaction.atomic():
+                for data in releves:
+                    Releve.objects.create(**data)
             errors.insert(0, f"✓ {len(releves)} ligne(s) ajoutée(s) à la base de données avec succès!")
         except Exception as exc:
             errors.append(f"Erreur lors de l'insertion: {str(exc)}")

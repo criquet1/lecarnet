@@ -7,7 +7,8 @@ from django.test import TestCase
 from django.urls import reverse
 
 from compte.models import Compte, Total
-from facture.models import Compagnie, Setting, Tr_desc, Tr_detail
+from facture.models import Compagnie, Tr_desc, Tr_detail
+from compte.models import Setting
 from tenancy.models import ClientDatabase, UserClientAccess
 from tenancy.services import SESSION_CLIENT_ALIAS_KEY, SESSION_CLIENT_ID_KEY
 
@@ -67,7 +68,8 @@ class FactureMultiTenantTests(TestCase):
 			pays='Canada',
 			phone='4180000000',
 			email='active@example.com',
-			annee_financiere=date(2000, 12, 31),
+			fin_annee_jour=31,
+			fin_annee_mois=12,
 			cap=cap,
 			car=car,
 			compte_tps_percue=tps_percue,

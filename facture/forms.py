@@ -1,11 +1,11 @@
 import calendar
-from datetime import date
 
 from django import forms
 from django.forms import formset_factory
 
 from .constants import MONTH_CHOICES_FR
-from .models import Compagnie, Setting, Tr_desc
+from .models import Compagnie, Tr_desc
+from compte.models import Setting
 from .utils import get_available_logos
 
 
@@ -26,8 +26,18 @@ class CompagnieForm(forms.ModelForm):
 
 class SettingForm(forms.ModelForm):
     logo = forms.ChoiceField(label="Logo", required=True)
-    fin_annee_jour = forms.ChoiceField(label="Jour", required=True)
-    fin_annee_mois = forms.ChoiceField(label="Mois", required=True)
+    fin_annee_jour = forms.TypedChoiceField(
+        label="Jour",
+        required=True,
+        coerce=int,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    fin_annee_mois = forms.TypedChoiceField(
+        label="Mois",
+        required=True,
+        coerce=int,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
 
     MONTH_CHOICES = MONTH_CHOICES_FR
 
@@ -44,6 +54,8 @@ class SettingForm(forms.ModelForm):
             'pays',
             'phone',
             'email',
+            'fin_annee_jour',
+            'fin_annee_mois',
             'car',
             'cap',
             'compte_tps_percue',
@@ -52,6 +64,7 @@ class SettingForm(forms.ModelForm):
             'compte_tvq_payee',
             'compte_fr_retard',
             'taxes_mode',
+            'frequence_paie',
         ]
         widgets = {
             'nom': forms.TextInput(attrs={'class': 'form-control'}),
@@ -69,6 +82,7 @@ class SettingForm(forms.ModelForm):
             'compte_tvq_payee': forms.Select(attrs={'class': 'form-select'}),
             'compte_fr_retard': forms.Select(attrs={'class': 'form-select'}),
             'taxes_mode': forms.Select(attrs={'class': 'form-select'}),
+            'frequence_paie': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -80,12 +94,12 @@ class SettingForm(forms.ModelForm):
         self.fields['fin_annee_jour'].choices = self.DAY_CHOICES
         self.fields['fin_annee_mois'].choices = self.MONTH_CHOICES
 
-        if self.instance and getattr(self.instance, 'annee_financiere', None):
-            self.fields['fin_annee_jour'].initial = self.instance.annee_financiere.day
-            self.fields['fin_annee_mois'].initial = self.instance.annee_financiere.month
+        if self.instance.pk:
+            self.fields['fin_annee_jour'].initial = str(self.instance.fin_annee_jour) if self.instance.fin_annee_jour else '31'
+            self.fields['fin_annee_mois'].initial = str(self.instance.fin_annee_mois) if self.instance.fin_annee_mois else '12'
         else:
-            self.fields['fin_annee_jour'].initial = 31
-            self.fields['fin_annee_mois'].initial = 12
+            self.fields['fin_annee_jour'].initial = '31'
+            self.fields['fin_annee_mois'].initial = '12'
 
     def clean(self):
         cleaned_data = super().clean()
@@ -100,21 +114,13 @@ class SettingForm(forms.ModelForm):
         return cleaned_data
 
     def save(self, commit=True):
-        instance = super().save(commit=False)
-        mois = int(self.cleaned_data['fin_annee_mois'])
-        jour = int(self.cleaned_data['fin_annee_jour'])
-        instance.annee_financiere = date(2000, mois, jour)
-
-        if commit:
-            instance.save()
-
-        return instance
+        return super().save(commit=commit)
 
 
 class TrDescForm(forms.ModelForm):
     class Meta:
         model = Tr_desc
-        fields = ['date', 'description', 'note_de_credit']
+        fields = ['date', 'desc_ctb', 'note_de_credit']
         widgets = {
             'date': forms.DateInput(attrs={'type': 'date'}),
             'note_de_credit': forms.CheckboxInput(attrs={'class': 'form-check-input'}),

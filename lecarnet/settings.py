@@ -35,6 +35,7 @@ ALLOWED_HOSTS = ['lecarnet.io', 'www.lecarnet.io', '127.0.0.1', 'localhost']
 INSTALLED_APPS = [
     'facture',
     'compte',
+    'paie',
     'tenancy',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -100,28 +101,16 @@ _oneclick_default_db = _oneclick_config.get('defaultDb', {}) if isinstance(_onec
 _oneclick_tenants = _oneclick_config.get('tenants', {}) if isinstance(_oneclick_config, dict) else {}
 
 
-default_db_engine = _env('DEFAULT_DB_ENGINE', _oneclick_default_db.get('engine', ''))
-USE_POSTGRES_DEFAULT = (default_db_engine or '').lower() in {'postgres', 'postgresql'}
-
-if USE_POSTGRES_DEFAULT:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': _env('DEFAULT_DB_NAME', _oneclick_default_db.get('name', 'lecarnet_central')),
-            'USER': _env('DEFAULT_DB_USER', _oneclick_default_db.get('user', 'postgres')),
-            'PASSWORD': _env('DEFAULT_DB_PASSWORD', _oneclick_default_db.get('password', '')),
-            'HOST': _env('DEFAULT_DB_HOST', _oneclick_default_db.get('host', '127.0.0.1')),
-            'PORT': _env('DEFAULT_DB_PORT', _oneclick_default_db.get('port', '5432')),
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': _env('DEFAULT_DB_NAME', _oneclick_default_db.get('name', 'lecarnet_central')),
+        'USER': _env('DEFAULT_DB_USER', _oneclick_default_db.get('user', 'postgres')),
+        'PASSWORD': _env('DEFAULT_DB_PASSWORD', _oneclick_default_db.get('password', '')),
+        'HOST': _env('DEFAULT_DB_HOST', _oneclick_default_db.get('host', '127.0.0.1')),
+        'PORT': _env('DEFAULT_DB_PORT', _oneclick_default_db.get('port', '5432')),
     }
-else:
-    sqlite_name = _env('DEFAULT_DB_NAME', _oneclick_default_db.get('name', 'db.sqlite3')) or 'db.sqlite3'
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / sqlite_name,
-        }
-    }
+}
 
 
 tenant_databases_json = _env('TENANT_DATABASES_JSON', '')
@@ -185,3 +174,8 @@ STATICFILES_DIRS = [
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'accueil'
 LOGOUT_REDIRECT_URL = 'login'
+
+AUTHENTICATION_BACKENDS = [
+    'tenancy.auth_backends.CaseInsensitiveUsernameBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]

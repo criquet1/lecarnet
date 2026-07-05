@@ -1,36 +1,36 @@
 {
   "defaultDb": {
-    "engine": "sqlite",
+    "engine": "postgres",
     "name": "lecarnet_central",
-    "user": "",
-    "password": "",
-    "host": "",
-    "port": ""
+    "user": "postgres",
+    "password": "CHANGE_ME",
+    "host": "127.0.0.1",
+    "port": "5432"
   },
   "tenants": {
     "Anonymus": {
-      "ENGINE": "django.db.backends.sqlite3",
-      "NAME": "tenant_anonymus.sqlite3",
-      "USER": "",
-      "PASSWORD": "",
-      "HOST": "",
-      "PORT": ""
+      "ENGINE": "django.db.backends.postgresql",
+      "NAME": "lecarnet_anonymus",
+      "USER": "postgres",
+      "PASSWORD": "CHANGE_ME",
+      "HOST": "127.0.0.1",
+      "PORT": "5432"
     },
     "client_alpha": {
-      "ENGINE": "django.db.backends.sqlite3",
-      "NAME": "tenant_client_alpha.sqlite3",
-      "USER": "",
-      "PASSWORD": "",
-      "HOST": "",
-      "PORT": ""
+      "ENGINE": "django.db.backends.postgresql",
+      "NAME": "lecarnet_alpha",
+      "USER": "postgres",
+      "PASSWORD": "CHANGE_ME",
+      "HOST": "127.0.0.1",
+      "PORT": "5432"
     },
     "client_test": {
-      "ENGINE": "django.db.backends.sqlite3",
-      "NAME": "tenant_client_test.sqlite3",
-      "USER": "",
-      "PASSWORD": "",
-      "HOST": "",
-      "PORT": ""
+      "ENGINE": "django.db.backends.postgresql",
+      "NAME": "lecarnet_test",
+      "USER": "postgres",
+      "PASSWORD": "CHANGE_ME",
+      "HOST": "127.0.0.1",
+      "PORT": "5432"
     }
   },
   "adminUser": {
