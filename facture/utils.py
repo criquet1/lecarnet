@@ -89,7 +89,14 @@ def get_settings():
 def get_setting(*select_related_fields):
 	queryset = Setting.objects
 	if select_related_fields:
-		queryset = queryset.select_related(*select_related_fields)
+		relational_fields = {
+			field.name
+			for field in Setting._meta.get_fields()
+			if field.is_relation and not field.auto_created and (field.many_to_one or field.one_to_one)
+		}
+		valid_fields = [field_name for field_name in select_related_fields if field_name in relational_fields]
+		if valid_fields:
+			queryset = queryset.select_related(*valid_fields)
 	return queryset.first()
 
 

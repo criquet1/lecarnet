@@ -1,0 +1,77 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1">{{ title }}</h2>
+        <p class="text-muted mb-0">Saisie et consultation des paies du client actif.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'paie:paie_employes' %}" class="btn btn-outline-primary">Employés</a>
+        <a href="{% url 'paie:paie_calendrier' %}" class="btn btn-outline-primary">Calendrier</a>
+        <a href="{% url 'paie:paie_saisir' %}" class="btn btn-primary">Saisir une paie</a>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Employés actifs</div><div class="display-6">{{ resume.employes_actifs }}</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Périodes ouvertes</div><div class="display-6">{{ resume.periodes_ouvertes }}</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Paies saisies</div><div class="display-6">{{ resume.paies_total }}</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Total net</div><div class="display-6">{{ resume.total_net|default:0|floatformat:2 }}</div></div></div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">Dernières paies</h5>
+            <a href="{% url 'paie:paie_journal' %}" class="btn btn-sm btn-outline-secondary">Voir le journal complet</a>
+        </div>
+        {% if paies_recentes %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Employé</th>
+                            <th>Période</th>
+                            <th>Fréquence</th>
+                            <th>Brut</th>
+                            <th>Retenues</th>
+                            <th>Net</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for paie in paies_recentes %}
+                            <tr>
+                                <td>{{ paie.employe }}</td>
+                                <td>{{ paie.periode.date_fin|date:"Y-m-d" }}</td>
+                                <td>{{ paie.periode.frequence_paie }}</td>
+                                <td>{{ paie.salaire_brut_periode|floatformat:2 }}</td>
+                                <td>{{ paie.total_retenues|floatformat:2 }}</td>
+                                <td>{{ paie.salaire_net|floatformat:2 }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-light border mb-0">Aucune paie enregistrée pour ce client.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

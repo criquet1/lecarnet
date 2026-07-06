@@ -2,11 +2,18 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from .forms import SocieteForm, SocieteUserAssignForm, SocieteUserCreateForm
-from .models import Societe, UserSocieteAccess
+from .forms import (
+    ExpertSocieteUserCreateForm,
+    ExpertUserTenantAssignForm,
+    SocieteForm,
+    SocieteUserAssignForm,
+    SocieteUserCreateForm,
+)
+from .models import ClientDatabase, Societe, UserClientAccess, UserSocieteAccess
 from .services import get_user_client_accesses, mark_user_must_change_password, set_active_client_on_session, sync_user_client_accesses
 
 
@@ -115,4 +122,199 @@ def manage_societes(request):
         'societes': societes,
         'societe_to_edit': societe_to_edit,
         'user_societe_accesses': user_societe_accesses,
+    })
+
+
+@login_required
+def manage_societe_users(request):
+    is_expert = request.user.groups.filter(name='expert').exists()
+    if not (request.user.is_superuser or is_expert):
+        messages.error(request, 'Acces reserve aux experts.')
+        return redirect('accueil')
+
+    societe_access = UserSocieteAccess.objects.select_related('societe').filter(
+        user=request.user,
+        societe__is_active=True,
+    ).order_by('-is_default', 'societe__name', 'id').first()
+
+    if not societe_access:
+        messages.error(request, 'Aucune societe active n est assignee a votre utilisateur.')
+        return redirect('accueil')
+
+    managed_societe = societe_access.societe
+    user_model = get_user_model()
+
+    societe_user_accesses_qs = UserSocieteAccess.objects.select_related('user').filter(
+        societe=managed_societe,
+    ).order_by('user__username', 'id')
+    societe_user_ids = list(societe_user_accesses_qs.values_list('user_id', flat=True))
+
+    societe_users_qs = user_model.objects.filter(id__in=societe_user_ids).order_by('username', 'id')
+    tenants_qs = ClientDatabase.objects.filter(societe=managed_societe).order_by('name', 'id')
+    tenant_ids = list(tenants_qs.values_list('id', flat=True))
+
+    create_user_form = ExpertSocieteUserCreateForm()
+    assign_tenant_form = ExpertUserTenantAssignForm(
+        users_qs=societe_users_qs.filter(is_active=True),
+        tenants_qs=tenants_qs.filter(is_active=True),
+    )
+
+    if request.method == 'POST':
+        action = (request.POST.get('action') or '').strip()
+
+        if action == 'create_societe_user':
+            create_user_form = ExpertSocieteUserCreateForm(request.POST)
+            if create_user_form.is_valid():
+                user = create_user_form.save(managed_societe)
+                expert_group, _ = Group.objects.get_or_create(name='expert')
+                if create_user_form.cleaned_data.get('is_expert'):
+                    user.groups.add(expert_group)
+                else:
+                    user.groups.remove(expert_group)
+
+                security_state = mark_user_must_change_password(user, True)
+                if security_state is None:
+                    user.delete()
+                    messages.error(request, 'Utilisateur non cree: impossible d activer le changement obligatoire du mot de passe.')
+                else:
+                    messages.success(request, f"Utilisateur cree: {user.username} (societe: {managed_societe.name})")
+                    return redirect('manage_societe_users')
+
+        elif action == 'assign_tenant_access':
+            assign_tenant_form = ExpertUserTenantAssignForm(
+                request.POST,
+                users_qs=societe_users_qs.filter(is_active=True),
+                tenants_qs=tenants_qs.filter(is_active=True),
+            )
+            if assign_tenant_form.is_valid():
+                access = assign_tenant_form.save()
+                sync_user_client_accesses(access.user)
+                messages.success(request, f"Acces tenant ajoute: {access.user.username} -> {access.client.name}")
+                return redirect('manage_societe_users')
+
+        elif action == 'toggle_user_expert':
+            user_id = request.POST.get('user_id')
+            target_user = get_object_or_404(societe_users_qs, pk=user_id)
+            should_be_expert = request.POST.get('is_expert') == '1'
+            expert_group, _ = Group.objects.get_or_create(name='expert')
+
+            if should_be_expert:
+                target_user.groups.add(expert_group)
+                messages.success(request, f'Role Expert active pour {target_user.username}.')
+            else:
+                if target_user.pk == request.user.pk and not request.user.is_superuser:
+                    messages.error(request, 'Vous ne pouvez pas retirer votre propre role Expert.')
+                else:
+                    target_user.groups.remove(expert_group)
+                    messages.success(request, f'Role Expert retire pour {target_user.username}.')
+
+            return redirect('manage_societe_users')
+
+        elif action == 'toggle_user_active':
+            user_id = request.POST.get('user_id')
+            target_user = get_object_or_404(societe_users_qs, pk=user_id)
+            should_be_active = request.POST.get('is_active') == '1'
+
+            if target_user.pk == request.user.pk and not should_be_active:
+                messages.error(request, 'Vous ne pouvez pas vous desactiver vous-meme.')
+            else:
+                target_user.is_active = should_be_active
+                target_user.save(update_fields=['is_active'])
+                sync_user_client_accesses(target_user)
+                messages.success(
+                    request,
+                    f"Utilisateur {target_user.username} {'active' if should_be_active else 'desactive'}.",
+                )
+
+            return redirect('manage_societe_users')
+
+        elif action == 'toggle_tenant_active':
+            tenant_id = request.POST.get('tenant_id')
+            target_tenant = get_object_or_404(tenants_qs, pk=tenant_id)
+            should_be_active = request.POST.get('is_active') == '1'
+            target_tenant.is_active = should_be_active
+            target_tenant.save(update_fields=['is_active'])
+
+            for user in societe_users_qs:
+                sync_user_client_accesses(user)
+
+            messages.success(
+                request,
+                f"Tenant {target_tenant.name} {'active' if should_be_active else 'desactive'}.",
+            )
+            return redirect('manage_societe_users')
+
+        elif action == 'revoke_tenant_access':
+            user_id = request.POST.get('user_id')
+            tenant_id = request.POST.get('tenant_id')
+            access = get_object_or_404(
+                UserClientAccess.objects.select_related('user', 'client'),
+                user_id=user_id,
+                client_id=tenant_id,
+                user_id__in=societe_user_ids,
+                client_id__in=tenant_ids,
+            )
+            target_user = access.user
+            access.delete()
+
+            fallback_default = UserClientAccess.objects.filter(user=target_user).order_by('client__name', 'id').first()
+            if fallback_default and not UserClientAccess.objects.filter(user=target_user, is_default=True).exists():
+                fallback_default.is_default = True
+                fallback_default.save(update_fields=['is_default'])
+
+            sync_user_client_accesses(target_user)
+
+            messages.success(request, f'Acces retire: {target_user.username} -> tenant.')
+            return redirect('manage_societe_users')
+
+        else:
+            messages.error(request, 'Action inconnue.')
+
+    expert_user_ids = set(
+        Group.objects.filter(name='expert', user__id__in=societe_user_ids).values_list('user__id', flat=True)
+    )
+    access_counts = {
+        row['user_id']: row['total']
+        for row in UserClientAccess.objects.filter(user_id__in=societe_user_ids, client_id__in=tenant_ids)
+        .values('user_id')
+        .annotate(total=Count('id'))
+    }
+    tenant_user_counts = {
+        row['client_id']: row['total']
+        for row in UserClientAccess.objects.filter(user_id__in=societe_user_ids, client_id__in=tenant_ids)
+        .values('client_id')
+        .annotate(total=Count('user_id', distinct=True))
+    }
+
+    societe_users = [
+        {
+            'user': access.user,
+            'is_default_societe': access.is_default,
+            'is_expert': access.user_id in expert_user_ids,
+            'tenant_access_count': access_counts.get(access.user_id, 0),
+        }
+        for access in societe_user_accesses_qs
+    ]
+
+    tenant_accesses = UserClientAccess.objects.select_related('user', 'client').filter(
+        user_id__in=societe_user_ids,
+        client_id__in=tenant_ids,
+    ).order_by('user__username', 'client__name', 'id')
+
+    tenants = [
+        {
+            'tenant': tenant,
+            'user_count': tenant_user_counts.get(tenant.id, 0),
+        }
+        for tenant in tenants_qs
+    ]
+
+    return render(request, 'tenancy/manage_societe_users.html', {
+        'title': 'Gestion des utilisateurs',
+        'managed_societe': managed_societe,
+        'create_user_form': create_user_form,
+        'assign_tenant_form': assign_tenant_form,
+        'societe_users': societe_users,
+        'tenants': tenants,
+        'tenant_accesses': tenant_accesses,
     })

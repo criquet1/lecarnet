@@ -1,3 +1,5 @@
+import sys
+
 from .db_context import get_current_tenant_alias
 
 
@@ -26,8 +28,9 @@ class TenantDatabaseRouter:
         return None
 
     def allow_migrate(self, db, app_label, model_name=None, **hints):
+        running_tests = 'test' in sys.argv
         if app_label in self.tenant_app_labels:
-            return db != 'default'
+            return db != 'default' or running_tests
         if app_label in self.central_app_labels:
             return db == 'default'
         return None

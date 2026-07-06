@@ -1,0 +1,306 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block body %}
+<h2 class="fw-bold mb-4">{{ title }}</h2>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form method="post" class="row g-3" data-prochaine-periode-url="{% url 'paie:paie_api_prochaine_periode' %}">
+            {% csrf_token %}
+            {{ form.non_field_errors }}
+            {{ form.montant_personnel_federal_td1 }}
+            {{ form.montant_personnel_quebec_tp1015 }}
+            {{ form.deduction_code_f }}
+            {{ form.deduction_tp1015_j }}
+            {{ form.deduction_tp1016_j1 }}
+            <div class="col-md-6">
+                <label class="form-label" for="{{ form.employe.id_for_label }}">Employé</label>
+                {{ form.employe }}{{ form.employe.errors }}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ form.periode_date_paie.id_for_label }}">Date de paiement</label>
+                {{ form.periode_date_paie }}{{ form.periode_date_paie.errors }}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ form.periode_date_fin.id_for_label }}">Fin de période</label>
+                {{ form.periode_date_fin }}{{ form.periode_date_fin.errors }}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ form.heures_travaillees.id_for_label }}">Heures travaillées</label>
+                {{ form.heures_travaillees }}{{ form.heures_travaillees.errors }}
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ form.retenue_supplementaire_qc.id_for_label }}">Retenue suppl. QC</label>
+                {{ form.retenue_supplementaire_qc }}{{ form.retenue_supplementaire_qc.errors }}
+            </div>
+            <div class="col-md-8">
+                <button
+                    type="button"
+                    class="btn btn-link p-0 text-decoration-none fw-semibold"
+                    data-bs-toggle="modal"
+                    data-bs-target="#codeFModal"
+                >
+                    Total des sommes suivantes pour la période de paie
+                </button>
+                <div class="small text-muted">Cliquez pour saisir le détail du code F.</div>
+                {% if form.deduction_code_f.errors %}
+                    <div class="invalid-feedback d-block">{{ form.deduction_code_f.errors|striptags }}</div>
+                {% endif %}
+                <div class="small mt-1">Total calculé: <span id="code-f-total-display">0.00</span></div>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label" for="{{ form.cotisation_supplementaire_rrq_csa.id_for_label }}">CSA RRQ</label>
+                {{ form.cotisation_supplementaire_rrq_csa }}{{ form.cotisation_supplementaire_rrq_csa.errors }}
+            </div>
+            <div class="col-12 d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary">Calculer et enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="codeFModal" tabindex="-1" aria-labelledby="codeFModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="codeFModalLabel">Detail du code F</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ form.code_f_rpa.id_for_label }}">Cotisation a un RPA</label>
+                        {{ form.code_f_rpa }}{{ form.code_f_rpa.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ form.code_f_reer.id_for_label }}">Cotisation a un REER</label>
+                        {{ form.code_f_reer }}{{ form.code_f_reer.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ form.code_f_rver_rpac.id_for_label }}">Cotisation a un RVER ou a un RPAC</label>
+                        {{ form.code_f_rver_rpac }}{{ form.code_f_rver_rpac.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ form.code_f_celiapp.id_for_label }}">Cotisation a un CELIAPP</label>
+                        {{ form.code_f_celiapp }}{{ form.code_f_celiapp.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ form.code_f_convention_retraite.id_for_label }}">Cotisation a une convention de retraite</label>
+                        {{ form.code_f_convention_retraite }}{{ form.code_f_convention_retraite.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ form.code_f_ric.id_for_label }}">Deduction relative au RIC</label>
+                        {{ form.code_f_ric }}{{ form.code_f_ric.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ form.code_f_voyages_region_eloignee.id_for_label }}">Deduction voyages region eloignee</label>
+                        {{ form.code_f_voyages_region_eloignee }}{{ form.code_f_voyages_region_eloignee.errors }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="{{ form.code_f_option_achat_titres.id_for_label }}">Deduction pour option d achat de titres</label>
+                        {{ form.code_f_option_achat_titres }}{{ form.code_f_option_achat_titres.errors }}
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" for="{{ form.code_f_partie_remuneration_admissible.id_for_label }}">Partie de la remuneration donnant droit a l une des deductions suivantes</label>
+                        {{ form.code_f_partie_remuneration_admissible }}{{ form.code_f_partie_remuneration_admissible.errors }}
+                    </div>
+                    <div class="col-12 ms-md-3 border-start ps-3">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.code_f_partie_reserve.id_for_label }}">- Deduction pour revenus situes dans une reserve</label>
+                                {{ form.code_f_partie_reserve }}{{ form.code_f_partie_reserve.errors }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.code_f_partie_specialiste_etranger.id_for_label }}">- Deduction pour specialiste etranger</label>
+                                {{ form.code_f_partie_specialiste_etranger }}{{ form.code_f_partie_specialiste_etranger.errors }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.code_f_partie_chercheur_etranger.id_for_label }}">- Deduction pour chercheur etranger</label>
+                                {{ form.code_f_partie_chercheur_etranger }}{{ form.code_f_partie_chercheur_etranger.errors }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.code_f_partie_chercheur_postdoc.id_for_label }}">- Deduction pour chercheur etranger en stage postdoctoral</label>
+                                {{ form.code_f_partie_chercheur_postdoc }}{{ form.code_f_partie_chercheur_postdoc.errors }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.code_f_partie_expert_etranger.id_for_label }}">- Deduction pour expert etranger</label>
+                                {{ form.code_f_partie_expert_etranger }}{{ form.code_f_partie_expert_etranger.errors }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.code_f_partie_professeur_etranger.id_for_label }}">- Deduction pour professeur etranger</label>
+                                {{ form.code_f_partie_professeur_etranger }}{{ form.code_f_partie_professeur_etranger.errors }}
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="{{ form.code_f_partie_producteur_poste_cle.id_for_label }}">- Deduction pour producteur etranger et pour particulier etranger occupant un poste cle dans une production etrangere tournee au Quebec</label>
+                                {{ form.code_f_partie_producteur_poste_cle }}{{ form.code_f_partie_producteur_poste_cle.errors }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.code_f_partie_travailleur_agricole_etranger.id_for_label }}">- Deduction pour travailleur agricole etranger</label>
+                                {{ form.code_f_partie_travailleur_agricole_etranger }}{{ form.code_f_partie_travailleur_agricole_etranger.errors }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.code_f_partie_forces_canadiennes_police.id_for_label }}">- Deduction pour le personnel des Forces canadiennes et des forces policieres</label>
+                                {{ form.code_f_partie_forces_canadiennes_police }}{{ form.code_f_partie_forces_canadiennes_police.errors }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const form = document.querySelector('form[data-prochaine-periode-url]');
+        const employeInput = document.getElementById('{{ form.employe.id_for_label }}');
+        const dateFinInput = document.getElementById('{{ form.periode_date_fin.id_for_label }}');
+        const datePaieInput = document.getElementById('{{ form.periode_date_paie.id_for_label }}');
+        function updateDatePaieFromSelect() {
+            if (!dateFinInput || !datePaieInput) {
+                return;
+            }
+            const selectedOption = dateFinInput.options[dateFinInput.selectedIndex];
+            datePaieInput.value = selectedOption ? (selectedOption.dataset.datePaie || '') : '';
+        }
+
+        async function refreshPeriodeEmploye() {
+            if (!form || !employeInput || !dateFinInput || !datePaieInput) {
+                return;
+            }
+
+            if (!employeInput.value) {
+                dateFinInput.innerHTML = '<option value="">---</option>';
+                dateFinInput.value = '';
+                datePaieInput.value = '';
+                return;
+            }
+
+            const url = form.dataset.prochainePeriodeUrl + '?employe_id=' + encodeURIComponent(employeInput.value);
+            try {
+                const response = await fetch(url, {
+                    headers: {'X-Requested-With': 'XMLHttpRequest'}
+                });
+                const payload = await response.json();
+                if (!response.ok || !payload.ok) {
+                    dateFinInput.innerHTML = '<option value="">---</option>';
+                    dateFinInput.value = '';
+                    datePaieInput.value = '';
+                    return;
+                }
+
+                const options = payload.options || [];
+                const defaultValue = payload.default_value || '';
+                dateFinInput.innerHTML = '';
+                if (!options.length) {
+                    dateFinInput.innerHTML = '<option value="">---</option>';
+                    datePaieInput.value = '';
+                    return;
+                }
+
+                options.forEach((opt) => {
+                    const option = document.createElement('option');
+                    option.value = opt.value;
+                    option.textContent = opt.label;
+                    option.dataset.datePaie = opt.date_paie || '';
+                    if (defaultValue && opt.value === defaultValue) {
+                        option.selected = true;
+                    }
+                    dateFinInput.appendChild(option);
+                });
+                if (!dateFinInput.value && options[0]) {
+                    dateFinInput.value = options[0].value;
+                }
+                updateDatePaieFromSelect();
+            } catch (error) {
+                dateFinInput.innerHTML = '<option value="">---</option>';
+                dateFinInput.value = '';
+                datePaieInput.value = '';
+            }
+        }
+
+        if (employeInput) {
+            employeInput.addEventListener('change', refreshPeriodeEmploye);
+        }
+        if (dateFinInput) {
+            dateFinInput.addEventListener('change', updateDatePaieFromSelect);
+        }
+
+        const componentIds = [
+            '{{ form.code_f_rpa.id_for_label }}',
+            '{{ form.code_f_reer.id_for_label }}',
+            '{{ form.code_f_rver_rpac.id_for_label }}',
+            '{{ form.code_f_celiapp.id_for_label }}',
+            '{{ form.code_f_convention_retraite.id_for_label }}',
+            '{{ form.code_f_ric.id_for_label }}',
+            '{{ form.code_f_voyages_region_eloignee.id_for_label }}',
+            '{{ form.code_f_option_achat_titres.id_for_label }}'
+        ];
+        const partieComponentIds = [
+            '{{ form.code_f_partie_reserve.id_for_label }}',
+            '{{ form.code_f_partie_specialiste_etranger.id_for_label }}',
+            '{{ form.code_f_partie_chercheur_etranger.id_for_label }}',
+            '{{ form.code_f_partie_chercheur_postdoc.id_for_label }}',
+            '{{ form.code_f_partie_expert_etranger.id_for_label }}',
+            '{{ form.code_f_partie_professeur_etranger.id_for_label }}',
+            '{{ form.code_f_partie_producteur_poste_cle.id_for_label }}',
+            '{{ form.code_f_partie_travailleur_agricole_etranger.id_for_label }}',
+            '{{ form.code_f_partie_forces_canadiennes_police.id_for_label }}'
+        ];
+        const partieTotalInput = document.getElementById('{{ form.code_f_partie_remuneration_admissible.id_for_label }}');
+        const hiddenTotal = document.getElementById('{{ form.deduction_code_f.id_for_label }}');
+        const totalDisplay = document.getElementById('code-f-total-display');
+
+        function parseAmount(value) {
+            const parsed = Number.parseFloat((value || '0').replace(',', '.'));
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+
+        function refreshTotal() {
+            const partieTotal = partieComponentIds
+                .map((id) => document.getElementById(id))
+                .filter(Boolean)
+                .reduce((sum, input) => sum + parseAmount(input.value), 0);
+
+            if (partieTotalInput) {
+                partieTotalInput.value = partieTotal.toFixed(2);
+            }
+
+            const totalHorsPartie = componentIds
+                .map((id) => document.getElementById(id))
+                .filter(Boolean)
+                .reduce((sum, input) => sum + parseAmount(input.value), 0);
+
+            const total = totalHorsPartie + partieTotal;
+
+            if (hiddenTotal) {
+                hiddenTotal.value = total.toFixed(2);
+            }
+            if (totalDisplay) {
+                totalDisplay.textContent = total.toFixed(2);
+            }
+        }
+
+        [...componentIds, ...partieComponentIds].forEach((id) => {
+            const input = document.getElementById(id);
+            if (input) {
+                input.addEventListener('input', refreshTotal);
+            }
+        });
+
+        refreshTotal();
+        refreshPeriodeEmploye();
+    })();
+</script>
+{% endblock %}

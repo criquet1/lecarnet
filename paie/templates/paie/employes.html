@@ -1,0 +1,81 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block body %}
+<h2 class="fw-bold mb-4">{{ title }}</h2>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="row g-4">
+    <div class="col-xl-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="mb-3">Nouvel employé</h5>
+                <form method="post" class="row g-3">
+                    {% csrf_token %}
+                    {{ form.non_field_errors }}
+                    <div class="col-12"><label class="form-label" for="{{ form.nom.id_for_label }}">Nom</label>{{ form.nom }}{{ form.nom.errors }}</div>
+                    <div class="col-12"><label class="form-label" for="{{ form.prenom.id_for_label }}">Prénom</label>{{ form.prenom }}{{ form.prenom.errors }}</div>
+                    <div class="col-12"><label class="form-label" for="{{ form.date_embauche.id_for_label }}">Date d'embauche</label>{{ form.date_embauche }}{{ form.date_embauche.errors }}</div>
+                    <div class="col-md-6"><label class="form-label" for="{{ form.salH.id_for_label }}">Taux horaire</label>{{ form.salH }}{{ form.salH.errors }}</div>
+                    <div class="col-md-6"><label class="form-label" for="{{ form.frequence_paie.id_for_label }}">Fréquence</label>{{ form.frequence_paie }}{{ form.frequence_paie.errors }}</div>
+                    <div class="col-md-6"><label class="form-label" for="{{ form.e_prov.id_for_label }}">Crédit Québec</label>{{ form.e_prov }}{{ form.e_prov.errors }}</div>
+                    <div class="col-md-6"><label class="form-label" for="{{ form.e_fed.id_for_label }}">Crédit fédéral</label>{{ form.e_fed }}{{ form.e_fed.errors }}</div>
+                    <div class="col-12"><div class="form-check">{{ form.actif }}<label class="form-check-label" for="{{ form.actif.id_for_label }}">Employé actif</label></div>{{ form.actif.errors }}</div>
+                    <div class="col-12"><button type="submit" class="btn btn-primary">Enregistrer</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-8">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="mb-3">Liste des employés</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Nom</th>
+                                <th>Date d'embauche</th>
+                                <th>Fréquence</th>
+                                <th>Taux</th>
+                                <th>Paies</th>
+                                <th>État</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for employe in employes %}
+                                <tr>
+                                    <td>{{ employe }}</td>
+                                    <td>{{ employe.date_embauche|date:"Y-m-d" }}</td>
+                                    <td>{{ employe.frequence_paie|default:"-" }}</td>
+                                    <td>{{ employe.salH|default:"-" }}</td>
+                                    <td>{{ employe.nb_paies }}</td>
+                                    <td>{% if employe.actif %}<span class="badge text-bg-success">Actif</span>{% else %}<span class="badge text-bg-secondary">Inactif</span>{% endif %}</td>
+                                    <td class="text-end">
+                                        <a href="{% url 'paie:paie_employe_edit' employe.id %}" class="btn btn-sm btn-outline-primary">Modifier</a>
+                                        {% if employe.actif %}
+                                            <form method="post" action="{% url 'paie:paie_employe_desactiver' employe.id %}" class="d-inline" onsubmit="return confirm('Desactiver cet employe ?');">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Desactiver</button>
+                                            </form>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="7" class="text-muted">Aucun employé.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

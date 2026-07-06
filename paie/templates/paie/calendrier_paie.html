@@ -1,0 +1,70 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1">{{ title }}</h2>
+        <p class="text-muted mb-0">Projection des dates de paie selon les paramètres (incluant ajustements week-end et fériés).</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'paie:paie_dashboard' %}" class="btn btn-outline-secondary">Retour au tableau de bord</a>
+    </div>
+</div>
+
+{% if error_message %}
+    <div class="alert alert-warning" role="alert">{{ error_message }}</div>
+{% endif %}
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label" for="id_annee">Année</label>
+                <select class="form-select" id="id_annee" name="annee">
+                    {% for y in year_options %}
+                        <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary">Afficher</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        {% if calendar_rows %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Début période</th>
+                            <th>Fin période</th>
+                            <th>Date de paie</th>
+                            <th>Jour</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in calendar_rows %}
+                            <tr>
+                                <td>{{ row.index }}</td>
+                                <td>{{ row.date_debut|date:"Y-m-d" }}</td>
+                                <td>{{ row.date_fin|date:"Y-m-d" }}</td>
+                                <td>{{ row.date_paie|date:"Y-m-d" }}</td>
+                                <td>{{ row.jour_paie }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-light border mb-0">Aucune date de paie à afficher pour cette année.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

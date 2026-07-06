@@ -174,13 +174,23 @@
 
             <div class="row g-3 mt-3">
                 <div class="col-md-6">
-                    <label class="form-label" for="frequence_paie_select">Fréquence de paie</label>
-                    <select class="form-select" id="frequence_paie_select" name="frequence_paie">
-                        <option value="">-- Sélectionner une fréquence --</option>
-                        {% for freq in frequences_paie %}
-                            <option value="{{ freq.code }}" {% if settings_instance.frequence_paie.code == freq.code %}selected{% endif %}>{{ freq.get_code_display }}</option>
-                        {% endfor %}
-                    </select>
+                    <label class="form-label" for="{{ form.frequence_paie.id_for_label }}">Fréquence de paie</label>
+                    {{ form.frequence_paie }}
+                    {{ form.frequence_paie.errors }}
+                    {% if not form.frequence_paie.field.queryset.exists %}
+                        <div class="form-text text-warning">Aucune fréquence disponible. Elles seront recréées automatiquement à l'ouverture de cette page.</div>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.date_debut_periode_paie_annee.id_for_label }}">Début de la 1re période de l'année</label>
+                    {{ form.date_debut_periode_paie_annee }}
+                    {{ form.date_debut_periode_paie_annee.errors }}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.date_premier_paiement_paie_annee.id_for_label }}">Date du 1er paiement de l'année</label>
+                    {{ form.date_premier_paiement_paie_annee }}
+                    {{ form.date_premier_paiement_paie_annee.errors }}
+                    <div class="form-text">Ces deux dates servent à générer automatiquement les périodes de paie.</div>
                 </div>
             </div>
         </div>

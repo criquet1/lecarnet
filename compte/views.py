@@ -19,11 +19,31 @@ from facture.utils import ensure_tax_authority_companies, expert_required, get_s
 from tenancy.models import ClientDatabase, Societe, UserClientAccess, UserSocieteAccess
 from tenancy.services import mark_user_must_change_password, set_active_client_on_session, sync_user_client_accesses, user_must_change_password
 
-from .forms import BulletinPaieForm, CompteCsvImportForm, CompteForm, CreerTenantForm, ImpQuebecForm, SettingForm
+from .forms import CompteCsvImportForm, CompteForm, CreerTenantForm, SettingForm
 from .models import Compte, SoldeAuxLivres, Total
 
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_default_frequences_paie():
+	from paie.models import FrequencePaie
+
+	defaults = [
+		(FrequencePaie.HEBDOMADAIRE, 'Hebdomadaire', 52),
+		(FrequencePaie.AUX_2_SEMAINES, 'Aux 2 semaines', 26),
+		(FrequencePaie.DEUX_FOIS_MOIS, '2 fois par mois', 24),
+		(FrequencePaie.PAR_MOIS, 'Par mois', 12),
+	]
+
+	for code, nom, periodes in defaults:
+		FrequencePaie.objects.update_or_create(
+			code=code,
+			defaults={
+				'nom': nom,
+				'nombre_periodes_par_annee': periodes,
+			},
+		)
 
 
 def _fetch_totaux_rows():
@@ -362,6 +382,7 @@ def compte_page(request):
 @expert_required
 def settings_page(request):
 	from paie.models import FrequencePaie
+	_ensure_default_frequences_paie()
 	settings_instance = get_settings()
 
 	if request.method == 'POST':
@@ -525,6 +546,7 @@ def _configured_tenant_aliases():
 
 
 @login_required
+@expert_required
 def creer_tenant_page(request):
 	if not Societe.objects.filter(is_active=True).exists():
 		Societe.objects.get_or_create(
@@ -707,43 +729,8 @@ def totaux_page(request):
 		'total_credit': total_credit,
 		'is_balanced': is_balanced,
 	})
-
-
 @expert_required
-def imp_quebec_page(request):
-	if request.method == 'POST':
-		form = ImpQuebecForm(request.POST)
-		if form.is_valid():
-			return render(request, 'compte/imp_quebec.html', {
-				'title': 'Impôt Québec',
-				'form': form,
-				'saved': True,
-			})
-	else:
-		form = ImpQuebecForm()
-
-	return render(request, 'compte/imp_quebec.html', {
-		'title': 'Impôt Québec',
-		'form': form,
-		'saved': False,
-	})
-
-
 def feuille_de_travail_page(request):
 	return render(request, 'compte/feuille_de_travail.html', {
 		'title': 'Feuille de travail',
 	})
-
-
-def creer_bulletin_paie(request):
-    if request.method == 'POST':
-        form = BulletinPaieForm(request.POST)
-        if form.is_valid():
-            # Sauvegarde l'objet. La méthode save() du modèle effectuera automatiquement 
-            # tous les calculs de taxes compliqués juste avant l'écriture finale.
-            bulletin = form.save()
-            return redirect('compte')
-    else:
-        form = BulletinPaieForm()
-        
-    return render(request, 'compte/creer_paie.html', {'form': form, 'title': 'Créer un bulletin de paie'})
