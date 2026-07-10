@@ -38,6 +38,12 @@
                 {{ form.heures_travaillees }}{{ form.heures_travaillees.errors }}
             </div>
             <div class="col-md-6">
+                <label class="form-label" for="{{ form.vacances_payees.id_for_label }}">Vacances</label>
+                {{ form.vacances_payees }}{{ form.vacances_payees.errors }}
+                <div class="form-text">Ce montant est ajoute au brut et affiche dans "Vacances payees" du journal.</div>
+                <div class="form-text">Vacances a payer: <span id="vacances-solde-display">0.00</span></div>
+            </div>
+            <div class="col-md-6">
                 <label class="form-label" for="{{ form.retenue_supplementaire_qc.id_for_label }}">Retenue suppl. QC</label>
                 {{ form.retenue_supplementaire_qc }}{{ form.retenue_supplementaire_qc.errors }}
             </div>
@@ -167,6 +173,8 @@
         const employeInput = document.getElementById('{{ form.employe.id_for_label }}');
         const dateFinInput = document.getElementById('{{ form.periode_date_fin.id_for_label }}');
         const datePaieInput = document.getElementById('{{ form.periode_date_paie.id_for_label }}');
+        const vacancesSoldeDisplay = document.getElementById('vacances-solde-display');
+
         function updateDatePaieFromSelect() {
             if (!dateFinInput || !datePaieInput) {
                 return;
@@ -184,6 +192,9 @@
                 dateFinInput.innerHTML = '<option value="">---</option>';
                 dateFinInput.value = '';
                 datePaieInput.value = '';
+                if (vacancesSoldeDisplay) {
+                    vacancesSoldeDisplay.textContent = '0.00';
+                }
                 return;
             }
 
@@ -197,6 +208,9 @@
                     dateFinInput.innerHTML = '<option value="">---</option>';
                     dateFinInput.value = '';
                     datePaieInput.value = '';
+                    if (vacancesSoldeDisplay) {
+                        vacancesSoldeDisplay.textContent = '0.00';
+                    }
                     return;
                 }
 
@@ -206,6 +220,9 @@
                 if (!options.length) {
                     dateFinInput.innerHTML = '<option value="">---</option>';
                     datePaieInput.value = '';
+                    if (vacancesSoldeDisplay) {
+                        vacancesSoldeDisplay.textContent = payload.vacances_cumulees || '0.00';
+                    }
                     return;
                 }
 
@@ -223,10 +240,16 @@
                     dateFinInput.value = options[0].value;
                 }
                 updateDatePaieFromSelect();
+                if (vacancesSoldeDisplay) {
+                    vacancesSoldeDisplay.textContent = payload.vacances_cumulees || '0.00';
+                }
             } catch (error) {
                 dateFinInput.innerHTML = '<option value="">---</option>';
                 dateFinInput.value = '';
                 datePaieInput.value = '';
+                if (vacancesSoldeDisplay) {
+                    vacancesSoldeDisplay.textContent = '0.00';
+                }
             }
         }
 

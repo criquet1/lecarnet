@@ -22,13 +22,17 @@
         </li>
         {% if request.user.is_superuser or request.user|in_group:"expert" %}
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {% if current_url == 'paie_dashboard' or current_url == 'paie_employes' or current_url == 'paie_calendrier' or current_url == 'paie_saisir' or current_url == 'paie_journal' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <a class="nav-link dropdown-toggle {% if current_url == 'paie_dashboard' or current_url == 'paie_employes' or current_url == 'paie_calendrier' or current_url == 'paie_parametres_taux' or current_url == 'paie_saisir' or current_url == 'paie_journal' or current_url == 'paie_remises_mensuelles' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             Paie
           </a>
           <ul class="dropdown-menu dropdown-menu-end">
             <li><a class="dropdown-item {% if current_url == 'paie_dashboard' %}active{% endif %}" {% if current_url == 'paie_dashboard' %}aria-current="page"{% endif %} href="{% url 'paie:paie_dashboard' %}">Tableau de bord</a></li>
             <li><a class="dropdown-item {% if current_url == 'paie_employes' %}active{% endif %}" {% if current_url == 'paie_employes' %}aria-current="page"{% endif %} href="{% url 'paie:paie_employes' %}">Employés</a></li>
             <li><a class="dropdown-item {% if current_url == 'paie_calendrier' %}active{% endif %}" {% if current_url == 'paie_calendrier' %}aria-current="page"{% endif %} href="{% url 'paie:paie_calendrier' %}">Calendrier de paie</a></li>
+            <li><a class="dropdown-item {% if current_url == 'paie_remises_mensuelles' %}active{% endif %}" {% if current_url == 'paie_remises_mensuelles' %}aria-current="page"{% endif %} href="{% url 'paie:paie_remises_mensuelles' %}">Remises mensuelles</a></li>
+            {% if request.user.is_superuser %}
+            <li><a class="dropdown-item {% if current_url == 'paie_parametres_taux' %}active{% endif %}" {% if current_url == 'paie_parametres_taux' %}aria-current="page"{% endif %} href="{% url 'paie:paie_parametres_taux' %}">Paramètres taux paie</a></li>
+            {% endif %}
             <li><a class="dropdown-item {% if current_url == 'paie_saisir' %}active{% endif %}" {% if current_url == 'paie_saisir' %}aria-current="page"{% endif %} href="{% url 'paie:paie_saisir' %}">Saisir une paie</a></li>
             <li><a class="dropdown-item {% if current_url == 'paie_journal' %}active{% endif %}" {% if current_url == 'paie_journal' %}aria-current="page"{% endif %} href="{% url 'paie:paie_journal' %}">Journal des paies</a></li>
           </ul>

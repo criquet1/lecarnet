@@ -1,0 +1,152 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block body %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1">{{ title }}</h2>
+        <p class="text-muted mb-0">Periodes d'effet par bloc (RRQ, RQAP, AE). Les taux doivent etre saisis en pourcentage (ex.: 2.5 = 2.5%).</p>
+    </div>
+    <a href="{% url 'paie:paie_dashboard' %}" class="btn btn-outline-secondary">Retour paie</a>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="row g-4">
+    <div class="col-xl-5">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="mb-3">{% if editing %}Modifier la configuration{% else %}Nouvelle configuration{% endif %}</h5>
+                <form method="post" class="row g-3">
+                    {% csrf_token %}
+                    {% if editing_id %}<input type="hidden" name="taux_id" value="{{ editing_id }}">{% endif %}
+                    {{ form.taux_rrq_employeur }}
+                    {{ form.non_field_errors }}
+
+                    <div class="col-12"><hr class="my-1"><div class="fw-semibold">RRQ</div></div>
+                    <div class="col-md-6"><label class="form-label" for="{{ form.rrq_date_debut_effet.id_for_label }}">Debut effet RRQ</label>{{ form.rrq_date_debut_effet }}{{ form.rrq_date_debut_effet.errors }}</div>
+                    <div class="col-md-6"><label class="form-label" for="{{ form.rrq_date_fin_effet.id_for_label }}">Fin effet RRQ</label>{{ form.rrq_date_fin_effet }}{{ form.rrq_date_fin_effet.errors }}</div>
+                    <div class="col-md-3"><label class="form-label" for="{{ form.taux_rrq_employe.id_for_label }}">Taux employe RRQ (%)</label>{{ form.taux_rrq_employe }}{{ form.taux_rrq_employe.errors }}</div>
+                    <div class="col-md-2"><label class="form-label" for="{{ form.taux_rrq_supplementaire_2_employe.id_for_label }}">Taux supp. 2 (%)</label>{{ form.taux_rrq_supplementaire_2_employe }}{{ form.taux_rrq_supplementaire_2_employe.errors }}</div>
+                    <div class="col-md-2"><label class="form-label" for="{{ form.exemption_base_rrq.id_for_label }}">Exemption de base</label>{{ form.exemption_base_rrq }}{{ form.exemption_base_rrq.errors }}</div>
+                    <div class="col-md-2"><label class="form-label" for="{{ form.max_assurable_rrq.id_for_label }}">MGA</label>{{ form.max_assurable_rrq }}{{ form.max_assurable_rrq.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.max_supplementaire_rrq.id_for_label }}">Maximum supplementaire RRQ</label>{{ form.max_supplementaire_rrq }}{{ form.max_supplementaire_rrq.errors }}</div>
+                    <div class="col-12"><div class="form-text">Le taux employe RRQ doit inclure le supplementaire 1 (ex.: 6,3 % = 5,3 % base + 1,0 % supp. 1).</div></div>
+
+                    <div class="col-12"><hr class="my-1"><div class="fw-semibold">RQAP</div></div>
+                    <div class="col-md-6"><label class="form-label" for="{{ form.rqap_date_debut_effet.id_for_label }}">Debut effet RQAP</label>{{ form.rqap_date_debut_effet }}{{ form.rqap_date_debut_effet.errors }}</div>
+                    <div class="col-md-6"><label class="form-label" for="{{ form.rqap_date_fin_effet.id_for_label }}">Fin effet RQAP</label>{{ form.rqap_date_fin_effet }}{{ form.rqap_date_fin_effet.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.taux_rqap_employe.id_for_label }}">Taux employe (%)</label>{{ form.taux_rqap_employe }}{{ form.taux_rqap_employe.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.taux_rqap_employeur.id_for_label }}">Taux employeur (%)</label>{{ form.taux_rqap_employeur }}{{ form.taux_rqap_employeur.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.max_assurable_rqap.id_for_label }}">Maximum assurable</label>{{ form.max_assurable_rqap }}{{ form.max_assurable_rqap.errors }}</div>
+
+                    <div class="col-12"><hr class="my-1"><div class="fw-semibold">AE</div></div>
+                    <div class="col-md-6"><label class="form-label" for="{{ form.ae_date_debut_effet.id_for_label }}">Debut effet AE</label>{{ form.ae_date_debut_effet }}{{ form.ae_date_debut_effet.errors }}</div>
+                    <div class="col-md-6"><label class="form-label" for="{{ form.ae_date_fin_effet.id_for_label }}">Fin effet AE</label>{{ form.ae_date_fin_effet }}{{ form.ae_date_fin_effet.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.taux_ae_employe.id_for_label }}">Taux employe (%)</label>{{ form.taux_ae_employe }}{{ form.taux_ae_employe.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.taux_ae_employeur.id_for_label }}">Taux employeur (%)</label>{{ form.taux_ae_employeur }}{{ form.taux_ae_employeur.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.max_assurable_ae.id_for_label }}">Maximum assurable</label>{{ form.max_assurable_ae }}{{ form.max_assurable_ae.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.taux_cnt_employeur.id_for_label }}">Taux CNT employeur (%)</label>{{ form.taux_cnt_employeur }}{{ form.taux_cnt_employeur.errors }}</div>
+
+                    <div class="col-12"><hr class="my-1"><div class="fw-semibold">Fiscal (annuel)</div></div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.credit_personnel_federal_min.id_for_label }}">Credit personnel federal minimal</label>{{ form.credit_personnel_federal_min }}{{ form.credit_personnel_federal_min.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.taux_credit_federal.id_for_label }}">Taux credit federal (%)</label>{{ form.taux_credit_federal }}{{ form.taux_credit_federal.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.montant_canadien_pour_emploi.id_for_label }}">Montant canadien pour emploi</label>{{ form.montant_canadien_pour_emploi }}{{ form.montant_canadien_pour_emploi.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.abattement_federal_quebec.id_for_label }}">Abattement federal Quebec (%)</label>{{ form.abattement_federal_quebec }}{{ form.abattement_federal_quebec.errors }}</div>
+                    <div class="col-md-2"><label class="form-label" for="{{ form.seuil_federal_1.id_for_label }}">Seuil fed 1</label>{{ form.seuil_federal_1 }}{{ form.seuil_federal_1.errors }}</div>
+                    <div class="col-md-2"><label class="form-label" for="{{ form.seuil_federal_2.id_for_label }}">Seuil fed 2</label>{{ form.seuil_federal_2 }}{{ form.seuil_federal_2.errors }}</div>
+                    <div class="col-md-2"><label class="form-label" for="{{ form.seuil_federal_3.id_for_label }}">Seuil fed 3</label>{{ form.seuil_federal_3 }}{{ form.seuil_federal_3.errors }}</div>
+                    <div class="col-md-2"><label class="form-label" for="{{ form.seuil_federal_4.id_for_label }}">Seuil fed 4</label>{{ form.seuil_federal_4 }}{{ form.seuil_federal_4.errors }}</div>
+                    <div class="col-md-2"><label class="form-label" for="{{ form.taux_federal_1.id_for_label }}">Taux fed 1 (%)</label>{{ form.taux_federal_1 }}{{ form.taux_federal_1.errors }}</div>
+                    <div class="col-md-2"><label class="form-label" for="{{ form.taux_federal_2.id_for_label }}">Taux fed 2 (%)</label>{{ form.taux_federal_2 }}{{ form.taux_federal_2.errors }}</div>
+                    <div class="col-md-2"><label class="form-label" for="{{ form.taux_federal_3.id_for_label }}">Taux fed 3 (%)</label>{{ form.taux_federal_3 }}{{ form.taux_federal_3.errors }}</div>
+                    <div class="col-md-2"><label class="form-label" for="{{ form.taux_federal_4.id_for_label }}">Taux fed 4 (%)</label>{{ form.taux_federal_4 }}{{ form.taux_federal_4.errors }}</div>
+                    <div class="col-md-2"><label class="form-label" for="{{ form.taux_federal_5.id_for_label }}">Taux fed 5 (%)</label>{{ form.taux_federal_5 }}{{ form.taux_federal_5.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.credit_personnel_quebec_min.id_for_label }}">Credit personnel Quebec minimal</label>{{ form.credit_personnel_quebec_min }}{{ form.credit_personnel_quebec_min.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.deduction_travailleur_qc_max_annuelle.id_for_label }}">Deduction travailleur QC max annuelle</label>{{ form.deduction_travailleur_qc_max_annuelle }}{{ form.deduction_travailleur_qc_max_annuelle.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.taux_credit_quebec.id_for_label }}">Taux credit Quebec (%)</label>{{ form.taux_credit_quebec }}{{ form.taux_credit_quebec.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.seuil_qc_1.id_for_label }}">Seuil QC 1</label>{{ form.seuil_qc_1 }}{{ form.seuil_qc_1.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.seuil_qc_2.id_for_label }}">Seuil QC 2</label>{{ form.seuil_qc_2 }}{{ form.seuil_qc_2.errors }}</div>
+                    <div class="col-md-4"><label class="form-label" for="{{ form.seuil_qc_3.id_for_label }}">Seuil QC 3</label>{{ form.seuil_qc_3 }}{{ form.seuil_qc_3.errors }}</div>
+                    <div class="col-md-3"><label class="form-label" for="{{ form.taux_qc_1.id_for_label }}">Taux QC 1 (%)</label>{{ form.taux_qc_1 }}{{ form.taux_qc_1.errors }}</div>
+                    <div class="col-md-3"><label class="form-label" for="{{ form.taux_qc_2.id_for_label }}">Taux QC 2 (%)</label>{{ form.taux_qc_2 }}{{ form.taux_qc_2.errors }}</div>
+                    <div class="col-md-3"><label class="form-label" for="{{ form.taux_qc_3.id_for_label }}">Taux QC 3 (%)</label>{{ form.taux_qc_3 }}{{ form.taux_qc_3.errors }}</div>
+                    <div class="col-md-3"><label class="form-label" for="{{ form.taux_qc_4.id_for_label }}">Taux QC 4 (%)</label>{{ form.taux_qc_4 }}{{ form.taux_qc_4.errors }}</div>
+
+                    <div class="col-12 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Enregistrer</button>
+                        {% if editing %}<a href="{% url 'paie:paie_parametres_taux' %}" class="btn btn-outline-secondary">Annuler</a>{% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-7">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="mb-3">Historique des configurations</h5>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Debut</th>
+                                <th>Fin</th>
+                                <th>Debut RQAP</th>
+                                <th>Fin RQAP</th>
+                                <th>Debut AE</th>
+                                <th>Fin AE</th>
+                                <th>RRQ emp.</th>
+                                <th>RRQ supp.2</th>
+                                <th>Exemption base RRQ</th>
+                                <th>MGA RRQ</th>
+                                <th>Max supp. RRQ</th>
+                                <th>RQAP emp.</th>
+                                <th>RQAP empl.</th>
+                                <th>Max RQAP</th>
+                                <th>AE emp.</th>
+                                <th>AE empl.</th>
+                                <th>CNT empl.</th>
+                                <th>Max AE</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in rows %}
+                                <tr>
+                                    <td>{{ row.rrq_date_debut_effet|date:"Y-m-d" }}</td>
+                                    <td>{% if row.rrq_date_fin_effet %}{{ row.rrq_date_fin_effet|date:"Y-m-d" }}{% else %}-{% endif %}</td>
+                                    <td>{{ row.rqap_date_debut_effet|date:"Y-m-d" }}</td>
+                                    <td>{% if row.rqap_date_fin_effet %}{{ row.rqap_date_fin_effet|date:"Y-m-d" }}{% else %}-{% endif %}</td>
+                                    <td>{{ row.ae_date_debut_effet|date:"Y-m-d" }}</td>
+                                    <td>{% if row.ae_date_fin_effet %}{{ row.ae_date_fin_effet|date:"Y-m-d" }}{% else %}-{% endif %}</td>
+                                    <td>{{ row.taux_rrq_employe }}</td>
+                                    <td>{{ row.taux_rrq_supplementaire_2_employe }}</td>
+                                    <td>{{ row.exemption_base_rrq|floatformat:2 }}</td>
+                                    <td>{{ row.max_assurable_rrq|floatformat:2 }}</td>
+                                    <td>{{ row.max_supplementaire_rrq|floatformat:2 }}</td>
+                                    <td>{{ row.taux_rqap_employe }}</td>
+                                    <td>{{ row.taux_rqap_employeur }}</td>
+                                    <td>{{ row.max_assurable_rqap|floatformat:2 }}</td>
+                                    <td>{{ row.taux_ae_employe }}</td>
+                                    <td>{{ row.taux_ae_employeur }}</td>
+                                    <td>{{ row.taux_cnt_employeur }}</td>
+                                    <td>{{ row.max_assurable_ae|floatformat:2 }}</td>
+                                    <td><a href="{% url 'paie:paie_parametres_taux' %}?edit={{ row.id }}" class="btn btn-sm btn-outline-primary">Modifier</a></td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="19" class="text-muted">Aucune configuration enregistree.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

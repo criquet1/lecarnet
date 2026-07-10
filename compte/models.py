@@ -170,6 +170,74 @@ class Setting(models.Model):
         null=True,
         verbose_name="Date du premier paiement de l annee",
     )
+    taux_cnesst_employeur = models.DecimalField(
+        max_digits=7,
+        decimal_places=5,
+        blank=True,
+        null=True,
+        verbose_name='Taux CNESST employeur',
+    )
+    taux_fss_employeur = models.DecimalField(
+        max_digits=7,
+        decimal_places=5,
+        blank=True,
+        null=True,
+        verbose_name='Taux FSS employeur',
+    )
+    compte_salaires_a_payer = models.ForeignKey(
+        Compte,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='settings_salaires_a_payer',
+    )
+    compte_vacances_a_payer = models.ForeignKey(
+        Compte,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='settings_vacances_a_payer',
+    )
+    compte_das_federales = models.ForeignKey(
+        Compte,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='settings_das_federales',
+    )
+    compte_das_provinciales = models.ForeignKey(
+        Compte,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='settings_das_provinciales',
+    )
+    compte_salaire = models.ForeignKey(
+        Compte,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='settings_salaire',
+    )
+    compte_vacances = models.ForeignKey(
+        Compte,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='settings_vacances',
+    )
+    compte_benefices_marginaux = models.ForeignKey(
+        Compte,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='settings_benefices_marginaux',
+    )
+    comptes_paie_autres = models.JSONField(
+        blank=True,
+        default=list,
+        help_text='Liste optionnelle de numeros de comptes supplementaires pour la paie.',
+    )
 
     def __str__(self):
         return self.nom

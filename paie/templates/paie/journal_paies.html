@@ -8,51 +8,258 @@
     <a href="{% url 'paie:paie_saisir' %}" class="btn btn-primary">Saisir une paie</a>
 </div>
 
-<div class="row g-3 mb-4">
-    <div class="col-md-6"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Total brut</div><div class="display-6">{{ total_brut|default:0|floatformat:2 }}</div></div></div></div>
-    <div class="col-md-6"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Total net</div><div class="display-6">{{ total_net|default:0|floatformat:2 }}</div></div></div></div>
-</div>
+<ul class="nav nav-tabs mb-3" id="journalTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="journal-total-tab" data-bs-toggle="tab" data-bs-target="#journal-total" type="button" role="tab" aria-controls="journal-total" aria-selected="true">Total</button>
+    </li>
+    {% for tab in employe_tabs %}
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="journal-{{ tab.tab_id }}-tab" data-bs-toggle="tab" data-bs-target="#journal-{{ tab.tab_id }}" type="button" role="tab" aria-controls="journal-{{ tab.tab_id }}" aria-selected="false">{{ tab.employe }}</button>
+        </li>
+    {% endfor %}
+</ul>
 
-<div class="card shadow-sm">
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-sm align-middle">
-                <thead>
-                    <tr>
-                        <th>Employé</th>
-                        <th>Date fin</th>
-                        <th>Fréquence</th>
-                        <th>Heures</th>
-                        <th>Brut</th>
-                        <th>RRQ</th>
-                        <th>RQAP</th>
-                        <th>AE</th>
-                        <th>Imp. féd.</th>
-                        <th>Imp. prov.</th>
-                        <th>Net</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for paie in paies %}
-                        <tr>
-                            <td>{{ paie.employe }}</td>
-                            <td>{{ paie.periode.date_fin|date:"Y-m-d" }}</td>
-                            <td>{{ paie.periode.frequence_paie }}</td>
-                            <td>{{ paie.heures_travaillees|floatformat:2 }}</td>
-                            <td>{{ paie.salaire_brut_periode|floatformat:2 }}</td>
-                            <td>{{ paie.rrq|floatformat:2 }}</td>
-                            <td>{{ paie.rqap|floatformat:2 }}</td>
-                            <td>{{ paie.ae|floatformat:2 }}</td>
-                            <td>{{ paie.impot_federal|floatformat:2 }}</td>
-                            <td>{{ paie.impot_provincial|floatformat:2 }}</td>
-                            <td>{{ paie.salaire_net|floatformat:2 }}</td>
-                        </tr>
-                    {% empty %}
-                        <tr><td colspan="11" class="text-muted">Aucune paie enregistrée.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+<div class="tab-content" id="journalTabsContent">
+    <form id="form-creer-ecriture-salaire" method="post" class="d-none">
+        {% csrf_token %}
+    </form>
+
+    <div class="tab-pane fade show active" id="journal-total" role="tabpanel" aria-labelledby="journal-total-tab" tabindex="0">
+        <div class="row g-3 mb-4">
+            <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Total brut</div><div class="display-6">{{ total_brut|default:0|floatformat:2 }}</div></div></div></div>
+            <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Total net</div><div class="display-6">{{ total_net|default:0|floatformat:2 }}</div></div></div></div>
+            <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Charge employeur</div><div class="display-6">{{ total_charge_employeur|default:0|floatformat:2 }}</div></div></div></div>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th colspan="6"></th>
+                                <th colspan="8" class="text-center" style="border-left: 6px solid #495057;">DAS PROVINCIALES</th>
+                                <th colspan="3" class="text-center" style="border-left: 6px solid #495057; border-right: 6px solid #495057;">DAS FÉDÉRALES</th>
+                                <th colspan="3"></th>
+                            </tr>
+                            <tr>
+                                <th rowspan="2">Période</th>
+                                <th rowspan="2">Date fin</th>
+                                <th rowspan="2" class="text-end">Heures</th>
+                                <th rowspan="2" class="text-end">Vacances payées</th>
+                                <th rowspan="2" class="text-end">Brut</th>
+                                <th rowspan="2" class="text-end">Net</th>
+                                <th colspan="2" class="text-center" style="border-left: 6px solid #495057; border-right: 1px solid #6c757d;">RRQ</th>
+                                <th colspan="2" class="text-center" style="border-right: 1px solid #6c757d;">RQAP</th>
+                                <th rowspan="2" class="text-end">Imp. prov.</th>
+                                <th rowspan="2" class="text-end">CNT</th>
+                                <th rowspan="2" class="text-end">FSS</th>
+                                <th rowspan="2" class="text-end">CNESST</th>
+                                <th colspan="2" class="text-center" style="border-left: 6px solid #495057; border-right: 1px solid #6c757d;">AE</th>
+                                <th rowspan="2" class="text-end" style="border-right: 6px solid #495057;">Imp. féd.</th>
+                                <th rowspan="2" class="text-end">Total QC</th>
+                                <th rowspan="2" class="text-end">Total CA</th>
+                                <th rowspan="2" class="text-end">Vacances</th>
+                            </tr>
+                            <tr>
+                                <th class="text-end" style="border-left: 6px solid #495057;">Employé</th>
+                                <th class="text-end" style="border-right: 1px solid #6c757d;">Employeur</th>
+                                <th class="text-end">Employé</th>
+                                <th class="text-end" style="border-right: 1px solid #6c757d;">Employeur</th>
+                                <th class="text-end" style="border-left: 6px solid #495057;">Employé</th>
+                                <th class="text-end" style="border-right: 1px solid #6c757d;">Employeur</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in total_rows %}
+                                {% if row.type == 'period' %}
+                                    <tr class="js-creer-ecriture-salaire" data-create-url="{% url 'paie:paie_creer_ecriture_salaire' row.totals.periode.id %}">
+                                        <td>{{ row.period_index }}</td>
+                                        <td>{{ row.date_fin|date:"Y-m-d" }}</td>
+                                        <td class="text-end">{{ row.totals.heures|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.vacances_payees|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.brut|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.net|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-left: 6px solid #495057;">{{ row.totals.rrq_employe|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-right: 1px solid #6c757d;">{{ row.totals.rrq_employeur|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.rqap|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-right: 1px solid #6c757d;">{{ row.totals.rqap_employeur|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.impot_provincial|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.cnt_employeur|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.fss_employeur|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.cnesst_employeur|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-left: 6px solid #495057;">{{ row.totals.ae|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-right: 1px solid #6c757d;">{{ row.totals.ae_employeur|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-right: 6px solid #495057;">{{ row.totals.impot_federal|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.total_qc|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.total_ca|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.vacances|floatformat:2 }}</td>
+                                    </tr>
+                                {% elif row.type == 'subtotal' %}
+                                    <tr class="table-light fw-semibold">
+                                        <td></td>
+                                        <td class="text-end">{{ row.month_name }}</td>
+                                        <td class="text-end">{{ row.totals.heures|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.vacances_payees|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.brut|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.net|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-left: 6px solid #495057;">{{ row.totals.rrq_employe|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-right: 1px solid #6c757d;">{{ row.totals.rrq_employeur|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.rqap|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-right: 1px solid #6c757d;">{{ row.totals.rqap_employeur|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.impot_provincial|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.cnt_employeur|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.fss_employeur|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.cnesst_employeur|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-left: 6px solid #495057;">{{ row.totals.ae|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-right: 1px solid #6c757d;">{{ row.totals.ae_employeur|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-right: 6px solid #495057;">{{ row.totals.impot_federal|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.total_qc|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.total_ca|floatformat:2 }}</td>
+                                        <td class="text-end">{{ row.totals.vacances|floatformat:2 }}</td>
+                                    </tr>
+                                {% elif row.type == 'separator' %}
+                                    <tr>
+                                        <td colspan="20" class="py-2"></td>
+                                    </tr>
+                                {% endif %}
+                            {% empty %}
+                                <tr><td colspan="20" class="text-muted">Aucune paie enregistrée.</td></tr>
+                            {% endfor %}
+                            {% if total_rows_grand_totals %}
+                                <tr class="table-secondary fw-bold">
+                                    <td></td>
+                                    <td class="text-end">TOTAL</td>
+                                    <td class="text-end">{{ total_rows_grand_totals.heures|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_rows_grand_totals.vacances_payees|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_rows_grand_totals.brut|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_rows_grand_totals.net|floatformat:2 }}</td>
+                                    <td class="text-end" style="border-left: 6px solid #495057;">{{ total_rows_grand_totals.rrq_employe|floatformat:2 }}</td>
+                                    <td class="text-end" style="border-right: 1px solid #6c757d;">{{ total_rows_grand_totals.rrq_employeur|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_rows_grand_totals.rqap|floatformat:2 }}</td>
+                                    <td class="text-end" style="border-right: 1px solid #6c757d;">{{ total_rows_grand_totals.rqap_employeur|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_rows_grand_totals.impot_provincial|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_rows_grand_totals.cnt_employeur|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_rows_grand_totals.fss_employeur|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_rows_grand_totals.cnesst_employeur|floatformat:2 }}</td>
+                                    <td class="text-end" style="border-left: 6px solid #495057;">{{ total_rows_grand_totals.ae|floatformat:2 }}</td>
+                                    <td class="text-end" style="border-right: 1px solid #6c757d;">{{ total_rows_grand_totals.ae_employeur|floatformat:2 }}</td>
+                                    <td class="text-end" style="border-right: 6px solid #495057;">{{ total_rows_grand_totals.impot_federal|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_rows_grand_totals.total_qc|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_rows_grand_totals.total_ca|floatformat:2 }}</td>
+                                    <td class="text-end">{{ total_rows_grand_totals.vacances|floatformat:2 }}</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
+
+    {% for tab in employe_tabs %}
+        <div class="tab-pane fade" id="journal-{{ tab.tab_id }}" role="tabpanel" aria-labelledby="journal-{{ tab.tab_id }}-tab" tabindex="0">
+            <div class="row g-3 mb-4">
+                <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Total brut</div><div class="display-6">{{ tab.total_brut|default:0|floatformat:2 }}</div></div></div></div>
+                <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Total net</div><div class="display-6">{{ tab.total_net|default:0|floatformat:2 }}</div></div></div></div>
+                <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Charge employeur</div><div class="display-6">{{ tab.total_charge_employeur|default:0|floatformat:2 }}</div></div></div></div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Date fin</th>
+                                    <th class="text-end">Heures</th>
+                                    <th class="text-end">Vacances payées</th>
+                                    <th class="text-end">Brut</th>
+                                    <th class="text-end">Net</th>
+                                    <th class="text-end" style="border-left: 6px solid #495057;">RRQ</th>
+                                    <th class="text-end">RQAP</th>
+                                    <th class="text-end">Imp. prov.</th>
+                                    <th class="text-end" style="border-left: 6px solid #495057;">AE</th>
+                                    <th class="text-end">Imp. féd.</th>
+                                    <th class="text-end">Vacances</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in tab.journal_rows %}
+                                    {% if row.type == 'paie' %}
+                                        <tr>
+                                            <td>{{ row.paie.periode.date_fin|date:"Y-m-d" }}</td>
+                                            <td class="text-end">{{ row.paie.heures_travaillees|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.paie.vacances_payees|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.paie.salaire_brut_periode|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.paie.salaire_net|floatformat:2 }}</td>
+                                            <td class="text-end" style="border-left: 6px solid #495057;">{{ row.paie.rrq|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.paie.rqap|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.paie.impot_provincial|floatformat:2 }}</td>
+                                            <td class="text-end" style="border-left: 6px solid #495057;">{{ row.paie.ae|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.paie.impot_federal|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.paie.vacances|floatformat:2 }}</td>
+                                        </tr>
+                                    {% elif row.type == 'subtotal' %}
+                                        <tr class="table-light fw-semibold">
+                                            <td>{{ row.month_name }}</td>
+                                            <td class="text-end">{{ row.totals.heures|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.totals.vacances_payees|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.totals.brut|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.totals.net|floatformat:2 }}</td>
+                                            <td class="text-end" style="border-left: 6px solid #495057;">{{ row.totals.rrq|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.totals.rqap|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.totals.impot_provincial|floatformat:2 }}</td>
+                                            <td class="text-end" style="border-left: 6px solid #495057;">{{ row.totals.ae|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.totals.impot_federal|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.totals.vacances|floatformat:2 }}</td>
+                                        </tr>
+                                    {% elif row.type == 'separator' %}
+                                        <tr>
+                                            <td colspan="11" class="py-2"></td>
+                                        </tr>
+                                    {% endif %}
+                                {% empty %}
+                                    <tr><td colspan="11" class="text-muted">Aucune paie enregistrée.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
 </div>
+
+<script>
+    (function () {
+        const form = document.getElementById('form-creer-ecriture-salaire');
+        const rows = document.querySelectorAll('.js-creer-ecriture-salaire');
+        if (!form || !rows.length) {
+            return;
+        }
+
+        rows.forEach(function (row) {
+            row.style.cursor = 'pointer';
+            row.title = "Créer l'écriture de salaire";
+            row.addEventListener('click', function (event) {
+                if (event.target.closest('a, button, input, select, textarea')) {
+                    return;
+                }
+                const createUrl = row.dataset.createUrl;
+                if (!createUrl) {
+                    return;
+                }
+
+                const confirmed = window.confirm("Êtes-vous certain de vouloir créer l'écriture maintenant ?");
+                if (!confirmed) {
+                    return;
+                }
+
+                form.action = createUrl;
+                form.submit();
+            });
+        });
+    })();
+</script>
 {% endblock %}

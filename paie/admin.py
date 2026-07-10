@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Employe, FrequencePaie, Paie, PeriodePaie
+from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie
 
 
 @admin.register(FrequencePaie)
@@ -25,3 +25,22 @@ class PeriodePaieAdmin(admin.ModelAdmin):
 class PaieAdmin(admin.ModelAdmin):
 	list_display = ('employe', 'periode', 'salaire_brut_periode', 'total_retenues', 'salaire_net')
 	list_select_related = ('employe', 'periode', 'periode__frequence_paie')
+
+
+@admin.register(ParametresTauxPaie)
+class ParametresTauxPaieAdmin(admin.ModelAdmin):
+	list_display = (
+		'rrq_date_debut_effet',
+		'rrq_date_fin_effet',
+		'rqap_date_debut_effet',
+		'rqap_date_fin_effet',
+		'ae_date_debut_effet',
+		'ae_date_fin_effet',
+		'taux_rrq_employe',
+		'taux_rrq_employeur',
+		'taux_rqap_employe',
+		'taux_rqap_employeur',
+		'taux_ae_employe',
+		'taux_ae_employeur',
+	)
+	ordering = ('-rrq_date_debut_effet', '-id')

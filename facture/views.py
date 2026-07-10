@@ -1072,7 +1072,7 @@ def rapport_de_taxes(request):
                 'id': detail.id,
                 'date': detail.tr_desc.date,
                 'compagnie_nom': detail.tr_desc.compagnie.nom if detail.tr_desc.compagnie else '-',
-                'facture': detail.tr_desc.description or '-',
+                'facture': detail.tr_desc.desc_ctb or '-',
                 'percue': percue,
                 'payee': payee,
             })
@@ -1236,7 +1236,7 @@ def rapport_de_taxes(request):
                                             no_ej=_next_no_ej(),
                                             compagnie=compagnie_fiscale,
                                             date=report_date,
-                                            description=f"Rapport de taxes {tax_name} {report.annee}-{report.mois:02d}",
+                                            desc_ctb=f"Rapport de taxes {tax_name} {report.annee}-{report.mois:02d}",
                                             source=source_rapport,
                                         )
 
@@ -1781,7 +1781,7 @@ def releve_bancaire(request):
                                 tr_desc.compagnie = compagnie_ecriture
                                 tr_desc.save()
 
-                                releve.desc_ctb = tr_desc.description or releve.desc_releve
+                                releve.desc_ctb = tr_desc.desc_ctb or releve.desc_releve
 
                                 Tr_detail.objects.filter(tr_desc=tr_desc).delete()
 
@@ -1914,7 +1914,7 @@ def releve_bancaire(request):
             tr_desc = releve.ecriture_tr_desc
             if tr_desc:
                 releve.ecriture_date = tr_desc.date.strftime('%Y-%m-%d') if tr_desc.date else ''
-                releve.ecriture_description = tr_desc.description or ''
+                releve.ecriture_description = tr_desc.desc_ctb or ''
                 releve.ecriture_compagnie_id = str(tr_desc.compagnie_id or '')
 
                 detail_rows = []

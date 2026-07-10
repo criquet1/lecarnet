@@ -1,0 +1,131 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block body %}
+<div class="text-center mb-4">
+    <h2 class="fw-bold mb-3">{{ title }}</h2>
+    <div class="d-inline-flex align-items-center gap-2 justify-content-center flex-wrap">
+        <a href="?mois={{ previous_year_value }}" class="btn btn-outline-secondary btn-sm">
+            Année précédente
+        </a>
+        <form method="get" class="d-inline-flex align-items-center gap-2 justify-content-center">
+        <input
+            type="month"
+            id="mois-select"
+            name="mois"
+            class="form-control fw-bold text-center"
+            style="max-width: 220px;"
+            value="{{ selected_month_value }}"
+            aria-label="Choisir un mois"
+            onchange="this.form.submit()"
+        >
+        </form>
+        <a href="?mois={{ next_year_value }}" class="btn btn-outline-secondary btn-sm">
+            Année suivante
+        </a>
+    </div>
+</div>
+
+{% if paies_count %}
+    <div class="alert alert-light border mb-4">
+        {{ paies_count }} paie{% if paies_count > 1 %}s{% endif %} incluse{% if paies_count > 1 %}s{% endif %} pour cette période.
+    </div>
+{% else %}
+    <div class="alert alert-warning border mb-4">
+        Aucune paie trouvée pour ce mois.
+    </div>
+{% endif %}
+
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">DAS fédérales</h5>
+                <span class="badge text-bg-primary">Remise mensuelle</span>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Libellé</th>
+                                <th class="text-end">Montant</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>AE employé</td>
+                                <td class="text-end">{{ federal_total.ae_employe|floatformat:2 }}</td>
+                            </tr>
+                            <tr>
+                                <td>AE employeur</td>
+                                <td class="text-end">{{ federal_total.ae_employeur|floatformat:2 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Impôt fédéral</td>
+                                <td class="text-end">{{ federal_total.impot_federal|floatformat:2 }}</td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-secondary fw-bold">
+                                <td>Total</td>
+                                <td class="text-end">{{ federal_total.total|floatformat:2 }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">DAS provinciales</h5>
+                <span class="badge text-bg-primary">Remise mensuelle</span>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Libellé</th>
+                                <th class="text-end">Montant</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>RRQ employé</td>
+                                <td class="text-end">{{ provincial_total.rrq_employe|floatformat:2 }}</td>
+                            </tr>
+                            <tr>
+                                <td>RRQ employeur</td>
+                                <td class="text-end">{{ provincial_total.rrq_employeur|floatformat:2 }}</td>
+                            </tr>
+                            <tr>
+                                <td>RQAP employé</td>
+                                <td class="text-end">{{ provincial_total.rqap_employe|floatformat:2 }}</td>
+                            </tr>
+                            <tr>
+                                <td>RQAP employeur</td>
+                                <td class="text-end">{{ provincial_total.rqap_employeur|floatformat:2 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Impôt provincial</td>
+                                <td class="text-end">{{ provincial_total.impot_provincial|floatformat:2 }}</td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr class="table-secondary fw-bold">
+                                <td>Total</td>
+                                <td class="text-end">{{ provincial_total.total|floatformat:2 }}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

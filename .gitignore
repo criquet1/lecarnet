@@ -19,6 +19,8 @@ backup/*.csv
 
 # Generated local project data
 lecarnet_central
+backup/notes.txt
+tmp_t4127_2026.pdf
 
 # VS Code / OS
 .vscode/

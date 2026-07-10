@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal, InvalidOperation
 from django import forms
 from django.contrib.auth import get_user_model
 
@@ -51,6 +52,9 @@ class SettingForm(forms.ModelForm):
     logo = forms.ChoiceField(label="Logo", required=True)
     fin_annee_jour = forms.TypedChoiceField(label="Jour", required=False, coerce=int, empty_value=None)
     fin_annee_mois = forms.TypedChoiceField(label="Mois", required=False, coerce=int, empty_value=None)
+    taux_cnesst_employeur = forms.CharField(required=False)
+    taux_fss_employeur = forms.DecimalField(required=False, decimal_places=5, max_digits=7)
+    comptes_paie_autres = forms.CharField(required=False, widget=forms.HiddenInput())
 
     MONTH_CHOICES = [
         ('1', 'Janvier'),
@@ -93,6 +97,16 @@ class SettingForm(forms.ModelForm):
             'frequence_paie',
             'date_debut_periode_paie_annee',
             'date_premier_paiement_paie_annee',
+            'taux_cnesst_employeur',
+            'taux_fss_employeur',
+            'compte_salaires_a_payer',
+            'compte_vacances_a_payer',
+            'compte_das_federales',
+            'compte_das_provinciales',
+            'compte_salaire',
+            'compte_vacances',
+            'compte_benefices_marginaux',
+            'comptes_paie_autres',
         ]
         widgets = {
             'nom': forms.TextInput(attrs={'class': 'form-control'}),
@@ -113,6 +127,13 @@ class SettingForm(forms.ModelForm):
             'compte_tvq_payee': forms.Select(attrs={'class': 'form-select'}),
             'compte_fr_retard': forms.Select(attrs={'class': 'form-select'}),
             'taxes_mode': forms.Select(attrs={'class': 'form-select'}),
+            'compte_salaires_a_payer': forms.Select(attrs={'class': 'form-select'}),
+            'compte_vacances_a_payer': forms.Select(attrs={'class': 'form-select'}),
+            'compte_das_federales': forms.Select(attrs={'class': 'form-select'}),
+            'compte_das_provinciales': forms.Select(attrs={'class': 'form-select'}),
+            'compte_salaire': forms.Select(attrs={'class': 'form-select'}),
+            'compte_vacances': forms.Select(attrs={'class': 'form-select'}),
+            'compte_benefices_marginaux': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -125,6 +146,76 @@ class SettingForm(forms.ModelForm):
         self.fields['fin_annee_mois'].choices = [('', '--')] + self.MONTH_CHOICES
         self.fields['fin_annee_jour'].widget.attrs.update({'class': 'form-select'})
         self.fields['fin_annee_mois'].widget.attrs.update({'class': 'form-select'})
+        self.fields['taux_cnesst_employeur'].widget.attrs.update({
+            'class': 'form-control',
+            'placeholder': 'Ex.: 1,54',
+            'inputmode': 'decimal',
+        })
+        self.fields['taux_cnesst_employeur'].help_text = 'Saisir le taux en $ par 100 $ de masse salariale (ex.: 1,54).'
+        self.fields['taux_fss_employeur'].widget.attrs.update({
+            'class': 'form-control',
+            'step': '0.00001',
+            'placeholder': 'Ex.: 0.01250',
+            'inputmode': 'decimal',
+        })
+        self.fields['taux_fss_employeur'].help_text = 'Saisir le taux FSS en ratio (ex.: 0.01250 pour 1,25 %).'
+
+        initial_autres = []
+        if self.instance and self.instance.pk and self.instance.comptes_paie_autres:
+            initial_autres = [str(value) for value in self.instance.comptes_paie_autres if value]
+        self.initial['comptes_paie_autres'] = ','.join(initial_autres)
+
+        if self.instance and self.instance.pk and self.instance.taux_cnesst_employeur is not None:
+            display_value = (Decimal(self.instance.taux_cnesst_employeur) * Decimal('100')).quantize(Decimal('0.01'))
+            self.initial['taux_cnesst_employeur'] = str(display_value)
+
+    def clean_taux_cnesst_employeur(self):
+        raw_value = (self.cleaned_data.get('taux_cnesst_employeur') or '').strip()
+        if not raw_value:
+            return None
+
+        normalized = raw_value.replace('$', '').replace(' ', '').replace(',', '.')
+        try:
+            value_per_100 = Decimal(normalized)
+        except (InvalidOperation, TypeError, ValueError):
+            raise forms.ValidationError('Saisissez un nombre valide, par exemple 1,54.')
+
+        if value_per_100 < 0:
+            raise forms.ValidationError('Le taux CNESST doit etre positif.')
+
+        if value_per_100 > Decimal('100'):
+            raise forms.ValidationError('Le taux CNESST semble trop eleve.')
+
+        # Stockage en ratio (ex.: 1,54 par 100$ devient 0,0154).
+        return (value_per_100 / Decimal('100')).quantize(Decimal('0.00001'))
+
+    def clean_comptes_paie_autres(self):
+        raw_value = (self.cleaned_data.get('comptes_paie_autres') or '').strip()
+        if not raw_value:
+            return []
+
+        entries = [part.strip() for part in raw_value.split(',') if part.strip()]
+        try:
+            account_ids = [int(value) for value in entries]
+        except ValueError:
+            raise forms.ValidationError('Les comptes additionnels de paie sont invalides.')
+
+        unique_ids = list(dict.fromkeys(account_ids))
+        existing_ids = set(Compte.objects.filter(numero__in=unique_ids).values_list('numero', flat=True))
+        missing_ids = [str(value) for value in unique_ids if value not in existing_ids]
+        if missing_ids:
+            raise forms.ValidationError(
+                f"Comptes introuvables: {', '.join(missing_ids)}"
+            )
+        return unique_ids
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.comptes_paie_autres = self.cleaned_data.get('comptes_paie_autres', [])
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
 
 
 class CreerTenantForm(forms.Form):

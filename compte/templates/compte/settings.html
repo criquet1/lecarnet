@@ -65,7 +65,6 @@
                             {% endif %}
                         </div>
                     </div>
-                
                 </div>
             </div>
             <div class="mb-3">
@@ -192,6 +191,87 @@
                     {{ form.date_premier_paiement_paie_annee.errors }}
                     <div class="form-text">Ces deux dates servent à générer automatiquement les périodes de paie.</div>
                 </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.taux_cnesst_employeur.id_for_label }}">Taux CNESST employeur</label>
+                    {{ form.taux_cnesst_employeur }}
+                    {{ form.taux_cnesst_employeur.errors }}
+                    <div class="form-text">Saisir le taux en dollars par 100 $ de masse salariale (ex.: 1,54).</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label" for="{{ form.taux_fss_employeur.id_for_label }}">Taux FSS employeur</label>
+                    {{ form.taux_fss_employeur }}
+                    {{ form.taux_fss_employeur.errors }}
+                    <div class="form-text">Saisir le taux FSS en ratio (ex.: 0.01250 pour 1,25 %).</div>
+                </div>
+            </div>
+
+            <div class="row g-3 mt-3">
+                <div class="col-12">
+                    <h6 class="mb-2">Comptes de paie</h6>
+                </div>
+                <div class="col-12">
+                    <div class="small text-muted fw-semibold">Une ligne par compte, comme une écriture de journal général.</div>
+                </div>
+
+                <div class="col-12">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-2"><span class="badge text-bg-light border">Débit</span></div>
+                        <div class="col-md-3 fw-semibold">Salaires</div>
+                        <div class="col-md-7">{{ form.compte_salaire }}{{ form.compte_salaire.errors }}</div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-2"><span class="badge text-bg-light border">Débit</span></div>
+                        <div class="col-md-3 fw-semibold">Vacances</div>
+                        <div class="col-md-7">{{ form.compte_vacances }}{{ form.compte_vacances.errors }}</div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-2"><span class="badge text-bg-light border">Débit</span></div>
+                        <div class="col-md-3 fw-semibold">Bénéfices marginaux</div>
+                        <div class="col-md-7">{{ form.compte_benefices_marginaux }}{{ form.compte_benefices_marginaux.errors }}</div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-2"><span class="badge text-bg-secondary">Crédit</span></div>
+                        <div class="col-md-3 fw-semibold">Salaires à payer</div>
+                        <div class="col-md-7">{{ form.compte_salaires_a_payer }}{{ form.compte_salaires_a_payer.errors }}</div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-2"><span class="badge text-bg-secondary">Crédit</span></div>
+                        <div class="col-md-3 fw-semibold">Vacances à payer</div>
+                        <div class="col-md-7">{{ form.compte_vacances_a_payer }}{{ form.compte_vacances_a_payer.errors }}</div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-2"><span class="badge text-bg-secondary">Crédit</span></div>
+                        <div class="col-md-3 fw-semibold">DAS féd à payer</div>
+                        <div class="col-md-7">{{ form.compte_das_federales }}{{ form.compte_das_federales.errors }}</div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-2"><span class="badge text-bg-secondary">Crédit</span></div>
+                        <div class="col-md-3 fw-semibold">DAS prov à payer</div>
+                        <div class="col-md-7">{{ form.compte_das_provinciales }}{{ form.compte_das_provinciales.errors }}</div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label">Autres comptes de paie</label>
+                    {{ form.comptes_paie_autres }}
+                    {{ form.comptes_paie_autres.errors }}
+                    <div id="paie-autres-container" class="d-flex flex-column gap-2"></div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="btn-ajouter-compte-paie">
+                        Ajouter une ligne
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -213,5 +293,74 @@ function updateLogoPreview() {
         previewDiv.innerHTML = '<div class="text-muted">Aucun logo sélectionné</div>';
     }
 }
+
+function addPaieAutreRow(selectedValue = '') {
+    const container = document.getElementById('paie-autres-container');
+    const template = document.getElementById('paie-autre-row-template');
+    const clone = template.content.firstElementChild.cloneNode(true);
+    const select = clone.querySelector('.paie-autre-select');
+    const removeButton = clone.querySelector('.btn-remove-paie-autre');
+
+    if (selectedValue) {
+        select.value = selectedValue;
+    }
+
+    select.addEventListener('change', syncPaieAutresField);
+    removeButton.addEventListener('click', function () {
+        clone.remove();
+        syncPaieAutresField();
+    });
+
+    container.appendChild(clone);
+    syncPaieAutresField();
+}
+
+function syncPaieAutresField() {
+    const hiddenField = document.getElementById('id_comptes_paie_autres');
+    if (!hiddenField) {
+        return;
+    }
+
+    const values = [];
+    document.querySelectorAll('.paie-autre-select').forEach(function (select) {
+        if (select.value && !values.includes(select.value)) {
+            values.push(select.value);
+        }
+    });
+    hiddenField.value = values.join(',');
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const addButton = document.getElementById('btn-ajouter-compte-paie');
+    const hiddenField = document.getElementById('id_comptes_paie_autres');
+
+    if (addButton) {
+        addButton.addEventListener('click', function () {
+            addPaieAutreRow();
+        });
+    }
+
+    if (hiddenField && hiddenField.value) {
+        hiddenField.value
+            .split(',')
+            .map(function (value) { return value.trim(); })
+            .filter(function (value) { return value.length > 0; })
+            .forEach(function (value) {
+                addPaieAutreRow(value);
+            });
+    }
+});
 </script>
+
+<template id="paie-autre-row-template">
+    <div class="input-group">
+        <select class="form-select paie-autre-select">
+            <option value="">-- Choisir un compte --</option>
+            {% for compte in form.compte_salaire.field.queryset %}
+                <option value="{{ compte.pk }}">{{ compte }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" class="btn btn-outline-danger btn-remove-paie-autre">Retirer</button>
+    </div>
+</template>
 {% endblock %}

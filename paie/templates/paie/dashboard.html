@@ -11,6 +11,9 @@
     <div class="d-flex gap-2">
         <a href="{% url 'paie:paie_employes' %}" class="btn btn-outline-primary">Employés</a>
         <a href="{% url 'paie:paie_calendrier' %}" class="btn btn-outline-primary">Calendrier</a>
+        {% if request.user.is_superuser %}
+        <a href="{% url 'paie:paie_parametres_taux' %}" class="btn btn-outline-primary">Paramètres taux</a>
+        {% endif %}
         <a href="{% url 'paie:paie_saisir' %}" class="btn btn-primary">Saisir une paie</a>
     </div>
 </div>

@@ -10,7 +10,10 @@ urlpatterns = [
 	path('employes/<int:employe_id>/', views.employe_edit_page, name='paie_employe_edit'),
 	path('employes/<int:employe_id>/desactiver/', views.employe_desactiver_page, name='paie_employe_desactiver'),
 	path('calendrier/', views.calendrier_paie_page, name='paie_calendrier'),
+	path('remises-mensuelles/', views.remises_mensuelles_page, name='paie_remises_mensuelles'),
+	path('parametres-taux/', views.parametres_taux_page, name='paie_parametres_taux'),
 	path('saisir/', views.saisir_paie_page, name='paie_saisir'),
 	path('api/prochaine-periode/', views.prochaine_periode_employe_api, name='paie_api_prochaine_periode'),
 	path('journal/', views.journal_paies_page, name='paie_journal'),
+	path('journal/creer-ecriture/<int:periode_id>/', views.creer_ecriture_salaire, name='paie_creer_ecriture_salaire'),
 ]

@@ -73,7 +73,7 @@ def split_debit_credit(amount):
 
 def get_settings():
 	try:
-		return Setting.objects.select_related(
+		queryset = Setting.objects.select_related(
 			'cap',
 			'car',
 			'compte_tps_percue',
@@ -81,7 +81,28 @@ def get_settings():
 			'compte_tvq_percue',
 			'compte_tvq_payee',
 			'compte_fr_retard',
-		).first()
+			'compte_salaires_a_payer',
+			'compte_vacances_a_payer',
+			'compte_das_federales',
+			'compte_das_provinciales',
+			'compte_salaire',
+			'compte_benefices_marginaux',
+		)
+		settings_instance = queryset.first()
+		if settings_instance is not None:
+			return settings_instance
+
+		logo_name = get_available_logos()[0]
+		return Setting.objects.create(
+			nom='Parametres',
+			logo=logo_name,
+			adresse='A definir',
+			ville='A definir',
+			code_postal='A definir',
+			pays='A definir',
+			phone='A definir',
+			email='admin@example.com',
+		)
 	except (OperationalError, ProgrammingError, ConnectionDoesNotExist):
 		return None
 

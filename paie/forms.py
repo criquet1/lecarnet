@@ -2,6 +2,7 @@ from calendar import monthrange
 from datetime import date as date_type
 from datetime import timedelta
 from decimal import Decimal
+from decimal import InvalidOperation
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -9,10 +10,12 @@ from holidays import country_holidays
 
 from facture.utils import get_setting
 
-from .models import Employe, FrequencePaie, Paie, PeriodePaie
+from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie
 
 
 class EmployeForm(forms.ModelForm):
+    taux_vacances = forms.CharField(required=False)
+
     class Meta:
         model = Employe
         fields = [
@@ -22,6 +25,7 @@ class EmployeForm(forms.ModelForm):
             'salH',
             'e_prov',
             'e_fed',
+            'taux_vacances',
             'frequence_paie',
             'actif',
         ]
@@ -39,6 +43,7 @@ class EmployeForm(forms.ModelForm):
             'salH': 'Taux horaire',
             'e_prov': 'Credit personnel Quebec',
             'e_fed': 'Credit personnel federal',
+            'taux_vacances': 'Taux de vacances (%)',
             'frequence_paie': 'Frequence de paie',
         }
 
@@ -46,11 +51,39 @@ class EmployeForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['frequence_paie'].queryset = FrequencePaie.objects.order_by('nombre_periodes_par_annee', 'code')
         self.fields['frequence_paie'].required = False
+        self.fields['taux_vacances'].widget.attrs.update({
+            'class': 'form-control',
+            'placeholder': 'Ex.: 4.00',
+            'inputmode': 'decimal',
+        })
+        self.fields['taux_vacances'].help_text = 'Saisir un pourcentage (ex.: 4 pour 4 %).'
+
+        if self.instance and self.instance.pk and self.instance.taux_vacances is not None:
+            display_value = (Decimal(self.instance.taux_vacances) * Decimal('100')).quantize(Decimal('0.01'))
+            self.initial['taux_vacances'] = str(display_value)
 
         if not self.instance.pk:
             settings_instance = get_setting('frequence_paie')
             if settings_instance and settings_instance.frequence_paie_id:
                 self.fields['frequence_paie'].initial = settings_instance.frequence_paie_id
+
+    def clean_taux_vacances(self):
+        raw_value = (self.cleaned_data.get('taux_vacances') or '').strip()
+        if not raw_value:
+            return Decimal('0.00000')
+
+        normalized = raw_value.replace('%', '').replace(' ', '').replace(',', '.')
+        try:
+            value_percent = Decimal(normalized)
+        except (InvalidOperation, TypeError, ValueError):
+            raise forms.ValidationError('Saisissez un pourcentage valide, par exemple 4,00.')
+
+        if value_percent < 0:
+            raise forms.ValidationError('Le taux de vacances doit etre positif.')
+        if value_percent > Decimal('100'):
+            raise forms.ValidationError('Le taux de vacances ne peut pas depasser 100 %.')
+
+        return (value_percent / Decimal('100')).quantize(Decimal('0.00001'))
 
 
 class PaieForm(forms.ModelForm):
@@ -76,6 +109,15 @@ class PaieForm(forms.ModelForm):
         'code_f_partie_travailleur_agricole_etranger',
         'code_f_partie_forces_canadiennes_police',
     ]
+
+    @staticmethod
+    def _decimal_or_zero(value):
+        if value in (None, ''):
+            return Decimal('0.00')
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            return Decimal('0.00')
 
     periode_date_fin = forms.ChoiceField(
         required=False,
@@ -112,6 +154,8 @@ class PaieForm(forms.ModelForm):
         fields = [
             'employe',
             'heures_travaillees',
+            'vacances_payees',
+            'vacances',
             'montant_personnel_federal_td1',
             'montant_personnel_quebec_tp1015',
             'deduction_code_f',
@@ -123,6 +167,8 @@ class PaieForm(forms.ModelForm):
         widgets = {
             'employe': forms.Select(attrs={'class': 'form-select'}),
             'heures_travaillees': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'vacances_payees': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'vacances': forms.HiddenInput(),
             'montant_personnel_federal_td1': forms.HiddenInput(),
             'montant_personnel_quebec_tp1015': forms.HiddenInput(),
             'deduction_code_f': forms.HiddenInput(),
@@ -132,6 +178,7 @@ class PaieForm(forms.ModelForm):
             'cotisation_supplementaire_rrq_csa': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
         }
         labels = {
+            'vacances_payees': 'Vacances',
             'deduction_code_f': 'Total des sommes suivantes pour la periode de paie',
             'deduction_tp1015_j': 'Deduction TP-1015 J',
             'deduction_tp1016_j1': 'Deduction TP-1016 J1',
@@ -143,6 +190,8 @@ class PaieForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self._selected_candidate = None
         self.fields['employe'].queryset = Employe.objects.filter(actif=True).select_related('frequence_paie').order_by('nom', 'prenom', 'id')
+        self.fields['vacances'].required = False
+        self.fields['vacances_payees'].required = False
 
         if self.is_bound:
             employe_id = self.data.get('employe')
@@ -474,6 +523,11 @@ class PaieForm(forms.ModelForm):
         cleaned_data['taux_horaire'] = employe.taux_horaire_defaut
         cleaned_data['montant_personnel_federal_td1'] = employe.montant_personnel_federal_defaut
         cleaned_data['montant_personnel_quebec_tp1015'] = employe.montant_personnel_quebec_defaut
+
+        salaire_brut = self._decimal_or_zero(cleaned_data.get('heures_travaillees')) * self._decimal_or_zero(cleaned_data.get('taux_horaire'))
+        salaire_brut += self._decimal_or_zero(cleaned_data.get('vacances_payees'))
+        taux_vacances = self._decimal_or_zero(employe.taux_vacances)
+        cleaned_data['vacances'] = (salaire_brut * taux_vacances).quantize(Decimal('0.01'))
         # J n'est pas le credit personnel de base TP-1015.
         # On le laisse a zero par defaut, sauf saisie explicite future.
         cleaned_data['deduction_tp1015_j'] = Decimal('0.00')
@@ -547,3 +601,153 @@ class PaieForm(forms.ModelForm):
 
         self.instance.periode = periode
         return super().save(commit=commit)
+
+
+class ParametresTauxPaieForm(forms.ModelForm):
+    PERCENT_FIELDS = (
+        'taux_rrq_employe',
+        'taux_rrq_supplementaire_2_employe',
+        'taux_rrq_employeur',
+        'taux_rqap_employe',
+        'taux_rqap_employeur',
+        'taux_ae_employe',
+        'taux_ae_employeur',
+        'taux_cnt_employeur',
+        'taux_credit_federal',
+        'abattement_federal_quebec',
+        'taux_federal_1',
+        'taux_federal_2',
+        'taux_federal_3',
+        'taux_federal_4',
+        'taux_federal_5',
+        'taux_qc_1',
+        'taux_qc_2',
+        'taux_qc_3',
+        'taux_qc_4',
+        'taux_credit_quebec',
+    )
+
+    class Meta:
+        model = ParametresTauxPaie
+        fields = [
+            'rrq_date_debut_effet',
+            'rrq_date_fin_effet',
+            'taux_rrq_employe',
+            'taux_rrq_supplementaire_2_employe',
+            'taux_rrq_employeur',
+            'exemption_base_rrq',
+            'max_assurable_rrq',
+            'max_supplementaire_rrq',
+            'rqap_date_debut_effet',
+            'rqap_date_fin_effet',
+            'taux_rqap_employe',
+            'taux_rqap_employeur',
+            'max_assurable_rqap',
+            'ae_date_debut_effet',
+            'ae_date_fin_effet',
+            'taux_ae_employe',
+            'taux_ae_employeur',
+            'taux_cnt_employeur',
+            'max_assurable_ae',
+            'credit_personnel_federal_min',
+            'taux_credit_federal',
+            'montant_canadien_pour_emploi',
+            'abattement_federal_quebec',
+            'seuil_federal_1',
+            'seuil_federal_2',
+            'seuil_federal_3',
+            'seuil_federal_4',
+            'taux_federal_1',
+            'taux_federal_2',
+            'taux_federal_3',
+            'taux_federal_4',
+            'taux_federal_5',
+            'credit_personnel_quebec_min',
+            'deduction_travailleur_qc_max_annuelle',
+            'seuil_qc_1',
+            'seuil_qc_2',
+            'seuil_qc_3',
+            'taux_qc_1',
+            'taux_qc_2',
+            'taux_qc_3',
+            'taux_qc_4',
+            'taux_credit_quebec',
+        ]
+        widgets = {
+            'rrq_date_debut_effet': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'rrq_date_fin_effet': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'taux_rrq_employe': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 6,30'}),
+            'taux_rrq_supplementaire_2_employe': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 4,00'}),
+            'taux_rrq_employeur': forms.HiddenInput(),
+            'exemption_base_rrq': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': 'Ex.: 3500,00'}),
+            'max_assurable_rrq': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'max_supplementaire_rrq': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': 'Ex.: 85000,00'}),
+            'rqap_date_debut_effet': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'rqap_date_fin_effet': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'taux_rqap_employe': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 0,49'}),
+            'taux_rqap_employeur': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 0,69'}),
+            'max_assurable_rqap': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'ae_date_debut_effet': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'ae_date_fin_effet': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'taux_ae_employe': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 1,30'}),
+            'taux_ae_employeur': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 2,28'}),
+            'taux_cnt_employeur': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 0,06'}),
+            'max_assurable_ae': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'credit_personnel_federal_min': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'taux_credit_federal': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 14,00'}),
+            'montant_canadien_pour_emploi': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'abattement_federal_quebec': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 16,50'}),
+            'seuil_federal_1': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'seuil_federal_2': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'seuil_federal_3': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'seuil_federal_4': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'taux_federal_1': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal'}),
+            'taux_federal_2': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal'}),
+            'taux_federal_3': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal'}),
+            'taux_federal_4': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal'}),
+            'taux_federal_5': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal'}),
+            'credit_personnel_quebec_min': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'deduction_travailleur_qc_max_annuelle': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'seuil_qc_1': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'seuil_qc_2': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'seuil_qc_3': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'taux_qc_1': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal'}),
+            'taux_qc_2': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal'}),
+            'taux_qc_3': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal'}),
+            'taux_qc_4': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal'}),
+            'taux_credit_quebec': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 14,00'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # RRQ employeur n'est plus saisi dans l'UI; on le maintient pour compatibilite schema.
+        self.fields['taux_rrq_employeur'].required = False
+
+        if not self.is_bound:
+            if self.instance and self.instance.pk and self.instance.taux_rrq_employeur is not None:
+                self.initial['taux_rrq_employeur'] = self.instance.taux_rrq_employeur
+            elif self.instance and getattr(self.instance, 'taux_rrq_employe', None) is not None:
+                self.initial['taux_rrq_employeur'] = self.instance.taux_rrq_employe
+            else:
+                self.initial['taux_rrq_employeur'] = Decimal('0.00000')
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        for field_name in self.PERCENT_FIELDS:
+            value = cleaned_data.get(field_name)
+            if value in (None, ''):
+                continue
+            if isinstance(value, str):
+                normalized = value.strip().replace(' ', '').replace('%', '').replace(',', '.')
+                try:
+                    value = Decimal(normalized)
+                except Exception:
+                    self.add_error(field_name, 'Saisir un taux valide (ex.: 2,28).')
+                    continue
+            cleaned_data[field_name] = value
+
+        if cleaned_data.get('taux_rrq_employeur') in (None, ''):
+            cleaned_data['taux_rrq_employeur'] = cleaned_data.get('taux_rrq_employe') or Decimal('0.00000')
+
+        return cleaned_data

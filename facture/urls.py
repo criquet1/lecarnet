@@ -7,7 +7,8 @@ from . import views
 urlpatterns = [
     path('login/', LoginView.as_view(template_name='registration/login.html', redirect_authenticated_user=True), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
-    path('', login_required(views.index), name='accueil'),
+    path('', views.index, name='accueil_public'),
+    path('accueil/', login_required(views.index), name='accueil'),
     path('facture/', login_required(views.facture), name='facture'),
     path('releve-bancaire/', login_required(views.releve_bancaire), name='releve_bancaire'),
     path('journal-general/', login_required(views.journal_general), name='journal_general'),

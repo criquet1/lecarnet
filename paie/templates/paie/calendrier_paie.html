@@ -3,13 +3,70 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block body %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2 class="fw-bold mb-1">{{ title }}</h2>
-        <p class="text-muted mb-0">Projection des dates de paie selon les paramètres (incluant ajustements week-end et fériés).</p>
-    </div>
-    <div class="d-flex gap-2">
-        <a href="{% url 'paie:paie_dashboard' %}" class="btn btn-outline-secondary">Retour au tableau de bord</a>
+<style>
+    .calendar-grid {
+        table-layout: fixed;
+    }
+
+    .calendar-grid th,
+    .calendar-grid td {
+        width: 14.2857%;
+    }
+
+    .calendar-grid tbody tr {
+        height: 100px;
+    }
+
+    .calendar-day {
+        height: 100px;
+        vertical-align: top;
+        background: #fff;
+        overflow: hidden;
+    }
+
+    .calendar-day.out-month {
+        background: #f8f9fa;
+        color: #6c757d;
+    }
+
+    .calendar-day.payday {
+        background: #d1e7dd;
+    }
+
+    .calendar-day.holiday {
+        background: #f8d7da;
+    }
+
+    .calendar-day.payday.holiday {
+        background: linear-gradient(135deg, #d1e7dd 0%, #f8d7da 100%);
+    }
+
+    .calendar-day.today {
+        box-shadow: inset 0 0 0 3px #0d6efd;
+    }
+
+    .day-number {
+        font-weight: 700;
+        font-size: 1.05rem;
+    }
+
+    .event-badge {
+        white-space: normal;
+        text-align: left;
+        font-size: 0.78rem;
+    }
+</style>
+
+<div class="text-center mb-4">
+    <h2 class="fw-bold mb-3">{{ title }}</h2>
+    <div class="d-flex justify-content-center align-items-center gap-2 flex-wrap">
+        <a href="?mois={{ previous_year_value }}" class="btn btn-outline-secondary btn-sm">Année précédente</a>
+        <a href="?mois={{ previous_month_value }}" class="btn btn-outline-secondary">Précédent</a>
+        <form method="get" class="d-inline-flex align-items-center gap-2">
+            <input type="month" id="mois-select" name="mois" class="form-control fw-bold" style="font-weight: 700;" value="{{ selected_month_value }}" onchange="this.form.submit()">
+        </form>
+        <a href="?mois={{ next_month_value }}" class="btn btn-outline-secondary">Suivant</a>
+        <a href="?mois={{ next_year_value }}" class="btn btn-outline-secondary btn-sm">Année suivante</a>
     </div>
 </div>
 
@@ -17,54 +74,53 @@
     <div class="alert alert-warning" role="alert">{{ error_message }}</div>
 {% endif %}
 
-<div class="card shadow-sm mb-3">
-    <div class="card-body">
-        <form method="get" class="row g-3 align-items-end">
-            <div class="col-md-4">
-                <label class="form-label" for="id_annee">Année</label>
-                <select class="form-select" id="id_annee" name="annee">
-                    {% for y in year_options %}
-                        <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3">
-                <button type="submit" class="btn btn-primary">Afficher</button>
-            </div>
-        </form>
-    </div>
+<div class="d-flex justify-content-center gap-2 flex-wrap mb-4">
+    <span class="badge text-bg-success">Jour de paie</span>
+    <span class="badge text-bg-danger">Jour férié</span>
+    <span class="badge text-bg-warning text-dark">Paie + férié</span>
 </div>
 
 <div class="card shadow-sm">
     <div class="card-body">
-        {% if calendar_rows %}
-            <div class="table-responsive">
-                <table class="table table-sm align-middle">
-                    <thead>
+        <div class="table-responsive">
+            <table class="table table-bordered calendar-grid align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center">Dim</th>
+                        <th class="text-center">Lun</th>
+                        <th class="text-center">Mar</th>
+                        <th class="text-center">Mer</th>
+                        <th class="text-center">Jeu</th>
+                        <th class="text-center">Ven</th>
+                        <th class="text-center">Sam</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for week in calendar_weeks %}
                         <tr>
-                            <th>#</th>
-                            <th>Début période</th>
-                            <th>Fin période</th>
-                            <th>Date de paie</th>
-                            <th>Jour</th>
+                            {% for day in week %}
+                                <td class="calendar-day {% if not day.in_current_month %}out-month{% endif %} {% if day.is_payday and day.is_holiday %}payday holiday{% elif day.is_payday %}payday{% elif day.is_holiday %}holiday{% endif %} {% if day.is_today %}today{% endif %}">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <span class="day-number">{{ day.date.day }}</span>
+                                        {% if day.is_today %}
+                                            <span class="badge text-bg-primary">Aujourd'hui</span>
+                                        {% endif %}
+                                    </div>
+
+                                    {% if day.holiday_name %}
+                                        <div class="badge text-bg-danger event-badge w-100 mb-1">{{ day.holiday_name }}</div>
+                                    {% endif %}
+
+                                    {% for entry in day.payday_entries %}
+                                        <div class="badge text-bg-success event-badge w-100 mb-1">{{ entry.label }}</div>
+                                    {% endfor %}
+                                </td>
+                            {% endfor %}
                         </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in calendar_rows %}
-                            <tr>
-                                <td>{{ row.index }}</td>
-                                <td>{{ row.date_debut|date:"Y-m-d" }}</td>
-                                <td>{{ row.date_fin|date:"Y-m-d" }}</td>
-                                <td>{{ row.date_paie|date:"Y-m-d" }}</td>
-                                <td>{{ row.jour_paie }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
-            <div class="alert alert-light border mb-0">Aucune date de paie à afficher pour cette année.</div>
-        {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 {% endblock %}
