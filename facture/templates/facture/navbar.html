@@ -78,8 +78,9 @@
             <a class="btn btn-warning btn-sm {% if current_url == 'manage_societes' %}active{% endif %}" href="{% url 'manage_societes' %}">Gestion des societes</a>
           {% endif %}
           {% if active_client_accesses|length > 1 %}
-            <button
-              type="button"
+            <a
+              id="activeClientTrigger"
+              href="{% url 'select_client' %}"
               class="btn btn-outline-light btn-sm"
               data-bs-toggle="modal"
               data-bs-target="#activeClientModal"
@@ -90,7 +91,7 @@
               {% else %}
                 Choisir un client
               {% endif %}
-            </button>
+            </a>
           {% else %}
             <span class="navbar-text small">
               {% if active_client %}
@@ -151,4 +152,23 @@
     </div>
   </div>
 </div>
+{% endif %}
+
+{% if active_client_accesses|length > 1 %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const trigger = document.getElementById('activeClientTrigger');
+  const modalEl = document.getElementById('activeClientModal');
+  if (!trigger || !modalEl) {
+    return;
+  }
+
+  trigger.addEventListener('click', function (event) {
+    if (window.bootstrap && window.bootstrap.Modal) {
+      event.preventDefault();
+      window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+  });
+});
+</script>
 {% endif %}
