@@ -19,7 +19,12 @@ class Command(BaseCommand):
         ]
 
         if not aliases:
-            raise CommandError('Aucune base client configuree. Verifiez TENANT_DATABASES_JSON.')
+            self.stdout.write(
+                self.style.WARNING(
+                    'Aucune base client configuree. Migration tenants ignoree.'
+                )
+            )
+            return
 
         for alias in aliases:
             if alias == 'default':
