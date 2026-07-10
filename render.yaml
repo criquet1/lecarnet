@@ -20,3 +20,5 @@ services:
         sync: false
       - key: DEFAULT_DB_PORT
         value: "5432"
+      - key: TENANT_DATABASES_JSON
+        sync: false
