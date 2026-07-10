@@ -44,6 +44,11 @@ def get_user_client_accesses(user):
         societe__is_active=True,
     ).values_list('societe_id', flat=True)
 
+    # Compatibilite: si aucun acces societe n'est configure, conserver les
+    # acces clients explicites (sinon l'utilisateur est bloque sur select-client).
+    if not allowed_societe_ids:
+        return base_qs
+
     scoped_qs = base_qs.filter(client__societe_id__in=allowed_societe_ids)
 
     if _is_expert(user):
@@ -133,8 +138,27 @@ def sync_user_client_accesses(user):
     ).values_list('societe_id', flat=True))
 
     if not allowed_societe_ids:
-        UserClientAccess.objects.filter(user=user).delete()
-        return UserClientAccess.objects.none()
+        # Ne pas supprimer les acces explicites si la couche Societe n'est pas
+        # encore renseignee (cas frequent en prod). Assure un seul default.
+        accesses = UserClientAccess.objects.filter(
+            user=user,
+            client__is_active=True,
+        ).order_by('-is_default', 'client__name', 'id')
+
+        if not accesses.exists():
+            return UserClientAccess.objects.none()
+
+        default_access = accesses.filter(is_default=True).first()
+        if not default_access:
+            default_access = accesses.first()
+            if default_access and not default_access.is_default:
+                default_access.is_default = True
+                default_access.save(update_fields=['is_default'])
+
+        if default_access:
+            accesses.exclude(id=default_access.id).filter(is_default=True).update(is_default=False)
+
+        return get_user_client_accesses(user)
 
     active_clients = ClientDatabase.objects.filter(
         is_active=True,
