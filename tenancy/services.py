@@ -34,12 +34,7 @@ def get_user_client_accesses(user):
     if _is_expert(user):
         return scoped_qs
 
-    # Standard user: enforce single-tenant visibility.
-    selected_id = scoped_qs.order_by('-is_default', 'client__name', 'id').values_list('id', flat=True).first()
-    if not selected_id:
-        return UserClientAccess.objects.none()
-
-    return scoped_qs.filter(id=selected_id)
+    return scoped_qs
 
 
 def pick_default_access(accesses):
@@ -160,20 +155,24 @@ def sync_user_client_accesses(user):
 
         return get_user_client_accesses(user)
 
-    # Standard user: keep only one existing allowed access, no auto-grant across all tenants.
+    # Standard user: keep explicit tenant assignments within allowed societes.
     accesses = UserClientAccess.objects.filter(
         user=user,
         client_id__in=allowed_client_ids,
     ).order_by('-is_default', 'client__name', 'id')
 
-    selected_access = accesses.first()
-    if not selected_access:
+    if not accesses.exists():
         return UserClientAccess.objects.none()
 
-    accesses.exclude(id=selected_access.id).delete()
-    if not selected_access.is_default:
-        selected_access.is_default = True
-        selected_access.save(update_fields=['is_default'])
+    default_access = accesses.filter(is_default=True).first()
+    if not default_access:
+        default_access = accesses.first()
+        if default_access and not default_access.is_default:
+            default_access.is_default = True
+            default_access.save(update_fields=['is_default'])
+
+    if default_access:
+        accesses.exclude(id=default_access.id).filter(is_default=True).update(is_default=False)
 
     return get_user_client_accesses(user)
 
