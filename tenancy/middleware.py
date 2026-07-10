@@ -9,6 +9,7 @@ from .services import (
     ensure_default_client_access,
     get_user_client_accesses,
     pick_default_access,
+    resolve_database_alias,
     set_active_client_on_session,
     sync_user_client_accesses,
     user_must_change_password,
@@ -43,8 +44,8 @@ class ActiveClientMiddleware:
 
             if access:
                 set_active_client_on_session(request, access)
-                alias = access.client.db_alias
-                if alias in settings.DATABASES:
+                alias = resolve_database_alias(access.client.db_alias)
+                if alias:
                     request.active_client = access.client
                     request.active_client_alias = alias
                     token = set_current_tenant_alias(alias)

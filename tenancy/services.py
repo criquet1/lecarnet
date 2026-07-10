@@ -12,6 +12,21 @@ def _is_expert(user):
     return user.is_superuser or user.groups.filter(name__iexact='expert').exists()
 
 
+def resolve_database_alias(alias):
+    if not alias:
+        return None
+
+    if alias in settings.DATABASES:
+        return alias
+
+    normalized = str(alias).strip().lower()
+    for configured_alias in settings.DATABASES.keys():
+        if str(configured_alias).strip().lower() == normalized:
+            return configured_alias
+
+    return None
+
+
 def get_user_client_accesses(user):
     if not user.is_authenticated:
         return UserClientAccess.objects.none()
@@ -43,8 +58,9 @@ def pick_default_access(accesses):
 
 
 def set_active_client_on_session(request, access):
+    alias = resolve_database_alias(access.client.db_alias) or access.client.db_alias
     request.session[SESSION_CLIENT_ID_KEY] = access.client_id
-    request.session[SESSION_CLIENT_ALIAS_KEY] = access.client.db_alias
+    request.session[SESSION_CLIENT_ALIAS_KEY] = alias
 
 
 def clear_active_client_on_session(request):
