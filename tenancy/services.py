@@ -70,7 +70,10 @@ def clear_active_client_on_session(request):
 
 def mark_user_must_change_password(user, required=True):
     try:
-        state, _ = UserSecurityState.objects.get_or_create(user=user)
+        state, _ = UserSecurityState.objects.using('default').get_or_create(
+            user_id=user.pk,
+            defaults={'must_change_password': required},
+        )
         if state.must_change_password != required:
             state.must_change_password = required
             state.save(update_fields=['must_change_password'])
@@ -84,7 +87,10 @@ def user_must_change_password(user):
         return False
 
     try:
-        return bool(user.security_state.must_change_password)
+        required = UserSecurityState.objects.using('default').filter(
+            user_id=user.pk,
+        ).values_list('must_change_password', flat=True).first()
+        return bool(required)
     except (UserSecurityState.DoesNotExist, OperationalError, ProgrammingError):
         return False
 

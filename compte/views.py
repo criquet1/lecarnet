@@ -685,8 +685,11 @@ def force_password_change_page(request):
 		form = PasswordChangeForm(request.user, request.POST)
 		if form.is_valid():
 			user = form.save()
-			mark_user_must_change_password(user, False)
+			state = mark_user_must_change_password(user, False)
 			update_session_auth_hash(request, user)
+			if state is None or user_must_change_password(user):
+				messages.error(request, 'Le mot de passe a ete mis a jour, mais le statut de securite n a pas pu etre synchronise. Reessayez.')
+				return redirect('force_password_change')
 			messages.success(request, 'Mot de passe mis a jour.')
 			return redirect('accueil')
 	else:
