@@ -640,9 +640,6 @@ def creer_tenant_page(request):
 						defaults={'is_default': True},
 					)
 					UserClientAccess.objects.filter(user=tenant_user).exclude(client=client).delete()
-					security_state = mark_user_must_change_password(tenant_user, True)
-					if security_state is None:
-						raise RuntimeError('Impossible d activer le changement obligatoire de mot de passe pour le nouvel utilisateur.')
 					set_active_client_on_session(request, access)
 					sync_user_client_accesses(request.user)
 

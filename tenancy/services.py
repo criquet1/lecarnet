@@ -83,16 +83,8 @@ def mark_user_must_change_password(user, required=True):
 
 
 def user_must_change_password(user):
-    if not user.is_authenticated:
-        return False
-
-    try:
-        required = UserSecurityState.objects.using('default').filter(
-            user_id=user.pk,
-        ).values_list('must_change_password', flat=True).first()
-        return bool(required)
-    except (UserSecurityState.DoesNotExist, OperationalError, ProgrammingError):
-        return False
+    # Obligation desactivee globalement (ne plus forcer le changement de mot de passe).
+    return False
 
 
 def _ensure_client_for_alias(alias):

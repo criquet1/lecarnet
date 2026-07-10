@@ -84,16 +84,11 @@ def manage_societes(request):
                     user.groups.add(expert_group)
                 else:
                     user.groups.remove(expert_group)
-                security_state = mark_user_must_change_password(user, True)
-                if security_state is None:
-                    user.delete()
-                    messages.error(request, 'Utilisateur non cree: impossible d activer le changement obligatoire du mot de passe.')
-                else:
-                    societe = user_form.cleaned_data['societe']
-                    if not UserSocieteAccess.objects.filter(user=user, is_default=True).exists():
-                        UserSocieteAccess.objects.filter(user=user, societe=societe).update(is_default=True)
-                    messages.success(request, f"Utilisateur cree: {user.username} (societe: {societe.name})")
-                    return redirect('manage_societes')
+                societe = user_form.cleaned_data['societe']
+                if not UserSocieteAccess.objects.filter(user=user, is_default=True).exists():
+                    UserSocieteAccess.objects.filter(user=user, societe=societe).update(is_default=True)
+                messages.success(request, f"Utilisateur cree: {user.username} (societe: {societe.name})")
+                return redirect('manage_societes')
 
         elif action == 'assign_existing_user':
             user_assign_form = SocieteUserAssignForm(request.POST, societes_qs=active_societes_qs, users_qs=users_qs)
@@ -171,14 +166,8 @@ def manage_societe_users(request):
                     user.groups.add(expert_group)
                 else:
                     user.groups.remove(expert_group)
-
-                security_state = mark_user_must_change_password(user, True)
-                if security_state is None:
-                    user.delete()
-                    messages.error(request, 'Utilisateur non cree: impossible d activer le changement obligatoire du mot de passe.')
-                else:
-                    messages.success(request, f"Utilisateur cree: {user.username} (societe: {managed_societe.name})")
-                    return redirect('manage_societe_users')
+                messages.success(request, f"Utilisateur cree: {user.username} (societe: {managed_societe.name})")
+                return redirect('manage_societe_users')
 
         elif action == 'assign_tenant_access':
             assign_tenant_form = ExpertUserTenantAssignForm(
