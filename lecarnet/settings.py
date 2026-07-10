@@ -21,13 +21,42 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
+
+def _env(name, default=''):
+    return os.environ.get(name, default).strip()
+
+
+def _env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _env_list(name):
+    raw_value = os.environ.get(name, '')
+    if not raw_value:
+        return []
+    return [item.strip() for item in raw_value.split(',') if item.strip()]
+
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-4yu1pvs&-g1oz$+skhpve!8*+45_efkzq752#!u15h+nj^&kp='
+SECRET_KEY = _env('SECRET_KEY', 'django-insecure-4yu1pvs&-g1oz$+skhpve!8*+45_efkzq752#!u15h+nj^&kp=')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = _env_bool('DEBUG', default=False)
 
-ALLOWED_HOSTS = ['lecarnet.io', 'www.lecarnet.io', '127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS.extend(_env_list('ALLOWED_HOSTS'))
+
+render_hostname = _env('RENDER_EXTERNAL_HOSTNAME')
+if render_hostname and render_hostname not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(render_hostname)
+
+CSRF_TRUSTED_ORIGINS = _env_list('CSRF_TRUSTED_ORIGINS')
+if render_hostname:
+    render_origin = f'https://{render_hostname}'
+    if render_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(render_origin)
 
 
 # Application definition
@@ -47,6 +76,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -55,6 +85,8 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 ROOT_URLCONF = 'lecarnet.urls'
 
@@ -80,9 +112,6 @@ WSGI_APPLICATION = 'lecarnet.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
-def _env(name, default=''):
-    return os.environ.get(name, default).strip()
 
 
 def _load_oneclick_config():
@@ -165,11 +194,16 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 STATICFILES_DIRS = [
     BASE_DIR / "static"
 ]
+
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / "media"
 
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'accueil'
@@ -179,3 +213,9 @@ AUTHENTICATION_BACKENDS = [
     'tenancy.auth_backends.CaseInsensitiveUsernameBackend',
     'django.contrib.auth.backends.ModelBackend',
 ]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
