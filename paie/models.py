@@ -416,6 +416,17 @@ class Paie(models.Model):
             rrq_max_assurable = fallback_max_assurable_rrq
         if rrq_max_supplementaire is None or Decimal(str(rrq_max_supplementaire)) <= Decimal('0'):
             rrq_max_supplementaire = fallback_max_supplementaire_rrq
+
+        # Sanitation de coherence metier RRQ (valeurs annuelles plausibles).
+        # Evite les erreurs de saisie comme MGA=746 ou 74.6 qui donnent un RRQ
+        # proche de 40$ sur un brut de 1000$.
+        if Decimal(str(rrq_exemption)) > Decimal('10000'):
+            rrq_exemption = Decimal('3500.00')
+        if Decimal(str(rrq_max_assurable)) < Decimal('10000'):
+            rrq_max_assurable = fallback_max_assurable_rrq
+        if Decimal(str(rrq_max_supplementaire)) < Decimal('10000'):
+            rrq_max_supplementaire = fallback_max_supplementaire_rrq
+
         if Decimal(str(rrq_max_supplementaire)) < Decimal(str(rrq_max_assurable)):
             rrq_max_supplementaire = rrq_max_assurable
 
