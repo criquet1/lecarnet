@@ -373,13 +373,31 @@ class Paie(models.Model):
         fallback_taux_credit_quebec = Decimal('14.00000')
 
         def _pick(start_field, end_field):
-            candidates = [
+            # 1) Bloc actif a la date de reference.
+            active_candidates = [
                 row for row in rows
                 if getattr(row, start_field) <= date_reference and (getattr(row, end_field) is None or getattr(row, end_field) >= date_reference)
             ]
-            if not candidates:
-                return None
-            return sorted(candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
+            if active_candidates:
+                return sorted(active_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
+
+            # 2) A defaut, dernier bloc commence avant la date (meme s'il est expire).
+            started_candidates = [
+                row for row in rows
+                if getattr(row, start_field) <= date_reference
+            ]
+            if started_candidates:
+                return sorted(started_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
+
+            # 3) Sinon, premier bloc futur.
+            future_candidates = [
+                row for row in rows
+                if getattr(row, start_field) > date_reference
+            ]
+            if future_candidates:
+                return sorted(future_candidates, key=lambda row: (getattr(row, start_field), row.id))[0]
+
+            return None
 
         rrq_row = _pick('rrq_date_debut_effet', 'rrq_date_fin_effet')
         rqap_row = _pick('rqap_date_debut_effet', 'rqap_date_fin_effet')

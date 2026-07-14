@@ -185,6 +185,32 @@ class PaieModelTestCase(TestCase):
 
 		self.assertEqual(paie.rrq, Decimal('54.52'))
 
+	def test_rrq_utilise_le_dernier_bloc_connu_si_aucun_bloc_actif(self):
+		ParametresTauxPaie.objects.using('default').create(
+			rrq_date_debut_effet=date(2025, 1, 1),
+			rrq_date_fin_effet=date(2025, 12, 31),
+			taux_rrq_employe=Decimal('6.40000'),
+			taux_rrq_supplementaire_2_employe=Decimal('4.00000'),
+			taux_rrq_employeur=Decimal('6.40000'),
+			exemption_base_rrq=Decimal('3500.00'),
+			max_assurable_rrq=Decimal('74600.00'),
+			max_supplementaire_rrq=Decimal('85000.00'),
+			rqap_date_debut_effet=date(2025, 1, 1),
+			rqap_date_fin_effet=date(2025, 12, 31),
+			taux_rqap_employe=Decimal('0.43000'),
+			taux_rqap_employeur=Decimal('0.69200'),
+			max_assurable_rqap=Decimal('98700.00'),
+			ae_date_debut_effet=date(2025, 1, 1),
+			ae_date_fin_effet=date(2025, 12, 31),
+			taux_ae_employe=Decimal('1.30000'),
+			taux_ae_employeur=Decimal('1.82000'),
+			max_assurable_ae=Decimal('67500.00'),
+		)
+
+		taux = Paie._taux_effectifs(date(2026, 1, 16))
+
+		self.assertEqual(taux['taux_rrq_employe'], Decimal('0.06400'))
+
 	def test_totaux_employeur_utilisent_rrq_employe_si_taux_employeur_zero(self):
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.AUX_2_SEMAINES,

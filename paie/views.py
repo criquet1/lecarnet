@@ -249,16 +249,35 @@ def _compute_employer_totals_for_period(paies, settings_instance):
 		cached_row = block_cache.get(cache_key)
 		if cached_row is not None or cache_key in block_cache:
 			return cached_row
-		candidates = [
+		active_candidates = [
 			row for row in taux_rows
 			if getattr(row, start_field) <= date_value and (getattr(row, end_field) is None or getattr(row, end_field) >= date_value)
 		]
-		if not candidates:
-			block_cache[cache_key] = None
-			return None
-		row = sorted(candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
-		block_cache[cache_key] = row
-		return row
+		if active_candidates:
+			row = sorted(active_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
+			block_cache[cache_key] = row
+			return row
+
+		started_candidates = [
+			row for row in taux_rows
+			if getattr(row, start_field) <= date_value
+		]
+		if started_candidates:
+			row = sorted(started_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
+			block_cache[cache_key] = row
+			return row
+
+		future_candidates = [
+			row for row in taux_rows
+			if getattr(row, start_field) > date_value
+		]
+		if future_candidates:
+			row = sorted(future_candidates, key=lambda row: (getattr(row, start_field), row.id))[0]
+			block_cache[cache_key] = row
+			return row
+
+		block_cache[cache_key] = None
+		return None
 
 	def _employer_from_employee(employee_amount, employe_rate, employeur_rate, fallback_to_employee=True):
 		employee_amount = _d(employee_amount)
@@ -532,16 +551,35 @@ def journal_paies_page(request):
 		cached_row = block_cache.get(cache_key)
 		if cached_row is not None or cache_key in block_cache:
 			return cached_row
-		candidates = [
+		active_candidates = [
 			row for row in taux_rows
 			if getattr(row, start_field) <= date_value and (getattr(row, end_field) is None or getattr(row, end_field) >= date_value)
 		]
-		if not candidates:
-			block_cache[cache_key] = None
-			return None
-		row = sorted(candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
-		block_cache[cache_key] = row
-		return row
+		if active_candidates:
+			row = sorted(active_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
+			block_cache[cache_key] = row
+			return row
+
+		started_candidates = [
+			row for row in taux_rows
+			if getattr(row, start_field) <= date_value
+		]
+		if started_candidates:
+			row = sorted(started_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
+			block_cache[cache_key] = row
+			return row
+
+		future_candidates = [
+			row for row in taux_rows
+			if getattr(row, start_field) > date_value
+		]
+		if future_candidates:
+			row = sorted(future_candidates, key=lambda row: (getattr(row, start_field), row.id))[0]
+			block_cache[cache_key] = row
+			return row
+
+		block_cache[cache_key] = None
+		return None
 
 	def _employer_from_employee(employee_amount, employe_rate, employeur_rate, fallback_to_employee=True):
 		employee_amount = _d(employee_amount)
@@ -1057,13 +1095,28 @@ def remises_mensuelles_page(request):
 	taux_fss_setting = _d(getattr(settings_instance, 'taux_fss_employeur', None))
 
 	def _row_for_block(date_value, start_field, end_field):
-		candidates = [
+		active_candidates = [
 			row for row in taux_rows
 			if getattr(row, start_field) <= date_value and (getattr(row, end_field) is None or getattr(row, end_field) >= date_value)
 		]
-		if not candidates:
-			return None
-		return sorted(candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
+		if active_candidates:
+			return sorted(active_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
+
+		started_candidates = [
+			row for row in taux_rows
+			if getattr(row, start_field) <= date_value
+		]
+		if started_candidates:
+			return sorted(started_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
+
+		future_candidates = [
+			row for row in taux_rows
+			if getattr(row, start_field) > date_value
+		]
+		if future_candidates:
+			return sorted(future_candidates, key=lambda row: (getattr(row, start_field), row.id))[0]
+
+		return None
 
 	def _employer_from_employee(employee_amount, employe_rate, employeur_rate, fallback_to_employee=True):
 		employee_amount = _d(employee_amount)
