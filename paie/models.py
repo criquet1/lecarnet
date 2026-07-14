@@ -419,9 +419,30 @@ class Paie(models.Model):
         if Decimal(str(rrq_max_supplementaire)) < Decimal(str(rrq_max_assurable)):
             rrq_max_supplementaire = rrq_max_assurable
 
+        rrq_rate = Paie._rate_to_ratio(
+            getattr(rrq_row, 'taux_rrq_employe', None) if rrq_row else None,
+            str(fallback_taux_rrq_base),
+        )
+        rrq_supp2_rate = Paie._rate_to_ratio(
+            getattr(rrq_row, 'taux_rrq_supplementaire_2_employe', None) if rrq_row else None,
+            str(fallback_taux_rrq_supp_2),
+        )
+
+        # Defensif prod: le taux RRQ de base doit etre positif et strictement
+        # superieur au taux supplementaire 2. Sinon, on retombe sur les valeurs
+        # de secours connues (annee 2026) pour eviter une sous-cotisation.
+        fallback_rrq_rate = fallback_taux_rrq_base / Decimal('100')
+        fallback_rrq_supp2_rate = fallback_taux_rrq_supp_2 / Decimal('100')
+        if rrq_rate <= Decimal('0'):
+            rrq_rate = fallback_rrq_rate
+        if rrq_supp2_rate < Decimal('0'):
+            rrq_supp2_rate = fallback_rrq_supp2_rate
+        if rrq_rate <= rrq_supp2_rate:
+            rrq_rate = fallback_rrq_rate
+
         return {
-            'taux_rrq_employe': Paie._rate_to_ratio(getattr(rrq_row, 'taux_rrq_employe', None) if rrq_row else None, str(fallback_taux_rrq_base)),
-            'taux_rrq_supplementaire_2_employe': Paie._rate_to_ratio(getattr(rrq_row, 'taux_rrq_supplementaire_2_employe', None) if rrq_row else None, str(fallback_taux_rrq_supp_2)),
+            'taux_rrq_employe': rrq_rate,
+            'taux_rrq_supplementaire_2_employe': rrq_supp2_rate,
             'exemption_base_rrq': Decimal(str(rrq_exemption)),
             'max_assurable_rrq': Decimal(str(rrq_max_assurable)),
             'max_supplementaire_rrq': Decimal(str(rrq_max_supplementaire)),
