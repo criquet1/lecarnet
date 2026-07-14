@@ -326,6 +326,16 @@ class Paie(models.Model):
         return Decimal(str(value)) / Decimal('100')
 
     @staticmethod
+    def _rate_to_ratio(value, fallback_percent):
+        if value in (None, ''):
+            raw = Decimal(str(fallback_percent))
+        else:
+            raw = Decimal(str(value))
+        if raw <= Decimal('1'):
+            return raw
+        return raw / Decimal('100')
+
+    @staticmethod
     def _taux_effectifs(date_reference):
         rows = list(ParametresTauxPaie.objects.using('default').all())
         fallback_taux_rrq_base = Decimal('6.30000')
@@ -377,8 +387,8 @@ class Paie(models.Model):
         fiscal_row = rrq_row or rqap_row or ae_row
 
         return {
-            'taux_rrq_employe': Paie._percent_to_ratio(getattr(rrq_row, 'taux_rrq_employe', None) if rrq_row else None, str(fallback_taux_rrq_base)),
-            'taux_rrq_supplementaire_2_employe': Paie._percent_to_ratio(getattr(rrq_row, 'taux_rrq_supplementaire_2_employe', None) if rrq_row else None, str(fallback_taux_rrq_supp_2)),
+            'taux_rrq_employe': Paie._rate_to_ratio(getattr(rrq_row, 'taux_rrq_employe', None) if rrq_row else None, str(fallback_taux_rrq_base)),
+            'taux_rrq_supplementaire_2_employe': Paie._rate_to_ratio(getattr(rrq_row, 'taux_rrq_supplementaire_2_employe', None) if rrq_row else None, str(fallback_taux_rrq_supp_2)),
             'exemption_base_rrq': getattr(rrq_row, 'exemption_base_rrq', Decimal('3500.00')) if rrq_row else Decimal('3500.00'),
             'max_assurable_rrq': getattr(rrq_row, 'max_assurable_rrq', fallback_max_assurable_rrq) if rrq_row else fallback_max_assurable_rrq,
             'max_supplementaire_rrq': getattr(rrq_row, 'max_supplementaire_rrq', fallback_max_supplementaire_rrq) if rrq_row else fallback_max_supplementaire_rrq,

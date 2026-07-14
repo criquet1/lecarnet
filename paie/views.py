@@ -264,6 +264,8 @@ def _compute_employer_totals_for_period(paies, settings_instance):
 		employee_amount = _d(employee_amount)
 		if employe_rate in (None, Decimal('0.00'), 0, '0', '0.0'):
 			return employee_amount if fallback_to_employee else Decimal('0.00')
+		if employeur_rate in (None, Decimal('0.00'), 0, '0', '0.0'):
+			return employee_amount if fallback_to_employee else Decimal('0.00')
 		ratio = Decimal(str(employeur_rate)) / Decimal(str(employe_rate))
 		return _money(employee_amount * ratio)
 
@@ -544,6 +546,8 @@ def journal_paies_page(request):
 	def _employer_from_employee(employee_amount, employe_rate, employeur_rate, fallback_to_employee=True):
 		employee_amount = _d(employee_amount)
 		if employe_rate in (None, Decimal('0.00'), 0, '0', '0.0'):
+			return employee_amount if fallback_to_employee else Decimal('0.00')
+		if employeur_rate in (None, Decimal('0.00'), 0, '0', '0.0'):
 			return employee_amount if fallback_to_employee else Decimal('0.00')
 		ratio = Decimal(str(employeur_rate)) / Decimal(str(employe_rate))
 		return _money(employee_amount * ratio)
@@ -1064,6 +1068,8 @@ def remises_mensuelles_page(request):
 	def _employer_from_employee(employee_amount, employe_rate, employeur_rate, fallback_to_employee=True):
 		employee_amount = _d(employee_amount)
 		if employe_rate in (None, Decimal('0.00'), 0, '0', '0.0'):
+			return employee_amount if fallback_to_employee else Decimal('0.00')
+		if employeur_rate in (None, Decimal('0.00'), 0, '0', '0.0'):
 			return employee_amount if fallback_to_employee else Decimal('0.00')
 		ratio = Decimal(str(employeur_rate)) / Decimal(str(employe_rate))
 		return _money(employee_amount * ratio)

@@ -729,7 +729,7 @@ class ParametresTauxPaieForm(forms.ModelForm):
             elif self.instance and getattr(self.instance, 'taux_rrq_employe', None) is not None:
                 self.initial['taux_rrq_employeur'] = self.instance.taux_rrq_employe
             else:
-                self.initial['taux_rrq_employeur'] = Decimal('0.00000')
+                self.initial['taux_rrq_employeur'] = None
 
     def clean(self):
         cleaned_data = super().clean()
@@ -747,7 +747,7 @@ class ParametresTauxPaieForm(forms.ModelForm):
                     continue
             cleaned_data[field_name] = value
 
-        if cleaned_data.get('taux_rrq_employeur') in (None, ''):
-            cleaned_data['taux_rrq_employeur'] = cleaned_data.get('taux_rrq_employe') or Decimal('0.00000')
+        # RRQ employeur est derive automatiquement du taux employe.
+        cleaned_data['taux_rrq_employeur'] = cleaned_data.get('taux_rrq_employe') or Decimal('0.00000')
 
         return cleaned_data

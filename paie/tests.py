@@ -12,8 +12,8 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from compte.models import Compte, Setting, Total
 from facture.models import Tr_desc, Tr_detail
 from paie.forms import PaieForm
-from paie.models import Employe, FrequencePaie, Paie, PeriodePaie
-from paie.views import creer_ecriture_salaire
+from paie.models import Employe, FrequencePaie, Paie, PeriodePaie, ParametresTauxPaie
+from paie.views import creer_ecriture_salaire, _compute_employer_totals_for_period
 from paie.services.das import DASInputs, calculer_das, calculer_rrq
 
 
@@ -139,6 +139,112 @@ class DASTestCase(SimpleTestCase):
 
 
 class PaieModelTestCase(TestCase):
+	def test_rrq_accepte_un_taux_deja_en_ratio(self):
+		frequence = FrequencePaie.objects.create(
+			code=FrequencePaie.AUX_2_SEMAINES,
+			nom='Aux 2 semaines',
+			nombre_periodes_par_annee=26,
+		)
+		ParametresTauxPaie.objects.using('default').create(
+			rrq_date_debut_effet=date(2026, 1, 1),
+			taux_rrq_employe=Decimal('0.06300'),
+			taux_rrq_supplementaire_2_employe=Decimal('0.04000'),
+			taux_rrq_employeur=Decimal('0.06300'),
+			exemption_base_rrq=Decimal('3500.00'),
+			max_assurable_rrq=Decimal('74600.00'),
+			max_supplementaire_rrq=Decimal('85000.00'),
+			rqap_date_debut_effet=date(2026, 1, 1),
+			taux_rqap_employe=Decimal('0.00430'),
+			taux_rqap_employeur=Decimal('0.00692'),
+			max_assurable_rqap=Decimal('98700.00'),
+			ae_date_debut_effet=date(2026, 1, 1),
+			taux_ae_employe=Decimal('0.01300'),
+			taux_ae_employeur=Decimal('0.01820'),
+			max_assurable_ae=Decimal('67500.00'),
+		)
+
+		employe = Employe.objects.create(
+			nom='Martin',
+			prenom='Noa',
+			date_embauche='2026-01-01',
+			salH='25.00',
+			frequence_paie=frequence,
+		)
+		periode = PeriodePaie.objects.create(
+			frequence_paie=frequence,
+			date_debut=date(2026, 1, 1),
+			date_fin=date(2026, 1, 14),
+			date_paie=date(2026, 1, 16),
+		)
+
+		paie = Paie.objects.create(
+			employe=employe,
+			periode=periode,
+			heures_travaillees=Decimal('40.00'),
+		)
+
+		self.assertEqual(paie.rrq, Decimal('54.52'))
+
+	def test_totaux_employeur_utilisent_rrq_employe_si_taux_employeur_zero(self):
+		frequence = FrequencePaie.objects.create(
+			code=FrequencePaie.AUX_2_SEMAINES,
+			nom='Aux 2 semaines',
+			nombre_periodes_par_annee=26,
+		)
+		ParametresTauxPaie.objects.using('default').create(
+			rrq_date_debut_effet=date(2026, 1, 1),
+			taux_rrq_employe=Decimal('6.30000'),
+			taux_rrq_supplementaire_2_employe=Decimal('4.00000'),
+			taux_rrq_employeur=Decimal('0.00000'),
+			exemption_base_rrq=Decimal('3500.00'),
+			max_assurable_rrq=Decimal('74600.00'),
+			max_supplementaire_rrq=Decimal('85000.00'),
+			rqap_date_debut_effet=date(2026, 1, 1),
+			taux_rqap_employe=Decimal('0.43000'),
+			taux_rqap_employeur=Decimal('0.69200'),
+			max_assurable_rqap=Decimal('98700.00'),
+			ae_date_debut_effet=date(2026, 1, 1),
+			taux_ae_employe=Decimal('1.30000'),
+			taux_ae_employeur=Decimal('1.82000'),
+			max_assurable_ae=Decimal('67500.00'),
+		)
+
+		employe = Employe.objects.create(
+			nom='Pineault',
+			prenom='Elio',
+			date_embauche='2026-01-01',
+			salH='25.00',
+			frequence_paie=frequence,
+		)
+		periode = PeriodePaie.objects.create(
+			frequence_paie=frequence,
+			date_debut=date(2026, 1, 1),
+			date_fin=date(2026, 1, 14),
+			date_paie=date(2026, 1, 16),
+		)
+		paie = Paie.objects.create(
+			employe=employe,
+			periode=periode,
+			heures_travaillees=Decimal('40.00'),
+		)
+
+		settings_instance = Setting.objects.create(
+			nom='Parametres employeur',
+			logo='images.png',
+			adresse='Adresse',
+			ville='Ville',
+			code_postal='A1A1A1',
+			pays='CA',
+			phone='000-000-0000',
+			email='test@example.com',
+			taux_cnesst_employeur=Decimal('0.00000'),
+			taux_fss_employeur=Decimal('0.00000'),
+		)
+
+		totals = _compute_employer_totals_for_period([paie], settings_instance)
+
+		self.assertEqual(totals['rrq_employeur'], paie.rrq)
+
 	def test_paie_utilise_les_donnees_employe_et_le_service_das(self):
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.AUX_2_SEMAINES,
