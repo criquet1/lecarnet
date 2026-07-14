@@ -404,12 +404,27 @@ class Paie(models.Model):
         ae_row = _pick('ae_date_debut_effet', 'ae_date_fin_effet')
         fiscal_row = rrq_row or rqap_row or ae_row
 
+        rrq_exemption = getattr(rrq_row, 'exemption_base_rrq', Decimal('3500.00')) if rrq_row else Decimal('3500.00')
+        rrq_max_assurable = getattr(rrq_row, 'max_assurable_rrq', fallback_max_assurable_rrq) if rrq_row else fallback_max_assurable_rrq
+        rrq_max_supplementaire = getattr(rrq_row, 'max_supplementaire_rrq', fallback_max_supplementaire_rrq) if rrq_row else fallback_max_supplementaire_rrq
+
+        # Defensif prod: si la config active contient des valeurs invalides (ex: MGA=0),
+        # revenir aux bornes RRQ de secours pour eviter un calcul erronne (ex: 4% sur tout le brut).
+        if rrq_exemption is None or Decimal(str(rrq_exemption)) < Decimal('0'):
+            rrq_exemption = Decimal('3500.00')
+        if rrq_max_assurable is None or Decimal(str(rrq_max_assurable)) <= Decimal('0'):
+            rrq_max_assurable = fallback_max_assurable_rrq
+        if rrq_max_supplementaire is None or Decimal(str(rrq_max_supplementaire)) <= Decimal('0'):
+            rrq_max_supplementaire = fallback_max_supplementaire_rrq
+        if Decimal(str(rrq_max_supplementaire)) < Decimal(str(rrq_max_assurable)):
+            rrq_max_supplementaire = rrq_max_assurable
+
         return {
             'taux_rrq_employe': Paie._rate_to_ratio(getattr(rrq_row, 'taux_rrq_employe', None) if rrq_row else None, str(fallback_taux_rrq_base)),
             'taux_rrq_supplementaire_2_employe': Paie._rate_to_ratio(getattr(rrq_row, 'taux_rrq_supplementaire_2_employe', None) if rrq_row else None, str(fallback_taux_rrq_supp_2)),
-            'exemption_base_rrq': getattr(rrq_row, 'exemption_base_rrq', Decimal('3500.00')) if rrq_row else Decimal('3500.00'),
-            'max_assurable_rrq': getattr(rrq_row, 'max_assurable_rrq', fallback_max_assurable_rrq) if rrq_row else fallback_max_assurable_rrq,
-            'max_supplementaire_rrq': getattr(rrq_row, 'max_supplementaire_rrq', fallback_max_supplementaire_rrq) if rrq_row else fallback_max_supplementaire_rrq,
+            'exemption_base_rrq': Decimal(str(rrq_exemption)),
+            'max_assurable_rrq': Decimal(str(rrq_max_assurable)),
+            'max_supplementaire_rrq': Decimal(str(rrq_max_supplementaire)),
             'taux_rqap_employe': Paie._percent_to_ratio(getattr(rqap_row, 'taux_rqap_employe', None) if rqap_row else None, str(fallback_taux_rqap)),
             'max_assurable_rqap': getattr(rqap_row, 'max_assurable_rqap', fallback_max_assurable_rqap) if rqap_row else fallback_max_assurable_rqap,
             'taux_ae_employe': Paie._percent_to_ratio(getattr(ae_row, 'taux_ae_employe', None) if ae_row else None, str(fallback_taux_ae)),

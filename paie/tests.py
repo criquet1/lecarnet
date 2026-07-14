@@ -211,6 +211,52 @@ class PaieModelTestCase(TestCase):
 
 		self.assertEqual(taux['taux_rrq_employe'], Decimal('0.06400'))
 
+	def test_rrq_ignore_un_mga_invalide_a_zero(self):
+		frequence = FrequencePaie.objects.create(
+			code=FrequencePaie.AUX_2_SEMAINES,
+			nom='Aux 2 semaines',
+			nombre_periodes_par_annee=26,
+		)
+		ParametresTauxPaie.objects.using('default').create(
+			rrq_date_debut_effet=date(2026, 1, 1),
+			taux_rrq_employe=Decimal('6.30000'),
+			taux_rrq_supplementaire_2_employe=Decimal('4.00000'),
+			taux_rrq_employeur=Decimal('6.30000'),
+			exemption_base_rrq=Decimal('3500.00'),
+			max_assurable_rrq=Decimal('0.00'),
+			max_supplementaire_rrq=Decimal('85000.00'),
+			rqap_date_debut_effet=date(2026, 1, 1),
+			taux_rqap_employe=Decimal('0.43000'),
+			taux_rqap_employeur=Decimal('0.69200'),
+			max_assurable_rqap=Decimal('98700.00'),
+			ae_date_debut_effet=date(2026, 1, 1),
+			taux_ae_employe=Decimal('1.30000'),
+			taux_ae_employeur=Decimal('1.82000'),
+			max_assurable_ae=Decimal('67500.00'),
+		)
+
+		employe = Employe.objects.create(
+			nom='Lemieux',
+			prenom='Ana',
+			date_embauche='2026-01-01',
+			salH='25.00',
+			frequence_paie=frequence,
+		)
+		periode = PeriodePaie.objects.create(
+			frequence_paie=frequence,
+			date_debut=date(2026, 1, 1),
+			date_fin=date(2026, 1, 14),
+			date_paie=date(2026, 1, 16),
+		)
+
+		paie = Paie.objects.create(
+			employe=employe,
+			periode=periode,
+			heures_travaillees=Decimal('40.00'),
+		)
+
+		self.assertEqual(paie.rrq, Decimal('54.52'))
+
 	def test_totaux_employeur_utilisent_rrq_employe_si_taux_employeur_zero(self):
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.AUX_2_SEMAINES,
