@@ -248,6 +248,12 @@
                             </tr>
                         {% endfor %}
                     </tbody>
+                    <tfoot>
+                        <tr>
+                            <th colspan="3" class="text-end">Total Solde de départ</th>
+                            <th class="text-end font-monospace {% if total_solde_depart == 0 %}text-success{% else %}text-danger{% endif %}" id="id_total_solde_depart">{{ total_solde_depart|floatformat:2 }}</th>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>
@@ -262,6 +268,7 @@
         var soldeCells = document.querySelectorAll('.solde-inline');
         var searchInput = document.getElementById('id_compte_search');
         var emptyRow = document.getElementById('empty-comptes-row');
+        var totalSoldeDepart = document.getElementById('id_total_solde_depart');
 
         function getCookie(name) {
             var cookieValue = null;
@@ -286,6 +293,25 @@
             return amount.toFixed(2);
         }
 
+        function parseAmount(value) {
+            var amount = Number(value);
+            if (isNaN(amount)) {
+                return 0;
+            }
+            return amount;
+        }
+
+        function updateTotalSoldeDepart(delta) {
+            if (!totalSoldeDepart) {
+                return;
+            }
+            var currentTotal = parseAmount(totalSoldeDepart.textContent);
+            var nextTotal = currentTotal + delta;
+            totalSoldeDepart.textContent = formatAmount(nextTotal);
+            totalSoldeDepart.classList.toggle('text-success', nextTotal === 0);
+            totalSoldeDepart.classList.toggle('text-danger', nextTotal !== 0);
+        }
+
         function makeEditable(cell) {
             if (cell.querySelector('input')) {
                 return;
@@ -294,6 +320,7 @@
             var compteId = cell.getAttribute('data-compte-id');
             var updateUrl = cell.getAttribute('data-update-url');
             var originalValue = cell.getAttribute('data-value') || '0.00';
+            var originalAmount = parseAmount(originalValue);
             var input = document.createElement('input');
             input.type = 'number';
             input.step = '0.01';
@@ -336,7 +363,9 @@
                         if (!response.ok || !data.ok) {
                             throw new Error(data.error || 'Erreur lors de la sauvegarde.');
                         }
-                        restore(formatAmount(data.solde_depart));
+                        var savedAmount = parseAmount(data.solde_depart);
+                        restore(formatAmount(savedAmount));
+                        updateTotalSoldeDepart(savedAmount - originalAmount);
                     });
                 }).catch(function () {
                     restore(originalValue);

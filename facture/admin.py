@@ -1,14 +1,15 @@
 from django.contrib import admin
 from facture.models import Compagnie, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart
 from compte.models import Setting
+from import_export.admin import ImportExportModelAdmin
 
 
-class SettingAdmin(admin.ModelAdmin):
+class SettingAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('id', 'nom', 'email', 'phone', 'adresse', 'ville', 'code_postal', 'pays')
     list_filter = ('nom',)
 
 
-class CompagnieAdmin(admin.ModelAdmin):
+class CompagnieAdmin(ImportExportModelAdmin,admin.ModelAdmin):
     list_display = ('id', 'nom', 'logo', 'get_cap_ou_car', 'get_comptes')
     list_filter = ('nom',)
     list_editable = ('nom',)
@@ -23,32 +24,32 @@ class CompagnieAdmin(admin.ModelAdmin):
     
     get_comptes.short_description = 'Comptes'
 
-class TrDescAdmin(admin.ModelAdmin):
+class TrDescAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('id', 'no_ej', 'compagnie', 'date', 'desc_ctb', 'source')
     list_filter = ('date', 'compagnie')
     search_fields = ('desc_ctb',)
     ordering = ('-date',)
 
 
-class TrDetailAdmin(admin.ModelAdmin):
+class TrDetailAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('id', 'tr_desc', 'compte', 'montant', 'rapport_taxes')
     list_filter = ('compte', 'tr_desc__compagnie')
     search_fields = ('tr_desc__no_ej', 'compte__libelle')
     ordering = ('-id',)
 
 
-class RapportTaxesAdmin(admin.ModelAdmin):
+class RapportTaxesAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('id', 'annee', 'mois', 'cree_le', 'transmis_le')
     list_filter = ('transmis_le',)
     ordering = ('-annee', '-mois', '-id')
 
-class ReleveBancaireAdmin(admin.ModelAdmin):
+class ReleveBancaireAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('id', 'fichier_source', 'nom_institut', 'no_compte', 'type_compte', 'date', 'no_ligne', 'desc_releve', 'desc_ctb')
     list_filter = ('nom_institut', 'date')
     search_fields = ('nom_institut', 'desc_releve', 'desc_ctb')
 
 
-class CompteReleveAdmin(admin.ModelAdmin):
+class CompteReleveAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('id', 'nom_affichage', 'no_compte', 'type_compte', 'type_onglet', 'compte_comptable')
     list_filter = ('type_onglet', 'type_compte')
     search_fields = ('nom_affichage', 'no_compte', 'nom_institut', 'compte_comptable__libelle')

@@ -1,17 +1,18 @@
 from django.contrib import admin
 from compte.models import Compte, SoldeAuxLivres, Total
+from import_export.admin import ImportExportModelAdmin
 
-class TotalAdmin(admin.ModelAdmin):
+class TotalAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('no_total', 'desc')
     list_filter = ('desc',)
 
 # Register your models here.
-class CompteAdmin(admin.ModelAdmin):
+class CompteAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('numero', 'libelle', 'no_total')
     list_filter = ('libelle',)
 
 
-class SoldeAuxLivresAdmin(admin.ModelAdmin):
+class SoldeAuxLivresAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('compte', 'solde_depart')
     list_filter = ('compte',)
 

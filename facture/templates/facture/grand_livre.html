@@ -88,9 +88,9 @@
                         {% for row in bloc.entries %}
                             <tr>
                                 <td>{{ row.no_ej }}</td>
-                                <td>{{ row.date|date:"Y-m-d" }}</td>
+                                <td>{% if row.date %}{{ row.date|date:"Y-m-d" }}{% endif %}</td>
                                 <td>{% if row.compagnie %}{{ row.compagnie.nom }}{% endif %}</td>
-                                <td>{{ row.description }}</td>
+                                <td>{% if row.is_solde_depart %}<em>{{ row.description }}</em>{% else %}{{ row.description }}{% endif %}</td>
                                 <td>{% if row.source %}{% if row.source.nom == 'Rapport de taxes' %}Rapp de tx{% else %}{{ row.source.nom }}{% endif %}{% endif %}</td>
                                 <td class="text-end font-monospace">{% if row.debit %}{{ row.debit|floatformat:2 }}{% endif %}</td>
                                 <td class="text-end font-monospace">{% if row.credit %}{{ row.credit|floatformat:2 }}{% endif %}</td>

@@ -110,6 +110,7 @@ def _fetch_balance_rows_from_sql_view():
 
 def _fetch_grand_livre_from_sql_view():
     db_alias = _ledger_db_alias()
+    solde_depart_par_compte = _solde_depart_par_compte()
     query = """
         SELECT
             compte_id,
@@ -165,11 +166,29 @@ def _fetch_grand_livre_from_sql_view():
                     'total_debit': Decimal('0'),
                     'total_credit': Decimal('0'),
                     'solde': Decimal('0'),
+                    'solde_depart': _coerce_decimal(solde_depart_par_compte.get(compte_id, Decimal('0'))),
                 }
+
+                solde_depart = current_block['solde_depart']
+                if current_block['is_bilan']:
+                    current_block['entries'].append({
+                        'date': None,
+                        'no_ej': '',
+                        'compagnie': None,
+                        'description': 'Solde de depart',
+                        'source': None,
+                        'debit': solde_depart if solde_depart >= 0 else Decimal('0'),
+                        'credit': abs(solde_depart) if solde_depart < 0 else Decimal('0'),
+                        'solde': solde_depart,
+                        'is_solde_depart': True,
+                    })
+                    current_block['solde'] = solde_depart
 
             debit = _coerce_decimal(debit)
             credit = _coerce_decimal(credit)
             solde = _coerce_decimal(solde)
+            solde_depart = current_block.get('solde_depart', Decimal('0'))
+            solde_avec_depart = solde_depart + solde
 
             current_block['entries'].append({
                 'date': tr_date,
@@ -179,11 +198,11 @@ def _fetch_grand_livre_from_sql_view():
                 'source': SimpleNamespace(nom=source_nom) if source_nom else None,
                 'debit': debit,
                 'credit': credit,
-                'solde': solde,
+                'solde': solde_avec_depart,
             })
             current_block['total_debit'] += debit
             current_block['total_credit'] += credit
-            current_block['solde'] = solde
+            current_block['solde'] = solde_avec_depart
             grand_total_debit += debit
             grand_total_credit += credit
 
@@ -291,7 +310,7 @@ def _closing_date_label(reference_date, settings_instance=None):
 
     closing_day = min(closing_day, monthrange(closing_year, closing_month)[1])
     month_label = MONTH_LABELS_FR[closing_month].lower()
-    return f"Pour l'année en cours au {closing_day} {month_label} {closing_year}"
+    return f"Pour l'année au {closing_day} {month_label} {closing_year}"
 
 
 def index(request):
@@ -345,6 +364,7 @@ def journal_general(request):
 
 def grand_livre(request):
     settings_instance = get_setting()
+    solde_depart_par_compte = _solde_depart_par_compte()
     report_date = Tr_desc.objects.order_by('-date').values_list('date', flat=True).first()
     report_year_label = _closing_date_label(report_date, settings_instance)
     try:
@@ -375,6 +395,20 @@ def grand_livre(request):
             if current_compte_id is None:
                 current_compte_id = detail.compte_id
                 current_compte = detail.compte
+                solde_depart = _coerce_decimal(solde_depart_par_compte.get(current_compte_id, Decimal('0')))
+                if is_bilan_account(current_compte):
+                    current_entries.append({
+                        'date': None,
+                        'no_ej': '',
+                        'compagnie': None,
+                        'description': 'Solde de depart',
+                        'source': None,
+                        'debit': solde_depart if solde_depart >= 0 else Decimal('0'),
+                        'credit': abs(solde_depart) if solde_depart < 0 else Decimal('0'),
+                        'solde': solde_depart,
+                        'is_solde_depart': True,
+                    })
+                solde = solde_depart
 
             if detail.compte_id != current_compte_id:
                 comptes.append({
@@ -391,7 +425,20 @@ def grand_livre(request):
                 current_entries = []
                 total_debit = Decimal('0')
                 total_credit = Decimal('0')
-                solde = Decimal('0')
+                solde_depart = _coerce_decimal(solde_depart_par_compte.get(current_compte_id, Decimal('0')))
+                if is_bilan_account(current_compte):
+                    current_entries.append({
+                        'date': None,
+                        'no_ej': '',
+                        'compagnie': None,
+                        'description': 'Solde de depart',
+                        'source': None,
+                        'debit': solde_depart if solde_depart >= 0 else Decimal('0'),
+                        'credit': abs(solde_depart) if solde_depart < 0 else Decimal('0'),
+                        'solde': solde_depart,
+                        'is_solde_depart': True,
+                    })
+                solde = solde_depart
 
             montant = detail.montant or Decimal('0')
             debit, credit = split_debit_credit(montant)

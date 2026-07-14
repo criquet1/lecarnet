@@ -362,6 +362,7 @@ def compte_page(request):
 	soldes_par_compte = {compte.pk: Decimal('0') for compte in comptes}
 	for solde in SoldeAuxLivres.objects.select_related('compte'):
 		soldes_par_compte[solde.compte_id] = solde.solde_depart
+	total_solde_depart = sum((soldes_par_compte.get(compte.pk, Decimal('0')) for compte in comptes), Decimal('0'))
 
 	comptes_releves = CompteReleve.objects.order_by('type_onglet', 'nom_affichage')
 
@@ -375,6 +376,7 @@ def compte_page(request):
 		'comptes': comptes,
 		'editing_compte': editing_compte,
 		'soldes_par_compte': soldes_par_compte,
+		'total_solde_depart': total_solde_depart,
 		'comptes_releves': comptes_releves,
 	})
 
