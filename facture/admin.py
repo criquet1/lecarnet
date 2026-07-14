@@ -25,10 +25,15 @@ class CompagnieAdmin(ImportExportModelAdmin,admin.ModelAdmin):
     get_comptes.short_description = 'Comptes'
 
 class TrDescAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ('id', 'no_ej', 'compagnie', 'date', 'desc_ctb', 'source')
+    list_display = ('id', 'no_ej', 'compagnie', 'date', 'transaction_releve', 'desc_ctb', 'source')
     list_filter = ('date', 'compagnie')
-    search_fields = ('desc_ctb',)
+    search_fields = ('desc_releve', 'desc_ctb')
     ordering = ('-date',)
+
+    def transaction_releve(self, obj):
+        return obj.desc_releve or ''
+
+    transaction_releve.short_description = 'Transaction relevé'
 
 
 class TrDetailAdmin(ImportExportModelAdmin, admin.ModelAdmin):

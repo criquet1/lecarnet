@@ -371,7 +371,7 @@
 
         function prefillFormFromRow(row) {
             var trDate = getField('id_trdesc_releve-date');
-            var trDescription = getField('id_trdesc_releve-description');
+            var trDescription = getField('id_trdesc_releve-desc_ctb');
             var ecritureExiste = row.dataset.ecritureCreee === '1';
             var descReleve = row.dataset.descReleve || '';
             var descCtb = row.dataset.descCtb || '';
@@ -384,7 +384,7 @@
                 trDate.value = ecritureExiste ? (row.dataset.ecritureDate || '') : (row.dataset.date || '');
             }
             if (trDescription) {
-                trDescription.value = descReleve || descCtb || '';
+                trDescription.value = descCtb || descReleve || '';
             }
             if (compagnieSelect && ecritureExiste) {
                 compagnieSelect.value = row.dataset.ecritureCompagnieId || '';

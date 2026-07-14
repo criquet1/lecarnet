@@ -1940,6 +1940,7 @@ def releve_bancaire(request):
                                 tr_desc = tr_desc_form.save(commit=False)
                                 if not tr_desc.no_ej:
                                     tr_desc.no_ej = _next_no_ej()
+                                tr_desc.desc_releve = tr_desc.desc_releve or releve.desc_releve or ''
                                 tr_desc.source = source_releve
                                 tr_desc.compagnie = compagnie_ecriture
                                 tr_desc.save()
