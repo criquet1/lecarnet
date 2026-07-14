@@ -1,6 +1,7 @@
 asgiref==3.11.1
 chardet==7.4.3
 Django==6.0.6
+django-import-export==4.4.1
 gunicorn==26.0.0
 holidays==0.99
 packaging==26.2
