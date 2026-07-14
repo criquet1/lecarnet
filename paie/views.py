@@ -3,6 +3,7 @@ import re
 from datetime import date as date_type
 from decimal import Decimal
 
+from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
@@ -13,7 +14,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from holidays import country_holidays
 
 from facture.models import Source, Tr_desc, Tr_detail
-from facture.utils import expert_required, get_setting
+from facture.utils import get_setting
 
 from .forms import EmployeForm, PaieForm, ParametresTauxPaieForm
 from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie
@@ -42,7 +43,7 @@ def _superuser_required(request):
 		raise PermissionDenied('Acces reserve au superuser.')
 
 
-@expert_required
+@login_required
 def paie_dashboard(request):
 	_ensure_default_frequences_paie()
 	paies_agg = Paie.objects.aggregate(
@@ -80,7 +81,7 @@ def paie_dashboard(request):
 	})
 
 
-@expert_required
+@login_required
 def employes_page(request):
 	_ensure_default_frequences_paie()
 	if request.method == 'POST':
@@ -100,7 +101,7 @@ def employes_page(request):
 	})
 
 
-@expert_required
+@login_required
 def employe_edit_page(request, employe_id):
 	_ensure_default_frequences_paie()
 	employe = get_object_or_404(Employe.objects.select_related('frequence_paie'), pk=employe_id)
@@ -121,7 +122,7 @@ def employe_edit_page(request, employe_id):
 	})
 
 
-@expert_required
+@login_required
 def employe_desactiver_page(request, employe_id):
 	if request.method != 'POST':
 		return redirect('paie:paie_employes')
@@ -137,7 +138,7 @@ def employe_desactiver_page(request, employe_id):
 	return redirect('paie:paie_employes')
 
 
-@expert_required
+@login_required
 def saisir_paie_page(request):
 	_ensure_default_frequences_paie()
 	if request.method == 'POST':
@@ -155,7 +156,7 @@ def saisir_paie_page(request):
 	})
 
 
-@expert_required
+@login_required
 def prochaine_periode_employe_api(request):
 	employe_id = request.GET.get('employe_id')
 	if not employe_id:
@@ -311,7 +312,7 @@ def _compute_employer_totals_for_period(paies, settings_instance):
 	return totals
 
 
-@expert_required
+@login_required
 def creer_ecriture_salaire(request, periode_id):
 	if request.method != 'POST':
 		return redirect('paie:paie_journal')
@@ -460,7 +461,7 @@ def creer_ecriture_salaire(request, periode_id):
 	return redirect('journal_general')
 
 
-@expert_required
+@login_required
 def journal_paies_page(request):
 	paies = list(
 		Paie.objects
@@ -966,7 +967,7 @@ def journal_paies_page(request):
 	})
 
 
-@expert_required
+@login_required
 def remises_mensuelles_page(request):
 	_ensure_default_frequences_paie()
 	mois_fr = {
@@ -1134,7 +1135,7 @@ def remises_mensuelles_page(request):
 	})
 
 
-@expert_required
+@login_required
 def calendrier_paie_page(request):
 	_ensure_default_frequences_paie()
 	settings_instance = get_setting(
@@ -1249,7 +1250,7 @@ def calendrier_paie_page(request):
 	})
 
 
-@expert_required
+@login_required
 def parametres_taux_page(request):
 	_superuser_required(request)
 	edit_id = request.GET.get('edit')
