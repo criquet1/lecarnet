@@ -216,7 +216,7 @@
                                     {% if tr_desc_form.desc_ctb.errors %}
                                         <div class="text-danger small mt-1">{{ tr_desc_form.desc_ctb.errors|join:", " }}</div>
                                     {% endif %}
-                                    <div class="form-text">La valeur est initialisée depuis la description relevé.</div>
+                                    <div class="form-text">La valeur est initialisée depuis la description relevé et peut être modifiée.</div>
                                 </div>
                                 <div class="col-12">
                                     <label for="id_compagnie_id" class="form-label">Compagnie (optionnelle)</label>
@@ -384,7 +384,7 @@
                 trDate.value = ecritureExiste ? (row.dataset.ecritureDate || '') : (row.dataset.date || '');
             }
             if (trDescription) {
-                trDescription.value = ecritureExiste ? (row.dataset.ecritureDescription || '') : (descCtb || descReleve);
+                trDescription.value = descReleve || descCtb || '';
             }
             if (compagnieSelect && ecritureExiste) {
                 compagnieSelect.value = row.dataset.ecritureCompagnieId || '';
