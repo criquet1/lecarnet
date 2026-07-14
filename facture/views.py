@@ -133,6 +133,7 @@ def _fetch_grand_livre_from_sql_view():
     grand_total_credit = Decimal('0')
     current_compte_id = None
     current_block = None
+    comptes_with_entries = set()
 
     with connections[db_alias].cursor() as cursor:
         cursor.execute(query)
@@ -149,6 +150,7 @@ def _fetch_grand_livre_from_sql_view():
             credit,
             solde,
         ) in cursor.fetchall():
+            comptes_with_entries.add(compte_id)
             if current_compte_id != compte_id:
                 if current_block is not None:
                     comptes.append(current_block)
@@ -208,6 +210,50 @@ def _fetch_grand_livre_from_sql_view():
 
     if current_block is not None:
         comptes.append(current_block)
+
+    # Ajoute les comptes de bilan sans mouvements mais avec solde de depart non nul.
+    missing_opening_ids = [
+        compte_id
+        for compte_id, solde_depart in solde_depart_par_compte.items()
+        if compte_id not in comptes_with_entries and _coerce_decimal(solde_depart) != Decimal('0')
+    ]
+    if missing_opening_ids:
+        comptes_map = {
+            compte.pk: compte
+            for compte in Compte.objects.filter(pk__in=missing_opening_ids)
+        }
+        for compte_id in missing_opening_ids:
+            compte = comptes_map.get(compte_id)
+            if not compte:
+                continue
+
+            numero = getattr(compte, 'numero', None) or 0
+            is_bilan = 1000 <= numero <= 3999
+            if not is_bilan:
+                continue
+
+            solde_depart = _coerce_decimal(solde_depart_par_compte.get(compte_id, Decimal('0')))
+            comptes.append({
+                'compte': compte,
+                'is_bilan': True,
+                'entries': [{
+                    'date': None,
+                    'no_ej': '',
+                    'compagnie': None,
+                    'description': 'Solde de depart',
+                    'source': None,
+                    'debit': solde_depart if solde_depart >= 0 else Decimal('0'),
+                    'credit': abs(solde_depart) if solde_depart < 0 else Decimal('0'),
+                    'solde': solde_depart,
+                    'is_solde_depart': True,
+                }],
+                'total_debit': Decimal('0'),
+                'total_credit': Decimal('0'),
+                'solde': solde_depart,
+                'solde_depart': solde_depart,
+            })
+
+    comptes.sort(key=lambda bloc: ((getattr(bloc['compte'], 'numero', None) or 0), bloc['compte'].pk or 0))
 
     grand_total_solde = grand_total_debit - grand_total_credit
     is_balanced = (grand_total_debit == grand_total_credit) and (grand_total_solde == Decimal('0'))
@@ -469,6 +515,48 @@ def grand_livre(request):
                 'total_credit': total_credit,
                 'solde': solde,
             })
+
+        comptes_with_entries = {
+            bloc['compte'].pk
+            for bloc in comptes
+            if bloc.get('compte') and getattr(bloc['compte'], 'pk', None)
+        }
+        missing_opening_ids = [
+            compte_id
+            for compte_id, solde_depart in solde_depart_par_compte.items()
+            if compte_id not in comptes_with_entries and _coerce_decimal(solde_depart) != Decimal('0')
+        ]
+        if missing_opening_ids:
+            comptes_map = {
+                compte.pk: compte
+                for compte in Compte.objects.filter(pk__in=missing_opening_ids)
+            }
+            for compte_id in missing_opening_ids:
+                compte = comptes_map.get(compte_id)
+                if not compte or not is_bilan_account(compte):
+                    continue
+
+                solde_depart = _coerce_decimal(solde_depart_par_compte.get(compte_id, Decimal('0')))
+                comptes.append({
+                    'compte': compte,
+                    'is_bilan': True,
+                    'entries': [{
+                        'date': None,
+                        'no_ej': '',
+                        'compagnie': None,
+                        'description': 'Solde de depart',
+                        'source': None,
+                        'debit': solde_depart if solde_depart >= 0 else Decimal('0'),
+                        'credit': abs(solde_depart) if solde_depart < 0 else Decimal('0'),
+                        'solde': solde_depart,
+                        'is_solde_depart': True,
+                    }],
+                    'total_debit': Decimal('0'),
+                    'total_credit': Decimal('0'),
+                    'solde': solde_depart,
+                })
+
+        comptes.sort(key=lambda bloc: ((getattr(bloc['compte'], 'numero', None) or 0), bloc['compte'].pk or 0))
 
         grand_total_solde = grand_total_debit - grand_total_credit
         is_balanced = (grand_total_debit == grand_total_credit) and (grand_total_solde == Decimal('0'))
