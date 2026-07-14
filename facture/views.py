@@ -131,6 +131,8 @@ def _fetch_grand_livre_from_sql_view():
     comptes = []
     grand_total_debit = Decimal('0')
     grand_total_credit = Decimal('0')
+    opening_total_debit = Decimal('0')
+    opening_total_credit = Decimal('0')
     current_compte_id = None
     current_block = None
     comptes_with_entries = set()
@@ -173,17 +175,21 @@ def _fetch_grand_livre_from_sql_view():
 
                 solde_depart = current_block['solde_depart']
                 if current_block['is_bilan']:
+                    opening_debit = solde_depart if solde_depart >= 0 else Decimal('0')
+                    opening_credit = abs(solde_depart) if solde_depart < 0 else Decimal('0')
                     current_block['entries'].append({
                         'date': None,
                         'no_ej': '',
                         'compagnie': None,
                         'description': 'Solde de depart',
                         'source': None,
-                        'debit': solde_depart if solde_depart >= 0 else Decimal('0'),
-                        'credit': abs(solde_depart) if solde_depart < 0 else Decimal('0'),
+                        'debit': opening_debit,
+                        'credit': opening_credit,
                         'solde': solde_depart,
                         'is_solde_depart': True,
                     })
+                    opening_total_debit += opening_debit
+                    opening_total_credit += opening_credit
                     current_block['solde'] = solde_depart
 
             debit = _coerce_decimal(debit)
@@ -233,6 +239,8 @@ def _fetch_grand_livre_from_sql_view():
                 continue
 
             solde_depart = _coerce_decimal(solde_depart_par_compte.get(compte_id, Decimal('0')))
+            opening_debit = solde_depart if solde_depart >= 0 else Decimal('0')
+            opening_credit = abs(solde_depart) if solde_depart < 0 else Decimal('0')
             comptes.append({
                 'compte': compte,
                 'is_bilan': True,
@@ -242,8 +250,8 @@ def _fetch_grand_livre_from_sql_view():
                     'compagnie': None,
                     'description': 'Solde de depart',
                     'source': None,
-                    'debit': solde_depart if solde_depart >= 0 else Decimal('0'),
-                    'credit': abs(solde_depart) if solde_depart < 0 else Decimal('0'),
+                    'debit': opening_debit,
+                    'credit': opening_credit,
                     'solde': solde_depart,
                     'is_solde_depart': True,
                 }],
@@ -252,11 +260,15 @@ def _fetch_grand_livre_from_sql_view():
                 'solde': solde_depart,
                 'solde_depart': solde_depart,
             })
+            opening_total_debit += opening_debit
+            opening_total_credit += opening_credit
 
     comptes.sort(key=lambda bloc: ((getattr(bloc['compte'], 'numero', None) or 0), bloc['compte'].pk or 0))
 
+    grand_total_debit += opening_total_debit
+    grand_total_credit += opening_total_credit
     grand_total_solde = grand_total_debit - grand_total_credit
-    is_balanced = (grand_total_debit == grand_total_credit) and (grand_total_solde == Decimal('0'))
+    is_balanced = grand_total_debit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) == grand_total_credit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
     return comptes, grand_total_debit, grand_total_credit, grand_total_solde, is_balanced
 
@@ -430,6 +442,8 @@ def grand_livre(request):
         comptes = []
         grand_total_debit = Decimal('0')
         grand_total_credit = Decimal('0')
+        opening_total_debit = Decimal('0')
+        opening_total_credit = Decimal('0')
         current_compte_id = None
         current_compte = None
         current_entries = []
@@ -443,17 +457,21 @@ def grand_livre(request):
                 current_compte = detail.compte
                 solde_depart = _coerce_decimal(solde_depart_par_compte.get(current_compte_id, Decimal('0')))
                 if is_bilan_account(current_compte):
+                    opening_debit = solde_depart if solde_depart >= 0 else Decimal('0')
+                    opening_credit = abs(solde_depart) if solde_depart < 0 else Decimal('0')
                     current_entries.append({
                         'date': None,
                         'no_ej': '',
                         'compagnie': None,
                         'description': 'Solde de depart',
                         'source': None,
-                        'debit': solde_depart if solde_depart >= 0 else Decimal('0'),
-                        'credit': abs(solde_depart) if solde_depart < 0 else Decimal('0'),
+                        'debit': opening_debit,
+                        'credit': opening_credit,
                         'solde': solde_depart,
                         'is_solde_depart': True,
                     })
+                    opening_total_debit += opening_debit
+                    opening_total_credit += opening_credit
                 solde = solde_depart
 
             if detail.compte_id != current_compte_id:
@@ -473,17 +491,21 @@ def grand_livre(request):
                 total_credit = Decimal('0')
                 solde_depart = _coerce_decimal(solde_depart_par_compte.get(current_compte_id, Decimal('0')))
                 if is_bilan_account(current_compte):
+                    opening_debit = solde_depart if solde_depart >= 0 else Decimal('0')
+                    opening_credit = abs(solde_depart) if solde_depart < 0 else Decimal('0')
                     current_entries.append({
                         'date': None,
                         'no_ej': '',
                         'compagnie': None,
                         'description': 'Solde de depart',
                         'source': None,
-                        'debit': solde_depart if solde_depart >= 0 else Decimal('0'),
-                        'credit': abs(solde_depart) if solde_depart < 0 else Decimal('0'),
+                        'debit': opening_debit,
+                        'credit': opening_credit,
                         'solde': solde_depart,
                         'is_solde_depart': True,
                     })
+                    opening_total_debit += opening_debit
+                    opening_total_credit += opening_credit
                 solde = solde_depart
 
             montant = detail.montant or Decimal('0')
@@ -537,6 +559,8 @@ def grand_livre(request):
                     continue
 
                 solde_depart = _coerce_decimal(solde_depart_par_compte.get(compte_id, Decimal('0')))
+                opening_debit = solde_depart if solde_depart >= 0 else Decimal('0')
+                opening_credit = abs(solde_depart) if solde_depart < 0 else Decimal('0')
                 comptes.append({
                     'compte': compte,
                     'is_bilan': True,
@@ -546,8 +570,8 @@ def grand_livre(request):
                         'compagnie': None,
                         'description': 'Solde de depart',
                         'source': None,
-                        'debit': solde_depart if solde_depart >= 0 else Decimal('0'),
-                        'credit': abs(solde_depart) if solde_depart < 0 else Decimal('0'),
+                        'debit': opening_debit,
+                        'credit': opening_credit,
                         'solde': solde_depart,
                         'is_solde_depart': True,
                     }],
@@ -555,11 +579,15 @@ def grand_livre(request):
                     'total_credit': Decimal('0'),
                     'solde': solde_depart,
                 })
+                opening_total_debit += opening_debit
+                opening_total_credit += opening_credit
 
         comptes.sort(key=lambda bloc: ((getattr(bloc['compte'], 'numero', None) or 0), bloc['compte'].pk or 0))
 
+        grand_total_debit += opening_total_debit
+        grand_total_credit += opening_total_credit
         grand_total_solde = grand_total_debit - grand_total_credit
-        is_balanced = (grand_total_debit == grand_total_credit) and (grand_total_solde == Decimal('0'))
+        is_balanced = grand_total_debit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) == grand_total_credit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
     return render(request, "facture/grand_livre.html", {
         'title': "Grand livre",
