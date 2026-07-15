@@ -53,13 +53,14 @@
         </li>
         {% if request.user.is_superuser or request.user|in_group:"expert" %}
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {% if current_url == 'compte' or current_url == 'settings' or current_url == 'creer_tenant' or current_url == 'totaux' or current_url == 'feuille_de_travail' or current_url == 'manage_societe_users' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <a class="nav-link dropdown-toggle {% if current_url == 'compte' or current_url == 'settings' or current_url == 'creer_tenant' or current_url == 'totaux' or current_url == 'feuille_de_travail' or current_url == 'transactions' or current_url == 'manage_societe_users' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             Administration
           </a>
           <ul class="dropdown-menu dropdown-menu-end">
             <li><a class="dropdown-item {% if current_url == 'compte' %}active{% endif %}" {% if current_url == 'compte' %}aria-current="page"{% endif %} href="{% url 'compte' %}">Comptes</a></li>
             <li><a class="dropdown-item {% if current_url == 'totaux' %}active{% endif %}" {% if current_url == 'totaux' %}aria-current="page"{% endif %} href="{% url 'totaux' %}">Totaux</a></li>
             <li><a class="dropdown-item {% if current_url == 'feuille_de_travail' %}active{% endif %}" {% if current_url == 'feuille_de_travail' %}aria-current="page"{% endif %} href="{% url 'feuille_de_travail' %}">Feuille de travail</a></li>
+            <li><a class="dropdown-item {% if current_url == 'transactions' %}active{% endif %}" {% if current_url == 'transactions' %}aria-current="page"{% endif %} href="{% url 'transactions' %}">Transactions</a></li>
             <li><a class="dropdown-item {% if current_url == 'creer_tenant' %}active{% endif %}" {% if current_url == 'creer_tenant' %}aria-current="page"{% endif %} href="{% url 'creer_tenant' %}">Créer un tenant</a></li>
             {% if request.user|in_group:"expert" %}
             <li><a class="dropdown-item {% if current_url == 'manage_societe_users' %}active{% endif %}" {% if current_url == 'manage_societe_users' %}aria-current="page"{% endif %} href="{% url 'manage_societe_users' %}">Gestion des utilisateurs</a></li>

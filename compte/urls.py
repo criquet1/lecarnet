@@ -10,4 +10,5 @@ urlpatterns = [
     path('user-password-change/', views.user_password_change_page, name='user_password_change'),
     path('totaux/', views.totaux_page, name='totaux'),
     path('feuille-de-travail/', views.feuille_de_travail_page, name='feuille_de_travail'),
+    path('transactions/', views.transactions_page, name='transactions'),
 ]

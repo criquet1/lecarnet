@@ -1,7 +1,9 @@
 from decimal import Decimal
+from datetime import date, timedelta
 import json
 import logging
 import os
+import re
 from types import SimpleNamespace
 
 from django.conf import settings
@@ -13,8 +15,9 @@ from django.core.management import call_command
 from django.db import connections, transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
-from facture.models import Compagnie, CompagnieSoldeDepart, CompteReleve
+from facture.models import Compagnie, CompagnieSoldeDepart, CompteReleve, Source, Tr_desc, Tr_detail
 from facture.utils import ensure_tax_authority_companies, expert_required, get_settings, parse_decimal, read_csv_rows
 from tenancy.models import ClientDatabase, Societe, UserClientAccess, UserSocieteAccess
 from tenancy.services import mark_user_must_change_password, set_active_client_on_session, sync_user_client_accesses, user_must_change_password
@@ -735,4 +738,185 @@ def totaux_page(request):
 def feuille_de_travail_page(request):
 	return render(request, 'compte/feuille_de_travail.html', {
 		'title': 'Feuille de travail',
+	})
+
+
+def _next_no_ej_transactions():
+	last_tr_desc = Tr_desc.objects.order_by('-id').first()
+	if not last_tr_desc:
+		return 'EJ1'
+
+	match = re.match(r'^EJ(\d+)$', last_tr_desc.no_ej or '')
+	if not match:
+		return 'EJ1'
+
+	return f"EJ{int(match.group(1)) + 1}"
+
+
+def _parse_compte_numero(raw_value):
+	value = (raw_value or '').strip()
+	if not value:
+		return None
+	match = re.match(r'^(\d{4})', value)
+	if not match:
+		return None
+	return int(match.group(1))
+
+
+def _resolve_transaction_date(raw_value):
+	value = (raw_value or '').strip().lower()
+	if value == 'today':
+		return timezone.localdate()
+	if value == 'yesterday':
+		return timezone.localdate() - timedelta(days=1)
+	try:
+		return date.fromisoformat(value)
+	except ValueError:
+		return None
+	return None
+
+
+@expert_required
+def transactions_page(request):
+	compagnies = list(Compagnie.objects.order_by('nom'))
+
+	if request.method == 'POST':
+		raw_date = (request.POST.get('date_select') or '').strip()
+		raw_compagnie_id = (request.POST.get('compagnie') or '').strip()
+		description = (request.POST.get('description') or '').strip()
+		source_name = (request.POST.get('source') or '').strip()
+
+		compte_values = request.POST.getlist('comptes_comptables[]')
+		debit_values = request.POST.getlist('montant_debit[]')
+		credit_values = request.POST.getlist('montant_credit[]')
+
+		date_value = _resolve_transaction_date(raw_date)
+		if not date_value:
+			messages.error(request, 'Veuillez selectionner une date valide.')
+			return render(request, 'compte/transactions.html', {
+				'title': 'Transactions',
+				'compagnies': compagnies,
+			})
+
+		compagnie = Compagnie.objects.filter(pk=raw_compagnie_id).first()
+		if not compagnie:
+			messages.error(request, 'Veuillez selectionner une compagnie valide.')
+			return render(request, 'compte/transactions.html', {
+				'title': 'Transactions',
+				'compagnies': compagnies,
+			})
+
+		if not description:
+			messages.error(request, 'La description est obligatoire.')
+			return render(request, 'compte/transactions.html', {
+				'title': 'Transactions',
+				'compagnies': compagnies,
+			})
+
+		if not source_name:
+			source_name = 'Manuel'
+
+		line_count = max(len(compte_values), len(debit_values), len(credit_values))
+		lines = []
+		total_debit = Decimal('0')
+		total_credit = Decimal('0')
+
+		for idx in range(line_count):
+			compte_raw = compte_values[idx] if idx < len(compte_values) else ''
+			debit_raw = debit_values[idx] if idx < len(debit_values) else ''
+			credit_raw = credit_values[idx] if idx < len(credit_values) else ''
+
+			if not (compte_raw or debit_raw or credit_raw):
+				continue
+
+			compte_numero = _parse_compte_numero(compte_raw)
+			if not compte_numero:
+				messages.error(request, f'Ligne {idx + 1}: compte comptable invalide (format attendu: 1234).')
+				return render(request, 'compte/transactions.html', {
+					'title': 'Transactions',
+					'compagnies': compagnies,
+				})
+
+			compte = Compte.objects.filter(pk=compte_numero).first()
+			if not compte:
+				messages.error(request, f'Ligne {idx + 1}: le compte {compte_numero} est introuvable.')
+				return render(request, 'compte/transactions.html', {
+					'title': 'Transactions',
+					'compagnies': compagnies,
+				})
+
+			debit_amount = parse_decimal(debit_raw) if (debit_raw or '').strip() else Decimal('0')
+			credit_amount = parse_decimal(credit_raw) if (credit_raw or '').strip() else Decimal('0')
+			if debit_amount is None or credit_amount is None:
+				messages.error(request, f'Ligne {idx + 1}: montant debit/credit invalide.')
+				return render(request, 'compte/transactions.html', {
+					'title': 'Transactions',
+					'compagnies': compagnies,
+				})
+
+			if debit_amount > 0 and credit_amount > 0:
+				messages.error(request, f'Ligne {idx + 1}: choisissez debit OU credit, pas les deux.')
+				return render(request, 'compte/transactions.html', {
+					'title': 'Transactions',
+					'compagnies': compagnies,
+				})
+
+			if debit_amount <= 0 and credit_amount <= 0:
+				messages.error(request, f'Ligne {idx + 1}: entrez un montant debit ou credit.')
+				return render(request, 'compte/transactions.html', {
+					'title': 'Transactions',
+					'compagnies': compagnies,
+				})
+
+			if debit_amount > 0:
+				total_debit += debit_amount
+				montant = debit_amount
+			else:
+				total_credit += credit_amount
+				montant = -credit_amount
+
+			lines.append({
+				'compte': compte,
+				'montant': montant,
+			})
+
+		if not lines:
+			messages.error(request, 'Ajoutez au moins une ligne comptable.')
+			return render(request, 'compte/transactions.html', {
+				'title': 'Transactions',
+				'compagnies': compagnies,
+			})
+
+		if total_debit.quantize(Decimal('0.01')) != total_credit.quantize(Decimal('0.01')):
+			messages.error(request, 'La transaction doit etre equilibree (debit = credit).')
+			return render(request, 'compte/transactions.html', {
+				'title': 'Transactions',
+				'compagnies': compagnies,
+			})
+
+		source, _ = Source.objects.get_or_create(nom=source_name[:15])
+
+		with transaction.atomic():
+			tr_desc = Tr_desc.objects.create(
+				no_ej=_next_no_ej_transactions(),
+				compagnie=compagnie,
+				date=date_value,
+				desc_releve=description,
+				desc_ctb=description[:40],
+				source=source,
+			)
+
+			for line in lines:
+				Tr_detail.objects.create(
+					tr_desc=tr_desc,
+					compte=line['compte'],
+					montant=line['montant'],
+				)
+
+		messages.success(request, f"Transaction sauvegardee ({tr_desc.no_ej}).")
+		return redirect('transactions')
+
+	return render(request, 'compte/transactions.html', {
+		'title': 'Transactions',
+		'compagnies': compagnies,
 	})
