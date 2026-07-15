@@ -12,9 +12,11 @@ from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.decorators import login_required
 from django.core.management import call_command
-from django.db import connections, transaction
+from django.db import DatabaseError, connections, transaction
+from django.db.utils import OperationalError, ProgrammingError
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.connection import ConnectionDoesNotExist
 from django.utils import timezone
 
 from facture.models import Compagnie, CompagnieSoldeDepart, CompteReleve, Source, Tr_desc, Tr_detail
@@ -780,120 +782,186 @@ def _resolve_transaction_date(raw_value):
 
 @expert_required
 def transactions_page(request):
-	compagnies = list(Compagnie.objects.order_by('nom'))
-	comptes = list(Compte.objects.order_by('numero'))
-
-	def _render_transactions_page():
-		return render(request, 'compte/transactions.html', {
-			'title': 'Transactions',
-			'compagnies': compagnies,
-			'comptes': comptes,
-		})
-
-	if request.method == 'POST':
-		raw_date = (request.POST.get('date_select') or '').strip()
-		raw_compagnie_id = (request.POST.get('compagnie') or '').strip()
-		description = (request.POST.get('description') or '').strip()
-		source_name = (request.POST.get('source') or '').strip()
-
-		compte_values = request.POST.getlist('comptes_comptables[]')
-		debit_values = request.POST.getlist('montant_debit[]')
-		credit_values = request.POST.getlist('montant_credit[]')
-
-		date_value = _resolve_transaction_date(raw_date)
-		if not date_value:
-			messages.error(request, 'Veuillez selectionner une date valide.')
-			return _render_transactions_page()
-
-		compagnie = Compagnie.objects.filter(pk=raw_compagnie_id).first()
-		if not compagnie:
-			messages.error(request, 'Veuillez selectionner une compagnie valide.')
-			return _render_transactions_page()
-
-		if not description:
-			messages.error(request, 'La description est obligatoire.')
-			return _render_transactions_page()
-
-		if not source_name:
-			source_name = 'Manuel'
-
-		line_count = max(len(compte_values), len(debit_values), len(credit_values))
-		lines = []
-		total_debit = Decimal('0')
-		total_credit = Decimal('0')
-
-		for idx in range(line_count):
-			compte_raw = compte_values[idx] if idx < len(compte_values) else ''
-			debit_raw = debit_values[idx] if idx < len(debit_values) else ''
-			credit_raw = credit_values[idx] if idx < len(credit_values) else ''
-
-			if not (compte_raw or debit_raw or credit_raw):
-				continue
-
-			compte_numero = _parse_compte_numero(compte_raw)
-			if not compte_numero:
-				messages.error(request, f'Ligne {idx + 1}: compte comptable invalide (format attendu: 1234).')
-				return _render_transactions_page()
-
-			compte = Compte.objects.filter(pk=compte_numero).first()
-			if not compte:
-				messages.error(request, f'Ligne {idx + 1}: le compte {compte_numero} est introuvable.')
-				return _render_transactions_page()
-
-			debit_amount = parse_decimal(debit_raw) if (debit_raw or '').strip() else Decimal('0')
-			credit_amount = parse_decimal(credit_raw) if (credit_raw or '').strip() else Decimal('0')
-			if debit_amount is None or credit_amount is None:
-				messages.error(request, f'Ligne {idx + 1}: montant debit/credit invalide.')
-				return _render_transactions_page()
-
-			if debit_amount > 0 and credit_amount > 0:
-				messages.error(request, f'Ligne {idx + 1}: choisissez debit OU credit, pas les deux.')
-				return _render_transactions_page()
-
-			if debit_amount <= 0 and credit_amount <= 0:
-				messages.error(request, f'Ligne {idx + 1}: entrez un montant debit ou credit.')
-				return _render_transactions_page()
-
-			if debit_amount > 0:
-				total_debit += debit_amount
-				montant = debit_amount
-			else:
-				total_credit += credit_amount
-				montant = -credit_amount
-
-			lines.append({
-				'compte': compte,
-				'montant': montant,
+	try:
+		try:
+			compagnies = list(Compagnie.objects.order_by('nom'))
+			comptes = list(Compte.objects.order_by('numero'))
+		except (OperationalError, ProgrammingError, ConnectionDoesNotExist):
+			logger.exception('Transactions indisponible: tables facture/compte manquantes sur la base active.')
+			messages.error(
+				request,
+				'La base client active n\'est pas initialisee (tables facture/compte manquantes). '
+				'Lancez les migrations tenant (migrate_tenants) puis rechargez la page.'
+			)
+			return render(request, 'compte/transactions.html', {
+				'title': 'Transactions',
+				'compagnies': [],
+				'comptes': [],
 			})
 
-		if not lines:
-			messages.error(request, 'Ajoutez au moins une ligne comptable.')
-			return _render_transactions_page()
+		def _render_transactions_page():
+			return render(request, 'compte/transactions.html', {
+				'title': 'Transactions',
+				'compagnies': compagnies,
+				'comptes': comptes,
+			})
 
-		if total_debit.quantize(Decimal('0.01')) != total_credit.quantize(Decimal('0.01')):
-			messages.error(request, 'La transaction doit etre equilibree (debit = credit).')
-			return _render_transactions_page()
+		if request.method == 'POST':
+			raw_date = (request.POST.get('date_select') or '').strip()
+			raw_compagnie_id = (request.POST.get('compagnie') or '').strip()
+			description = (request.POST.get('description') or '').strip()
+			source_name = (request.POST.get('source') or '').strip()
 
-		source, _ = Source.objects.get_or_create(nom=source_name[:15])
+			compte_values = request.POST.getlist('comptes_comptables[]')
+			debit_values = request.POST.getlist('montant_debit[]')
+			credit_values = request.POST.getlist('montant_credit[]')
 
-		with transaction.atomic():
-			tr_desc = Tr_desc.objects.create(
-				no_ej=_next_no_ej_transactions(),
-				compagnie=compagnie,
-				date=date_value,
-				desc_releve=description,
-				desc_ctb=description[:40],
-				source=source,
-			)
+			date_value = _resolve_transaction_date(raw_date)
+			if not date_value:
+				messages.error(request, 'Veuillez selectionner une date valide.')
+				return _render_transactions_page()
 
-			for line in lines:
-				Tr_detail.objects.create(
-					tr_desc=tr_desc,
-					compte=line['compte'],
-					montant=line['montant'],
+			compagnie = None
+			if raw_compagnie_id:
+				try:
+					compagnie = Compagnie.objects.filter(pk=raw_compagnie_id).first()
+				except (ValueError, TypeError):
+					messages.error(request, 'Compagnie invalide.')
+					return _render_transactions_page()
+				except (OperationalError, ProgrammingError, ConnectionDoesNotExist, DatabaseError):
+					logger.exception('Echec lecture compagnie: base active non initialisee.')
+					messages.error(
+						request,
+						'Impossible de charger la compagnie: base client active non initialisee. '
+						'Executez les migrations tenant puis reessayez.'
+					)
+					return _render_transactions_page()
+				if not compagnie:
+					messages.error(request, 'Compagnie invalide.')
+					return _render_transactions_page()
+
+			if not description:
+				messages.error(request, 'La description est obligatoire.')
+				return _render_transactions_page()
+
+			if not source_name:
+				source_name = 'Manuel'
+
+			line_count = max(len(compte_values), len(debit_values), len(credit_values))
+			lines = []
+			total_debit = Decimal('0')
+			total_credit = Decimal('0')
+
+			for idx in range(line_count):
+				compte_raw = compte_values[idx] if idx < len(compte_values) else ''
+				debit_raw = debit_values[idx] if idx < len(debit_values) else ''
+				credit_raw = credit_values[idx] if idx < len(credit_values) else ''
+
+				if not (compte_raw or debit_raw or credit_raw):
+					continue
+
+				compte_numero = _parse_compte_numero(compte_raw)
+				if not compte_numero:
+					messages.error(request, f'Ligne {idx + 1}: compte comptable invalide (format attendu: 1234).')
+					return _render_transactions_page()
+
+				try:
+					compte = Compte.objects.filter(pk=compte_numero).first()
+				except (OperationalError, ProgrammingError, ConnectionDoesNotExist, DatabaseError):
+					logger.exception('Echec lecture compte: base active non initialisee.')
+					messages.error(
+						request,
+						'Impossible de charger les comptes: base client active non initialisee. '
+						'Executez les migrations tenant puis reessayez.'
+					)
+					return _render_transactions_page()
+				if not compte:
+					messages.error(request, f'Ligne {idx + 1}: le compte {compte_numero} est introuvable.')
+					return _render_transactions_page()
+
+				debit_amount = parse_decimal(debit_raw) if (debit_raw or '').strip() else Decimal('0')
+				credit_amount = parse_decimal(credit_raw) if (credit_raw or '').strip() else Decimal('0')
+				if debit_amount is None or credit_amount is None:
+					messages.error(request, f'Ligne {idx + 1}: montant debit/credit invalide.')
+					return _render_transactions_page()
+
+				if debit_amount > 0 and credit_amount > 0:
+					messages.error(request, f'Ligne {idx + 1}: choisissez debit OU credit, pas les deux.')
+					return _render_transactions_page()
+
+				if debit_amount <= 0 and credit_amount <= 0:
+					messages.error(request, f'Ligne {idx + 1}: entrez un montant debit ou credit.')
+					return _render_transactions_page()
+
+				if debit_amount > 0:
+					total_debit += debit_amount
+					montant = debit_amount
+				else:
+					total_credit += credit_amount
+					montant = -credit_amount
+
+				lines.append({
+					'compte': compte,
+					'montant': montant,
+				})
+
+			if not lines:
+				messages.error(request, 'Ajoutez au moins une ligne comptable.')
+				return _render_transactions_page()
+
+			if total_debit.quantize(Decimal('0.01')) != total_credit.quantize(Decimal('0.01')):
+				messages.error(request, 'La transaction doit etre equilibree (debit = credit).')
+				return _render_transactions_page()
+
+			try:
+				with transaction.atomic():
+					source, _ = Source.objects.get_or_create(nom=source_name[:15])
+
+					tr_desc = Tr_desc.objects.create(
+						no_ej=_next_no_ej_transactions(),
+						compagnie=compagnie,
+						date=date_value,
+						desc_releve=description,
+						desc_ctb=description[:40],
+						source=source,
+					)
+
+					for line in lines:
+						Tr_detail.objects.create(
+							tr_desc=tr_desc,
+							compte=line['compte'],
+							montant=line['montant'],
+						)
+			except (OperationalError, ProgrammingError, ConnectionDoesNotExist, DatabaseError):
+				logger.exception('Echec sauvegarde transaction: base active non initialisee.')
+				messages.error(
+					request,
+					'Impossible de sauvegarder: la base client active n\'est pas initialisee. '
+					'Executez les migrations tenant puis reessayez.'
 				)
+				return _render_transactions_page()
+			except Exception:
+				logger.exception('Echec sauvegarde transaction: erreur non prevue.')
+				messages.error(
+					request,
+					'Impossible de sauvegarder la transaction pour le moment. '
+					'Consultez les logs serveur pour le detail technique.'
+				)
+				return _render_transactions_page()
 
-		messages.success(request, f"Transaction sauvegardee ({tr_desc.no_ej}).")
-		return redirect('transactions')
+			messages.success(request, f"Transaction sauvegardee ({tr_desc.no_ej}).")
+			return redirect('transactions')
 
-	return _render_transactions_page()
+		return _render_transactions_page()
+	except Exception:
+		logger.exception('Erreur inattendue dans transactions_page.')
+		messages.error(
+			request,
+			'Une erreur inattendue est survenue dans Transactions. '
+			'Reessayez apres avoir redemarre le serveur.'
+		)
+		return render(request, 'compte/transactions.html', {
+			'title': 'Transactions',
+			'compagnies': [],
+			'comptes': [],
+		})
