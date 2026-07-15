@@ -154,7 +154,12 @@
             <div id="line-items" class="line-items">
                 <div class="line-item">
                     <div>
-                        <input id="compte_1" name="comptes_comptables[]" type="text" placeholder="Ex: 1000 - Encaisse">
+                        <select id="compte_1" name="comptes_comptables[]">
+                            <option value="" selected disabled>Choisir un compte</option>
+                            {% for compte in comptes %}
+                                <option value="{{ compte.numero }}">{{ compte.numero }} - {{ compte.libelle }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
 
                     <div>
@@ -178,6 +183,7 @@
         (function () {
             const lineItems = document.getElementById("line-items");
             const addLineButton = document.getElementById("add-line");
+            const comptesOptionsHtml = document.getElementById("compte_1").innerHTML;
             let rowIndex = 1;
 
             addLineButton.addEventListener("click", function () {
@@ -187,7 +193,7 @@
                 row.className = "line-item";
                 row.innerHTML = [
                     '<div>',
-                    '  <input id="compte_' + rowIndex + '" name="comptes_comptables[]" type="text" placeholder="Ex: 1000 - Encaisse">',
+                    '  <select id="compte_' + rowIndex + '" name="comptes_comptables[]">' + comptesOptionsHtml + '</select>',
                     '</div>',
                     '<div>',
                     '  <input id="debit_' + rowIndex + '" name="montant_debit[]" type="text" placeholder="Montant débit">',

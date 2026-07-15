@@ -757,6 +757,8 @@ def _parse_compte_numero(raw_value):
 	value = (raw_value or '').strip()
 	if not value:
 		return None
+	if value.isdigit():
+		return int(value)
 	match = re.match(r'^(\d{4})', value)
 	if not match:
 		return None
@@ -779,6 +781,14 @@ def _resolve_transaction_date(raw_value):
 @expert_required
 def transactions_page(request):
 	compagnies = list(Compagnie.objects.order_by('nom'))
+	comptes = list(Compte.objects.order_by('numero'))
+
+	def _render_transactions_page():
+		return render(request, 'compte/transactions.html', {
+			'title': 'Transactions',
+			'compagnies': compagnies,
+			'comptes': comptes,
+		})
 
 	if request.method == 'POST':
 		raw_date = (request.POST.get('date_select') or '').strip()
@@ -793,25 +803,16 @@ def transactions_page(request):
 		date_value = _resolve_transaction_date(raw_date)
 		if not date_value:
 			messages.error(request, 'Veuillez selectionner une date valide.')
-			return render(request, 'compte/transactions.html', {
-				'title': 'Transactions',
-				'compagnies': compagnies,
-			})
+			return _render_transactions_page()
 
 		compagnie = Compagnie.objects.filter(pk=raw_compagnie_id).first()
 		if not compagnie:
 			messages.error(request, 'Veuillez selectionner une compagnie valide.')
-			return render(request, 'compte/transactions.html', {
-				'title': 'Transactions',
-				'compagnies': compagnies,
-			})
+			return _render_transactions_page()
 
 		if not description:
 			messages.error(request, 'La description est obligatoire.')
-			return render(request, 'compte/transactions.html', {
-				'title': 'Transactions',
-				'compagnies': compagnies,
-			})
+			return _render_transactions_page()
 
 		if not source_name:
 			source_name = 'Manuel'
@@ -832,41 +833,26 @@ def transactions_page(request):
 			compte_numero = _parse_compte_numero(compte_raw)
 			if not compte_numero:
 				messages.error(request, f'Ligne {idx + 1}: compte comptable invalide (format attendu: 1234).')
-				return render(request, 'compte/transactions.html', {
-					'title': 'Transactions',
-					'compagnies': compagnies,
-				})
+				return _render_transactions_page()
 
 			compte = Compte.objects.filter(pk=compte_numero).first()
 			if not compte:
 				messages.error(request, f'Ligne {idx + 1}: le compte {compte_numero} est introuvable.')
-				return render(request, 'compte/transactions.html', {
-					'title': 'Transactions',
-					'compagnies': compagnies,
-				})
+				return _render_transactions_page()
 
 			debit_amount = parse_decimal(debit_raw) if (debit_raw or '').strip() else Decimal('0')
 			credit_amount = parse_decimal(credit_raw) if (credit_raw or '').strip() else Decimal('0')
 			if debit_amount is None or credit_amount is None:
 				messages.error(request, f'Ligne {idx + 1}: montant debit/credit invalide.')
-				return render(request, 'compte/transactions.html', {
-					'title': 'Transactions',
-					'compagnies': compagnies,
-				})
+				return _render_transactions_page()
 
 			if debit_amount > 0 and credit_amount > 0:
 				messages.error(request, f'Ligne {idx + 1}: choisissez debit OU credit, pas les deux.')
-				return render(request, 'compte/transactions.html', {
-					'title': 'Transactions',
-					'compagnies': compagnies,
-				})
+				return _render_transactions_page()
 
 			if debit_amount <= 0 and credit_amount <= 0:
 				messages.error(request, f'Ligne {idx + 1}: entrez un montant debit ou credit.')
-				return render(request, 'compte/transactions.html', {
-					'title': 'Transactions',
-					'compagnies': compagnies,
-				})
+				return _render_transactions_page()
 
 			if debit_amount > 0:
 				total_debit += debit_amount
@@ -882,17 +868,11 @@ def transactions_page(request):
 
 		if not lines:
 			messages.error(request, 'Ajoutez au moins une ligne comptable.')
-			return render(request, 'compte/transactions.html', {
-				'title': 'Transactions',
-				'compagnies': compagnies,
-			})
+			return _render_transactions_page()
 
 		if total_debit.quantize(Decimal('0.01')) != total_credit.quantize(Decimal('0.01')):
 			messages.error(request, 'La transaction doit etre equilibree (debit = credit).')
-			return render(request, 'compte/transactions.html', {
-				'title': 'Transactions',
-				'compagnies': compagnies,
-			})
+			return _render_transactions_page()
 
 		source, _ = Source.objects.get_or_create(nom=source_name[:15])
 
@@ -916,7 +896,4 @@ def transactions_page(request):
 		messages.success(request, f"Transaction sauvegardee ({tr_desc.no_ej}).")
 		return redirect('transactions')
 
-	return render(request, 'compte/transactions.html', {
-		'title': 'Transactions',
-		'compagnies': compagnies,
-	})
+	return _render_transactions_page()
