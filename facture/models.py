@@ -375,3 +375,22 @@ class Releve(models.Model):
 
     def __str__(self):
         return f"{self.no_compte} {self.type_compte} {self.date} #{self.no_ligne}"
+
+
+class SoldeFin(models.Model):
+    compte = models.OneToOneField(
+        Compte,
+        on_delete=models.DO_NOTHING,
+        primary_key=True,
+        db_column='compte_id',
+    )
+    compte_numero = models.CharField(max_length=20)
+    solde_depart = models.DecimalField(max_digits=10, decimal_places=2)
+    total_transactions = models.DecimalField(max_digits=10, decimal_places=2)
+    solde_final = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        managed = False
+        db_table = 'solde_fin'
+        ordering = ['compte_numero']
+
