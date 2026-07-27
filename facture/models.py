@@ -378,13 +378,13 @@ class Releve(models.Model):
 
 
 class SoldeFin(models.Model):
-    compte = models.OneToOneField(
+    compte_numero = models.OneToOneField(
         Compte,
         on_delete=models.DO_NOTHING,
         primary_key=True,
-        db_column='compte_id',
+        db_column='compte_numero',
+        to_field='numero',
     )
-    compte_numero = models.CharField(max_length=20)
     solde_depart = models.DecimalField(max_digits=10, decimal_places=2)
     total_transactions = models.DecimalField(max_digits=10, decimal_places=2)
     solde_final = models.DecimalField(max_digits=10, decimal_places=2)
@@ -394,3 +394,38 @@ class SoldeFin(models.Model):
         db_table = 'solde_fin'
         ordering = ['compte_numero']
 
+
+class TransactionListe(models.Model):
+    transaction_id = models.IntegerField(primary_key=True)
+    no_ej = models.IntegerField()
+    date = models.DateField()
+    compagnie = models.CharField(max_length=255, null=True)
+    description = models.CharField(max_length=255, null=True)
+    source = models.CharField(max_length=255, null=True)
+    compte_numero = models.CharField(max_length=50)
+    compte_libelle = models.CharField(max_length=255)
+    rapport_taxes_id = models.IntegerField(null=True)
+    debit = models.DecimalField(max_digits=12, decimal_places=2)
+    credit = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        managed = False
+        db_table = 'transactions_liste'
+
+
+class Facture(models.Model):
+    transaction_id = models.IntegerField(primary_key=True)
+    no_ej = models.IntegerField()
+    date = models.DateField()
+    compagnie = models.CharField(max_length=255, null=True)
+    description = models.CharField(max_length=255, null=True)
+    source = models.CharField(max_length=255, null=True)
+    compte_numero = models.CharField(max_length=50)
+    compte_libelle = models.CharField(max_length=255)
+    rapport_taxes_id = models.IntegerField(null=True)
+    debit = models.DecimalField(max_digits=12, decimal_places=2)
+    credit = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        managed = False
+        db_table = 'factures'

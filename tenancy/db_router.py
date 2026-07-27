@@ -17,6 +17,10 @@ class TenantDatabaseRouter:
         return (app_label, model_name.lower()) in cls.centralized_tenant_models
 
     def db_for_read(self, model, **hints):
+        # Forcer SoldeFin à aller dans le tenant actif
+        if model._meta.model_name == 'soldefin':
+            return get_current_tenant_alias() or 'default'
+
         if self._is_centralized_tenant_model(model._meta.app_label, model._meta.model_name):
             return 'default'
         if model._meta.app_label in self.tenant_app_labels:
@@ -24,6 +28,10 @@ class TenantDatabaseRouter:
         return None
 
     def db_for_write(self, model, **hints):
+        # Forcer SoldeFin à aller dans le tenant actif
+        if model._meta.model_name == 'soldefin':
+            return get_current_tenant_alias() or 'default'
+
         if self._is_centralized_tenant_model(model._meta.app_label, model._meta.model_name):
             return 'default'
         if model._meta.app_label in self.tenant_app_labels:

@@ -15,12 +15,11 @@ db.sqlite3
 # Local PostgreSQL bootstrap config and backups
 scripts/oneclick.config.json
 scripts/oneclick.postgres.local.json
-backup/*.csv
+backup/
 
 # Generated local project data
 lecarnet_central
 staticfiles/
-backup/notes.txt
 tmp_t4127_2026.pdf
 check_all_databases.py
 reset_migrations.py

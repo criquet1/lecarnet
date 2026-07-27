@@ -4,77 +4,102 @@
 {% block title %} {{ title }} {% endblock %}
 
 {% block body %}
+
+{% if request.user.is_expert or request.user.is_superuser %}
+<div class="border rounded p-3 mb-4 bg-light" style="overflow:hidden;">
+    {% include "compte/transactions_form.html" %}
+</div>
+{% endif %}
+
 <h2 class="fw-bold text-center mb-2">{{ title }}</h2>
+
 {% if report_year_label %}
 <h2 class="fw-bold text-center mb-4">{{ report_year_label }}</h2>
 {% endif %}
 
-<div class="d-flex flex-column gap-3 mx-auto w-100" style="max-width: 840px;">
-	{% for entry in journal_entries %}
-		<div class="border rounded p-3">
-			<div class="d-flex align-items-center gap-3 flex-wrap mb-2">
-				<span>{{ entry.no_ej }}</span>
-				<span>{{ entry.date|date:"Y-m-d" }}</span>
-				<span>{{ entry.description }}</span>
-				<span>{% if entry.compagnie %}{{ entry.compagnie.nom }}{% endif %}</span>
-				<span class="ms-auto text-end"><strong>Source :</strong> {% if entry.source %}{{ entry.source.nom }}{% endif %}</span>
-			</div>
+<!-- IMPORTANT : on enlève le flex qui masquait les transactions -->
+<div class="mx-auto w-100" style="max-width: 840px;">
 
-			<div class="table-responsive">
-				<table class="table table-sm table-striped align-middle mb-0" style="table-layout: fixed; width: 100%;">
-					<colgroup>
-						<col>
-						<col style="width: 130px;">
-						<col style="width: 130px;">
-					</colgroup>
-					<thead>
-						<tr>
-							<th>Compte</th>
-							<th class="text-end text-nowrap">Débit</th>
-							<th class="text-end text-nowrap">Crédit</th>
-						</tr>
-					</thead>
-					<tbody>
-						{% for detail in entry.details.all %}
-							<tr>
-								<td>{{ detail.compte.numero }} - {{ detail.compte.libelle }}</td>
-								<td class="text-end text-nowrap font-monospace">{% if detail.montant >= 0 %}{{ detail.montant|floatformat:2 }}{% endif %}</td>
-								<td class="text-end text-nowrap font-monospace">{% if detail.montant < 0 %}{{ detail.montant|floatformat:2|slice:"1:" }}{% endif %}</td>
-							</tr>
-						{% empty %}
-							<tr>
-								<td colspan="3" class="text-muted">Aucune ligne de détail</td>
-							</tr>
-						{% endfor %}
-					</tbody>
-				</table>
-			</div>
-		</div>
-	{% empty %}
-		<div class="text-center text-muted">Aucune écriture pour le moment.</div>
-	{% endfor %}
+    {% for entry in journal_entries %}
+        <div class="border rounded p-3 mb-3">
+            <div class="d-flex align-items-center gap-3 flex-wrap mb-2">
+                <span>{{ entry.no_ej }}</span>
+                <span>{{ entry.date|date:"Y-m-d" }}</span>
+                <span>{{ entry.description }}</span>
+                <span>{% if entry.compagnie %}{{ entry.compagnie.nom }}{% endif %}</span>
+                <span class="ms-auto text-end">
+                    <strong>Source :</strong>
+                    {% if entry.source %}{{ entry.source.nom }}{% endif %}
+                </span>
+            </div>
 
-	<div class="border rounded p-3">
-		<table class="table table-sm align-middle mb-0" style="table-layout: fixed; width: 100%;">
-			<colgroup>
-				<col>
-				<col style="width: 130px;">
-				<col style="width: 130px;">
-			</colgroup>
-			<tbody>
-				<tr>
-					<th>Totaux généraux</th>
-					<th class="text-end text-nowrap font-monospace">{{ total_debit|floatformat:2 }}</th>
-					<th class="text-end text-nowrap font-monospace">{{ total_credit|floatformat:2 }}</th>
-				</tr>
-			</tbody>
-		</table>
-	</div>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle mb-0" style="table-layout: fixed; width: 100%;">
+                    <colgroup>
+                        <col>
+                        <col style="width: 130px;">
+                        <col style="width: 130px;">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th class="text-end text-nowrap">Débit</th>
+                            <th class="text-end text-nowrap">Crédit</th>
+                        </tr>
+                    </thead>
+<tbody>
+    {% for detail in entry.details.all %}
+        <tr>
+            <td class="{% if detail.montant < 0 %}indent-credit{% endif %}">
+                {{ detail.compte.numero }} - {{ detail.compte.libelle }}
+            </td>
+
+            <td class="text-end text-nowrap font-monospace">
+                {% if detail.montant >= 0 %}
+                    {{ detail.montant|floatformat:2 }}
+                {% endif %}
+            </td>
+
+            <td class="text-end text-nowrap font-monospace">
+                {% if detail.montant < 0 %}
+                    {{ detail.montant|floatformat:2|slice:"1:" }}
+                {% endif %}
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="3" class="text-muted">Aucune ligne de détail</td>
+        </tr>
+    {% endfor %}
+</tbody>
+
+                </table>
+            </div>
+        </div>
+    {% empty %}
+        <div class="text-center text-muted">Aucune écriture pour le moment.</div>
+    {% endfor %}
+
+    <div class="border rounded p-3 mt-4">
+        <table class="table table-sm align-middle mb-0" style="table-layout: fixed; width: 100%;">
+            <colgroup>
+                <col>
+                <col style="width: 130px;">
+                <col style="width: 130px;">
+            </colgroup>
+            <tbody>
+                <tr>
+                    <th>Totaux généraux</th>
+                    <th class="text-end text-nowrap font-monospace">{{ total_debit|floatformat:2 }}</th>
+                    <th class="text-end text-nowrap font-monospace">{{ total_credit|floatformat:2 }}</th>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
 </div>
-
 
 {% endblock %}
 
 {% block scripts %}
-    
 {% endblock %}
