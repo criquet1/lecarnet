@@ -391,7 +391,7 @@ class SoldeFin(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'solde_fin'
+        db_table = '"public"."solde_fin"'
         ordering = ['compte_numero']
 
 

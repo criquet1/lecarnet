@@ -11,7 +11,7 @@
 
                 {% if user.is_authenticated %}
                     <div class="d-grid gap-2">
-                        <a href="{% url 'accueil' %}" class="btn btn-primary">Entrer dans l'application</a>
+                        <a href="{% url 'accueil' %}" class="btn btn-primary">Bonjour</a>
                     </div>
                 {% else %}
                     <form method="post" action="{% url 'login' %}">

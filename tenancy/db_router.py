@@ -17,7 +17,6 @@ class TenantDatabaseRouter:
         return (app_label, model_name.lower()) in cls.centralized_tenant_models
 
     def db_for_read(self, model, **hints):
-        # Forcer SoldeFin à aller dans le tenant actif
         if model._meta.model_name == 'soldefin':
             return get_current_tenant_alias() or 'default'
 
@@ -28,7 +27,6 @@ class TenantDatabaseRouter:
         return None
 
     def db_for_write(self, model, **hints):
-        # Forcer SoldeFin à aller dans le tenant actif
         if model._meta.model_name == 'soldefin':
             return get_current_tenant_alias() or 'default'
 
@@ -49,8 +47,6 @@ class TenantDatabaseRouter:
     def allow_migrate(self, db, app_label, model_name=None, **hints):
         running_tests = 'test' in sys.argv
         if app_label == 'paie' and model_name is None:
-            # Les operations RunPython de paie (sans model_name) doivent pouvoir
-            # s'executer aussi sur default pour centraliser ParametresTauxPaie.
             return True
         if self._is_centralized_tenant_model(app_label, model_name):
             return db == 'default' or running_tests
@@ -59,3 +55,7 @@ class TenantDatabaseRouter:
         if app_label in self.central_app_labels:
             return db == 'default'
         return None
+
+
+    
+    
