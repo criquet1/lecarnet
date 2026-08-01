@@ -622,6 +622,7 @@ class PaieForm(forms.ModelForm):
             )
 
         self.instance.periode = periode
+        self.instance.taux_horaire = self.cleaned_data['taux_horaire']
         return super().save(commit=commit)
 
 

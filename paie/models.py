@@ -415,6 +415,13 @@ class Paie(models.Model):
     
     def recalculer(self):
         taux_horaire = self.taux_horaire if self.taux_horaire is not None else self.employe.taux_horaire_defaut
+        heures_travaillees = self._decimal_or_zero(self.heures_travaillees)
+        taux_horaire = self._decimal_or_zero(taux_horaire)
+        if heures_travaillees > 0 and taux_horaire <= 0:
+            raise ValidationError(
+                'Le taux horaire de cet employe est absent ou invalide. Corrigez sa fiche avant de calculer la paie.'
+            )
+
         credit_federal = (
             self.montant_personnel_federal_td1
             if self.montant_personnel_federal_td1 is not None
@@ -432,7 +439,7 @@ class Paie(models.Model):
 
         self.vacances_payees = self._decimal_or_zero(self.vacances_payees)
         salaire_brut_periode = (
-            self._decimal_or_zero(self.heures_travaillees) * self._decimal_or_zero(taux_horaire)
+            heures_travaillees * taux_horaire
             + self.vacances_payees
         )
         cumuls = self._cumuls_precedents()

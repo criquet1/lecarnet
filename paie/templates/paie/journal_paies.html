@@ -34,6 +34,12 @@
 
 {% block content %}
 
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} no-print" role="alert">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
 <ul class="nav nav-tabs mb-3" id="journalTabs" role="tablist">
     <li class="nav-item" role="presentation">
         <button class="nav-link active" id="journal-total-tab" data-bs-toggle="tab" data-bs-target="#journal-total" type="button" role="tab" aria-controls="journal-total" aria-selected="true">Total</button>
