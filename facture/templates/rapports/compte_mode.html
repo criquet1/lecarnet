@@ -8,6 +8,22 @@
     {% if report_year_label %}{{ report_year_label }}{% else %}Détail des soldes par compagnie.{% endif %}
 {% endblock %}
 
+{% block page_actions %}
+    {% include "includes/components/print_button.html" %}
+{% endblock %}
+
+{% block page_css %}
+<style>
+    @media print {
+        @page { size: letter landscape; }
+
+        table {
+            font-size: .7rem;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 
 <div class="mx-auto w-100" style="max-width: 980px;">

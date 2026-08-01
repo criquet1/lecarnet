@@ -27,6 +27,10 @@
             <div class="col-md-6">
                 <label class="form-label" for="{{ form.employe.id_for_label }}">Employé</label>
                 {{ form.employe }}{{ form.employe.errors }}
+                <div class="form-text">
+                    Taux horaire utilisé :
+                    <span id="taux-horaire-display">---</span> $/h
+                </div>
             </div>
             <div class="col-md-6">
                 <label class="form-label" for="{{ form.periode_date_paie.id_for_label }}">Date de paiement</label>
@@ -177,6 +181,17 @@
         const dateFinInput = document.getElementById('{{ form.periode_date_fin.id_for_label }}');
         const datePaieInput = document.getElementById('{{ form.periode_date_paie.id_for_label }}');
         const vacancesSoldeDisplay = document.getElementById('vacances-solde-display');
+        const tauxHoraireDisplay = document.getElementById('taux-horaire-display');
+
+        function updateTauxHoraire(value) {
+            if (!tauxHoraireDisplay) {
+                return;
+            }
+            const taux = Number.parseFloat((value || '0').replace(',', '.'));
+            tauxHoraireDisplay.textContent = Number.isFinite(taux) ? taux.toFixed(2) : '0.00';
+            tauxHoraireDisplay.classList.toggle('text-danger', !Number.isFinite(taux) || taux <= 0);
+            tauxHoraireDisplay.classList.toggle('fw-semibold', !Number.isFinite(taux) || taux <= 0);
+        }
 
         function updateDatePaieFromSelect() {
             if (!dateFinInput || !datePaieInput) {
@@ -198,6 +213,7 @@
                 if (vacancesSoldeDisplay) {
                     vacancesSoldeDisplay.textContent = '0.00';
                 }
+                updateTauxHoraire('0');
                 return;
             }
 
@@ -214,6 +230,7 @@
                     if (vacancesSoldeDisplay) {
                         vacancesSoldeDisplay.textContent = '0.00';
                     }
+                    updateTauxHoraire('0');
                     return;
                 }
 
@@ -246,6 +263,7 @@
                 if (vacancesSoldeDisplay) {
                     vacancesSoldeDisplay.textContent = payload.vacances_cumulees || '0.00';
                 }
+                updateTauxHoraire(payload.taux_horaire);
             } catch (error) {
                 dateFinInput.innerHTML = '<option value="">---</option>';
                 dateFinInput.value = '';
@@ -253,6 +271,7 @@
                 if (vacancesSoldeDisplay) {
                     vacancesSoldeDisplay.textContent = '0.00';
                 }
+                updateTauxHoraire('0');
             }
         }
 

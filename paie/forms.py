@@ -67,6 +67,19 @@ class EmployeForm(forms.ModelForm):
             if settings_instance and settings_instance.frequence_paie_id:
                 self.fields['frequence_paie'].initial = settings_instance.frequence_paie_id
 
+    def clean_salH(self):
+        raw_value = (self.cleaned_data.get('salH') or '').strip()
+        normalized = raw_value.replace('\u00a0', '').replace(' ', '').replace('$', '').replace(',', '.')
+        try:
+            hourly_rate = Decimal(normalized)
+        except (InvalidOperation, TypeError, ValueError):
+            raise forms.ValidationError('Saisissez un taux horaire valide, par exemple 25,00.')
+
+        if hourly_rate <= 0:
+            raise forms.ValidationError('Le taux horaire doit etre superieur a zero.')
+
+        return str(hourly_rate.quantize(Decimal('0.01')))
+
     def clean_taux_vacances(self):
         raw_value = (self.cleaned_data.get('taux_vacances') or '').strip()
         if not raw_value:
@@ -524,7 +537,16 @@ class PaieForm(forms.ModelForm):
         cleaned_data['montant_personnel_federal_td1'] = employe.montant_personnel_federal_defaut
         cleaned_data['montant_personnel_quebec_tp1015'] = employe.montant_personnel_quebec_defaut
 
-        salaire_brut = self._decimal_or_zero(cleaned_data.get('heures_travaillees')) * self._decimal_or_zero(cleaned_data.get('taux_horaire'))
+        heures_travaillees = self._decimal_or_zero(cleaned_data.get('heures_travaillees'))
+        taux_horaire = self._decimal_or_zero(cleaned_data.get('taux_horaire'))
+        if heures_travaillees > 0 and taux_horaire <= 0:
+            self.add_error(
+                'employe',
+                'Le taux horaire de cet employe est absent ou invalide. Corrigez sa fiche avant de calculer la paie.',
+            )
+            return cleaned_data
+
+        salaire_brut = heures_travaillees * taux_horaire
         salaire_brut += self._decimal_or_zero(cleaned_data.get('vacances_payees'))
         taux_vacances = self._decimal_or_zero(employe.taux_vacances)
         cleaned_data['vacances'] = (salaire_brut * taux_vacances).quantize(Decimal('0.01'))

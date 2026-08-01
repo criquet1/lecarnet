@@ -14,7 +14,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 
 from compte.models import Compte, Setting, Total
 from facture.models import Tr_desc, Tr_detail
-from paie.forms import PaieForm
+from paie.forms import EmployeForm, PaieForm
 from paie.models import Employe, FrequencePaie, Paie, PeriodePaie, ParametresTauxPaie
 from paie.views import creer_ecriture_salaire, journal_paies_page, _compute_employer_totals_for_period
 from paie.services.das import DASInputs, calculer_das, calculer_rrq
@@ -142,6 +142,45 @@ class DASTestCase(SimpleTestCase):
 
 
 class PaieModelTestCase(TestCase):
+	def test_taux_horaire_employe_accepte_la_virgule_decimale(self):
+		employe = Employe(salH='25,50 $')
+
+		self.assertEqual(employe.taux_horaire_defaut, Decimal('25.50'))
+
+	def test_formulaire_employe_refuse_un_taux_horaire_nul(self):
+		form = EmployeForm(data={
+			'nom': 'Sans taux',
+			'prenom': 'Test',
+			'date_embauche': '2026-01-01',
+			'salH': '0',
+			'taux_vacances': '4',
+			'actif': True,
+		})
+
+		self.assertFalse(form.is_valid())
+		self.assertIn('salH', form.errors)
+
+	def test_saisie_paie_refuse_des_heures_avec_un_taux_horaire_nul(self):
+		frequence = FrequencePaie.objects.create(
+			code=FrequencePaie.AUX_2_SEMAINES,
+			nom='Aux 2 semaines',
+			nombre_periodes_par_annee=26,
+		)
+		employe = Employe.objects.create(
+			nom='Sans taux',
+			prenom='Paie',
+			date_embauche='2026-01-01',
+			salH='0.00',
+			frequence_paie=frequence,
+		)
+		form = PaieForm(data={
+			'employe': employe.pk,
+			'heures_travaillees': '40.00',
+		})
+
+		self.assertFalse(form.is_valid())
+		self.assertIn('taux horaire', form.errors['employe'][0].lower())
+
 	def test_rrq_accepte_un_taux_deja_en_ratio(self):
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.AUX_2_SEMAINES,

@@ -6,6 +6,10 @@
 
 {% block page_subtitle %}Calendrier des jours de paie et des jours fériés.{% endblock %}
 
+{% block page_actions %}
+{% include "includes/components/print_button.html" %}
+{% endblock %}
+
 {% block page_css %}
 <style>
     .calendar-grid {
@@ -59,11 +63,25 @@
         text-align: left;
         font-size: 0.78rem;
     }
+
+    @media print {
+        @page { size: letter landscape; }
+
+        .calendar-grid tbody tr,
+        .calendar-day {
+            height: 82px;
+        }
+
+        .calendar-day {
+            print-color-adjust: exact;
+            -webkit-print-color-adjust: exact;
+        }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="text-center mb-4">
+<div class="text-center mb-4 no-print">
     <div class="d-flex justify-content-center align-items-center gap-2 flex-wrap">
         <a href="?mois={{ previous_year_value }}" class="btn btn-outline-secondary btn-sm">Année précédente</a>
         <a href="?mois={{ previous_month_value }}" class="btn btn-outline-secondary">Précédent</a>

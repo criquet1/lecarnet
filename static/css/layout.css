@@ -59,3 +59,59 @@ body{
     display:flex;
     gap:15px;
 }
+
+/*=====================================================
+  IMPRESSION
+======================================================*/
+
+@media print {
+  @page {
+    size: letter;
+    margin: 12mm;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .sidebar,
+  .app-topbar,
+  .page-actions,
+  .site-footer,
+  .no-print {
+    display: none !important;
+  }
+
+  .app-layout,
+  .app-main {
+    display: block;
+    min-height: auto;
+  }
+
+  .app-content {
+    padding: 0;
+  }
+
+  .page-header {
+    align-items: flex-start;
+    margin-bottom: 16px;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+  }
+
+  .page-subtitle {
+    margin: 4px 0 0;
+  }
+
+  .table-responsive {
+    overflow: visible !important;
+  }
+
+  .card,
+  .shadow,
+  .shadow-sm {
+    box-shadow: none !important;
+  }
+}

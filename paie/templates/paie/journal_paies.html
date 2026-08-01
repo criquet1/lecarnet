@@ -7,7 +7,29 @@
 {% block page_subtitle %}Sommaire des paies et des retenues par période et par employé.{% endblock %}
 
 {% block page_actions %}
+{% include "includes/components/print_button.html" %}
 <a href="{% url 'paie:paie_saisir' %}" class="btn btn-primary">Saisir une paie</a>
+{% endblock %}
+
+{% block page_css %}
+<style>
+    @media print {
+        @page { size: letter landscape; }
+
+        #journalTabs {
+            display: none;
+        }
+
+        #journalTabsContent table {
+            font-size: .52rem;
+        }
+
+        #journalTabsContent th,
+        #journalTabsContent td {
+            padding: .15rem .2rem;
+        }
+    }
+</style>
 {% endblock %}
 
 {% block content %}

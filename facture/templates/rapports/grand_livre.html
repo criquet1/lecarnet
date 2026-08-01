@@ -9,6 +9,27 @@
     {% if report_year_label %}{{ report_year_label }}{% else %}Mouvements et soldes détaillés par compte.{% endif %}
 {% endblock %}
 
+{% block page_actions %}
+    {% include "includes/components/print_button.html" %}
+{% endblock %}
+
+{% block page_css %}
+<style>
+    @media print {
+        @page { size: letter landscape; }
+
+        .grand-livre-table {
+            font-size: .68rem;
+        }
+
+        .grand-livre-table th,
+        .grand-livre-table td {
+            padding: .2rem .3rem;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 
 <style>

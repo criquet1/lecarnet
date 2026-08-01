@@ -9,10 +9,14 @@
     {% if report_year_label %}{{ report_year_label }}{% else %}Détail chronologique des écritures comptables.{% endif %}
 {% endblock %}
 
+{% block page_actions %}
+    {% include "includes/components/print_button.html" %}
+{% endblock %}
+
 {% block content %}
 
 {% if request.user.is_expert or request.user.is_superuser %}
-<div class="border rounded p-3 mb-4 bg-light" style="overflow:hidden;">
+<div class="border rounded p-3 mb-4 bg-light no-print" style="overflow:hidden;">
     {% include "compte/transactions_form.html" %}
 </div>
 {% endif %}

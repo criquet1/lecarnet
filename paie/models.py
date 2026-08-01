@@ -70,7 +70,8 @@ class Employe(models.Model):
         if valeur in (None, ''):
             return Decimal('0.00')
         try:
-            return Decimal(str(valeur))
+            normalized = str(valeur).strip().replace('\u00a0', '').replace(' ', '').replace('$', '').replace(',', '.')
+            return Decimal(normalized)
         except (InvalidOperation, TypeError, ValueError):
             return Decimal('0.00')
 
