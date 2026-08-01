@@ -2,9 +2,12 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block body %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}Sommaire mensuel des retenues fédérales et provinciales.{% endblock %}
+
+{% block content %}
 <div class="text-center mb-4">
-    <h2 class="fw-bold mb-3">{{ title }}</h2>
     <div class="d-inline-flex align-items-center gap-2 justify-content-center flex-wrap">
         <a href="?mois={{ previous_year_value }}" class="btn btn-outline-secondary btn-sm">
             Année précédente

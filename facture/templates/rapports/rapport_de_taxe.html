@@ -1,26 +1,21 @@
 {% extends "layouts/app_base.html" %}
 {% load static %}
 
-{% block extrastyle %}
-<link rel="stylesheet" href="{% static 'css/taxes_report.css' %}">
+{% block page_css %}
+<link rel="stylesheet" href="{% static 'css/pages/taxes.css' %}">
 {% endblock %}
 
 {% block title %} {{ title }} {% endblock %}
 
-{% block body %}
-<h2 class="fw-bold text-center mb-2">{{ title }}</h2>
-{% if report_year_label %}
-<h2 class="fw-bold text-center mb-4">{{ report_year_label }}</h2>
-{% endif %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}
+    {% if report_year_label %}{{ report_year_label }}{% else %}Préparation et transmission des taxes de la période de travail.{% endif %}
+{% endblock %}
+
+{% block content %}
 
 <div class="mx-auto w-100" style="max-width: 980px;">
-    <form method="get" class="row g-2 align-items-end mb-3">
-        <div class="col-auto">
-            <label for="id_mois" class="form-label mb-1">Periode mensuelle</label>
-            <input id="id_mois" type="month" name="mois" class="form-control form-control-sm" value="{{ selected_month_value }}" onchange="this.form.submit()">
-        </div>
-    </form>
-
     {% for msg in feedback %}
         <div class="alert alert-success py-2">{{ msg }}</div>
     {% endfor %}

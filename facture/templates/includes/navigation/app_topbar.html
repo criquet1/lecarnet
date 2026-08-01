@@ -1,0 +1,60 @@
+{% load static %}
+
+<header class="app-topbar">
+
+    <div class="topbar-left">
+
+        <img
+            src="{% static 'images/logos/' %}{{ site_settings.logo }}"
+            alt="{{ site_settings.nom }}"
+            class="topbar-company-logo">
+
+        <div class="topbar-company">
+
+            <span class="company-label">
+                {{ site_settings.nom }}
+            </span>
+
+        </div>
+
+    </div>
+
+    <div class="topbar-right">
+
+        <form method="post"
+              action="{% url 'update_working_period' %}"
+              class="topbar-period-form"
+              data-storage-key="working_period_{{ working_period.tenant_key }}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <label for="working-period" class="topbar-period-label">
+                <i class="bi bi-calendar3"></i>
+                <span>Période de travail</span>
+            </label>
+            <input id="working-period"
+                   type="month"
+                   name="period"
+                   value="{{ working_period.value }}"
+                   class="form-control form-control-sm topbar-period-input"
+                   aria-label="Période de travail">
+        </form>
+
+    </div>
+
+</header>
+
+<script>
+    (function () {
+        var form = document.querySelector('.topbar-period-form');
+        var input = document.getElementById('working-period');
+        if (!form || !input) {
+            return;
+        }
+
+        localStorage.setItem(form.dataset.storageKey, input.value);
+        input.addEventListener('change', function () {
+            localStorage.setItem(form.dataset.storageKey, input.value);
+            form.requestSubmit();
+        });
+    })();
+</script>

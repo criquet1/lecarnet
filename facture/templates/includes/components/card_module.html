@@ -1,0 +1,40 @@
+<div class="card-module">
+
+    <div class="card-module-header">
+
+        <div class="card-module-icon">
+            <i class="bi {{ icon }}"></i>
+        </div>
+
+        <div class="card-module-title">
+
+            <h3>{{ titre }}</h3>
+
+            {% if sous_titre %}
+                <small>{{ sous_titre }}</small>
+            {% endif %}
+
+        </div>
+
+    </div>
+
+
+    <div class="card-module-body">
+
+        {% block card_body %}
+        {% endblock %}
+
+    </div>
+
+
+    <div class="card-module-footer">
+
+        <a href="{{ url }}">
+
+            Ouvrir →
+
+        </a>
+
+    </div>
+
+</div>

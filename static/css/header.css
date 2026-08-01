@@ -1,0 +1,114 @@
+/*=====================================================
+TOPBAR
+======================================================*/
+
+.app-topbar{
+
+    height:72px;
+
+    padding:0 32px;
+
+    background:white;
+
+    border-bottom:1px solid #edf1f7;
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+}
+
+.topbar-left{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:18px;
+
+}
+
+.topbar-company-logo{
+
+    width:52px;
+
+    height:52px;
+
+    object-fit:contain;
+
+    border-radius:14px;
+
+    background:white;
+
+    padding:4px;
+
+    box-shadow:0 5px 18px rgba(0,0,0,.10);
+
+}
+
+.topbar-company{
+
+    display:flex;
+
+    flex-direction:column;
+
+}
+
+.company-label{
+
+    font-size:1.15rem;
+
+    font-weight:700;
+
+    color:#222;
+
+}
+
+.topbar-date{
+
+    color:#7c869e;
+
+    font-weight:600;
+
+}
+
+.topbar-period-form {
+    display:flex;
+    align-items:center;
+    gap:12px;
+}
+
+.topbar-period-label {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin:0;
+    color:#596174;
+    font-size:.9rem;
+    font-weight:600;
+    white-space:nowrap;
+}
+
+.topbar-period-input {
+    width:150px;
+}
+
+@media (max-width: 640px) {
+    .app-topbar {
+        padding:0 16px;
+    }
+
+    .topbar-period-form {
+        gap:6px;
+    }
+
+    .topbar-period-label span {
+        display:none;
+    }
+
+    .topbar-period-input {
+        width:132px;
+    }
+}

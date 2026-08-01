@@ -2,8 +2,11 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block body %}
-<h2 class="fw-bold mb-4">{{ title }}</h2>
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}Création et gestion des employés du client actif.{% endblock %}
+
+{% block content %}
 
 {% if messages %}
     {% for message in messages %}

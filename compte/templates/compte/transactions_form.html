@@ -65,7 +65,8 @@
                             class="form-select form-select-sm">
                         <option value="" selected disabled>Choisir un compte</option>
                         {% for compte in comptes %}
-                            <option value="{{ compte.numero }}">
+                            <option value="{{ compte.numero }}"
+                                    data-requires-company="{% if compte.pk == compte_cap_id or compte.pk == compte_car_id %}1{% else %}0{% endif %}">
                                 {{ compte.numero }} - {{ compte.libelle }}
                             </option>
                         {% endfor %}
@@ -102,8 +103,25 @@
 (function () {
     const lineItems = document.getElementById("line-items");
     const addLineButton = document.getElementById("add-line");
+    const companySelect = document.getElementById("compagnie");
     const comptesOptionsHtml = document.getElementById("compte_1").innerHTML;
     let rowIndex = 1;
+
+    function syncCompanyRequirement() {
+        const accountSelects = lineItems.querySelectorAll('select[name="comptes_comptables[]"]');
+        const companyRequired = Array.from(accountSelects).some(function (select) {
+            const option = select.options[select.selectedIndex];
+            return option && option.dataset.requiresCompany === "1";
+        });
+
+        companySelect.required = companyRequired;
+    }
+
+    lineItems.addEventListener("change", function (event) {
+        if (event.target.matches('select[name="comptes_comptables[]"]')) {
+            syncCompanyRequirement();
+        }
+    });
 
     addLineButton.addEventListener("click", function () {
         rowIndex += 1;
@@ -123,6 +141,9 @@
         ].join('');
 
         lineItems.appendChild(row);
+        syncCompanyRequirement();
     });
+
+    syncCompanyRequirement();
 })();
 </script>

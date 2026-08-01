@@ -1,0 +1,112 @@
+<section class="hero">
+
+    <div class="container-xl">
+
+        <div class="hero-grid">
+
+            <!-- Colonne gauche -->
+
+            <div>
+
+                <h1 class="hero-title">
+
+                    Bienvenue dans<br>
+
+                    votre <span>espace de gestion</span>
+
+                </h1>
+
+                <p class="hero-text">
+
+                    Gérez vos factures, relevés, paie et rapports
+                    en toute simplicité.
+                    Tout ce dont vous avez besoin,
+                    au même endroit.
+
+                </p>
+
+                <div class="hero-buttons">
+
+                    <a href="{% url 'login' %}" class="login-btn">
+
+                        <i class="bi bi-person"></i>
+
+                        Se connecter
+
+                    </a>
+
+                </div>
+
+                <div class="features">
+
+                    <div class="feature">
+
+                        <div class="feature-icon">
+
+                            <i class="bi bi-shield-check"></i>
+
+                        </div>
+
+                        <div>
+
+                            <h5>Sécurisé</h5>
+
+                            <p>Vos données sont protégées.</p>
+
+                        </div>
+
+                    </div>
+
+                    <div class="feature">
+
+                        <div class="feature-icon">
+
+                            <i class="bi bi-clock-history"></i>
+
+                        </div>
+
+                        <div>
+
+                            <h5>Rapide</h5>
+
+                            <p>Accédez à vos données instantanément.</p>
+
+                        </div>
+
+                    </div>
+
+                    <div class="feature">
+
+                        <div class="feature-icon">
+
+                            <i class="bi bi-patch-check"></i>
+
+                        </div>
+
+                        <div>
+
+                            <h5>Fiable</h5>
+
+                            <p>Des informations toujours à jour.</p>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- Colonne droite -->
+
+            <div>
+
+                {% include "includes/components/dashboard_preview.html" %}
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>

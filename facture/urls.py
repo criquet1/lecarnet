@@ -5,9 +5,19 @@ from . import views
 
 
 urlpatterns = [
-    path('login/', LoginView.as_view(template_name='registration/login.html', redirect_authenticated_user=True), name='login'),
+    # path('login/', LoginView.as_view(template_name='registration/login.html', redirect_authenticated_user=True), name='login'),
+    path(
+        "login/",
+        LoginView.as_view(
+            template_name="registration/login.html",
+            redirect_authenticated_user=True,
+        ),
+        name="login",
+    ),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('', views.index, name='accueil_public'),
+    path("dashboard/", login_required(views.dashboard), name="dashboard"),
+    path('working-period/', views.update_working_period, name='update_working_period'),
     path('accueil/', login_required(views.index), name='accueil'),
     path('facture/', login_required(views.facture), name='facture'),
     path('releve-bancaire/', login_required(views.releve_bancaire), name='releve_bancaire'),

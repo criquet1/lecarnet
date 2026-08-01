@@ -5,6 +5,7 @@ from django.db.utils import OperationalError, ProgrammingError
 from django.utils.connection import ConnectionDoesNotExist
 
 from facture.constants import MONTH_LABELS_FR
+from facture.working_period import get_working_period
 from compte.models import Setting
 
 
@@ -88,4 +89,5 @@ def site_settings(request):
     return {
         'site_settings': settings,
         'fiscal_period_options': fiscal_period_options,
+        'working_period': get_working_period(request),
     }

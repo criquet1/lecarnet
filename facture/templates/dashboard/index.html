@@ -1,0 +1,181 @@
+{% extends "layouts/app_base.html" %}
+{% load static %}
+
+{% block title %}
+Tableau de bord
+{% endblock %}
+
+{% block page_css %}
+<link rel="stylesheet" href="{% static 'css/pages/dashboard.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<div class="dashboard-container">
+
+    <h1 class="page-title">
+        Tableau de bord
+    </h1>
+
+    <div class="dashboard-period">
+        <i class="bi bi-calendar3"></i>
+        {{ nom_mois }} {{ annee }}
+    </div>
+
+    <p class="page-subtitle">
+        Consultez rapidement l'état de vos opérations.
+    </p>
+
+    <div class="dashboard-grid">
+
+        <!-- ===================================================== -->
+        <!-- FACTURES -->
+        <!-- ===================================================== -->
+
+        <div class="dashboard-card">
+
+            <div class="card-header">
+
+                <i class="bi bi-receipt"></i>
+
+                <h2>Factures</h2>
+
+            </div>
+
+            <div class="card-content">
+
+                <div class="card-row">
+
+                    <span class="card-label">
+                        Compagnies actives
+                    </span>
+
+                    <span class="card-value">
+                        {{ nb_compagnies }}
+                    </span>
+
+                </div>
+
+                <div class="card-row">
+
+                    <span class="card-label">
+                        Factures enregistrées
+                    </span>
+
+                    <span class="card-value">
+                        {{ nb_factures }}
+                    </span>
+
+                </div>
+
+            </div>
+
+            <div class="card-reminder {{ badge_class }}">
+
+                <i class="bi bi-info-circle"></i>
+
+                <span>
+
+                    {{ reminder_factures }}
+
+                </span>
+
+            </div>
+
+            <div class="card-footer">
+
+                <a href="#">
+
+                    Voir les factures
+
+                    <i class="bi bi-arrow-right"></i>
+
+                </a>
+
+            </div>
+
+        </div>
+
+
+        <!-- ===================================================== -->
+        <!-- RELEVÉS -->
+        <!-- ===================================================== -->
+
+        <div class="dashboard-card">
+
+            <div class="card-header">
+                <i class="bi bi-bank"></i>
+                <h2>Relevés</h2>
+            </div>
+
+            <div class="card-content">
+
+                <div class="card-row">
+                    <span class="card-label">Comptes actifs</span>
+                    <span class="card-value">{{ nb_releves_attendus }}</span>
+                </div>
+
+                <div class="card-row">
+                    <span class="card-label">Relevés importés</span>
+                    <span class="card-value">{{ nb_releves_importes }}</span>
+                </div>
+
+            </div>
+
+            <div class="card-reminder {{ badge_releves }}">
+                <i class="bi bi-info-circle"></i>
+                <span>{{ reminder_releves }}</span>
+            </div>
+
+            <div class="card-footer">
+                <a href="#">
+                    Gérer les relevés
+                    <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+
+        </div> <!-- FERMETURE de la carte Relevés, manquante avant -->
+
+
+        <!-- ===================================================== -->
+        <!-- PAIE -->
+        <!-- ===================================================== -->
+
+        <div class="dashboard-card">
+
+            <div class="card-header">
+                <i class="bi bi-cash-stack"></i>
+                <h2>Paie</h2>
+            </div>
+
+            <div class="card-content">
+
+                <div class="card-row">
+                    <span class="card-label">Employés actifs</span>
+                    <span class="card-value">{{ nb_employes }}</span>
+                </div>
+
+                <div class="card-row">
+                    <span class="card-label">Paies produites</span>
+                    <span class="card-value">{{ nb_paies }}</span>
+                </div>
+
+            </div>
+
+            <div class="card-reminder {{ badge_paie }}">
+                <i class="bi bi-info-circle"></i>
+                <span>{{ reminder_paie }}</span>
+            </div>
+
+            <div class="card-footer">
+                <a href="{% url 'paie:paie_dashboard' %}">
+                    Gérer la paie
+                    <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+

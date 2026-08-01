@@ -1,0 +1,44 @@
+<div class="card-panel">
+
+    <div class="card-header d-flex justify-content-between align-items-center">
+
+        <div>
+
+            <h2 class="card-title mb-0">
+
+                <i class="bi {{ icon }}"></i>
+
+                {{ titre }}
+
+            </h2>
+
+        </div>
+
+        <div>
+
+            <span class="status-badge {{ badge_class }}">
+                {{ badge }}
+            </span>
+
+        </div>
+
+    </div>
+
+    <div class="card-body">
+
+        {% block contenu %}
+        {% endblock %}
+
+    </div>
+
+    <div class="card-footer">
+
+        <a href="{{ url }}" class="btn btn-outline-primary">
+
+            {{ bouton }}
+
+        </a>
+
+    </div>
+
+</div>

@@ -1,0 +1,172 @@
+/* ==========================================================
+   Tableau de bord
+   ========================================================== */
+
+.dashboard-period{
+    display:flex;
+    align-items:center;
+    gap:.5rem;
+    color:var(--mcc-muted);
+    font-size:.95rem;
+    margin-bottom:1.5rem;
+}
+
+.page-title {
+    margin-bottom: .25rem;
+}
+
+.page-subtitle {
+    color: #6c757d;
+    margin-bottom: 2rem;
+}
+
+
+/* ==========================================================
+   Grille
+   ========================================================== */
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
+
+
+/* ==========================================================
+   Carte
+   ========================================================== */
+
+.dashboard-card {
+    background: var(--mcc-white);
+    border: 1px solid var(--mcc-border);
+    border-radius: 12px;
+    overflow: hidden;
+    border-top:4px solid var(--mcc-primary);
+    box-shadow:var(--mcc-shadow);
+    width:100%;
+    max-width:480px;
+}
+
+
+/* ==========================================================
+   En-tête
+   ========================================================== */
+
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid #ececec;
+}
+
+.card-header i {
+    font-size: 1.5rem;
+    color: #0d6efd;
+}
+
+.card-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+
+/* ==========================================================
+   Contenu
+   ========================================================== */
+
+.card-content{
+    padding:1.25rem 1.5rem;
+}
+
+.card-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:.60rem 0;
+}
+
+.card-row + .card-row{
+    border-top:1px solid var(--mcc-border);
+}
+
+.card-label{
+    color:var(--mcc-muted);
+    font-size:.95rem;
+}
+
+.card-value{
+    font-size:1.45rem;
+    font-weight:700;
+    color:var(--mcc-text);
+}
+
+
+/* ==========================================================
+   Reminder
+   ========================================================== */
+
+.card-reminder{
+    display:flex;
+    align-items:center;
+    gap:.75rem;
+    margin:1rem 1.5rem;
+    padding:1rem 1.2rem;
+    border-radius:10px;
+    font-size:.92rem;
+    line-height:1.4;
+}
+
+.card-reminder i{
+
+    font-size:1rem;
+    margin-top:2px;
+
+}
+
+/* ---------- États ---------- */
+
+.card-reminder.status-success{
+    background:#eaf8ef;
+    color:#18864b;
+}
+
+.card-reminder.status-warning{
+    background:#fff8dc;
+    color:#b88700;
+}
+
+.card-reminder.status-danger{
+    background:#fdeaea;
+    color:#b93232;
+}
+
+.card-reminder.status-info{
+    background:#eef5ff;
+    color:#2563c9;
+}
+
+
+/* ==========================================================
+   Pied de carte
+   ========================================================== */
+
+.card-footer{
+    display:flex;
+    justify-content:center;
+    padding:1rem 1.5rem;
+    border-top:1px solid var(--mcc-border);
+}
+
+.card-footer a{
+    display:flex;
+    align-items:center;
+    gap:.4rem;
+    text-decoration:none;
+    font-weight:600;
+}
+
+.card-footer a:hover {
+    text-decoration: underline;
+}

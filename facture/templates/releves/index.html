@@ -1,22 +1,22 @@
 {% extends "layouts/app_base.html" %}
-{% load facture_extras %}
+{% load static %}
 {% load l10n %}
 
-{% block title %}Relevés{% endblock %}
+{% load facture_extras %}
 
-{% block body %}
+{% block title %} Relevés {% endblock %}
 
-    <div class="d-flex align-items-baseline gap-3 mb-3">
-        <h1 class="mb-0">Relevés bancaires</h1>
-        <form method="get" class="d-inline-flex align-items-center gap-2">
-            <span class="fw-semibold">Période:</span>
-            <select name="periode" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
-                {% for period in fiscal_period_options %}
-                    <option value="{{ period.value }}" {% if selected_periode == period.value %}selected{% endif %}>{{ period.label }}</option>
-                {% endfor %}
-            </select>
-        </form>
-    </div>
+{% block page_title %}
+    Relevés
+{% endblock %}
+
+{% block page_subtitle %}
+Téléchargement des relevés bancaires
+{% endblock %}
+
+{% block content %}
+
+    <h1 class="mb-3">Relevés bancaires</h1>
     {% if periode_label %}
         <p class="text-muted mb-3">Période sélectionnée: {{ periode_label }}</p>
     {% endif %}

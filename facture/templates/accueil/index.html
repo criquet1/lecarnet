@@ -1,0 +1,89 @@
+{% extends "layouts/base.html" %}
+{% load static %}
+
+{% block title %}Mon carnet comptable{% endblock %}
+
+{% block extrastyle %}
+<link rel="stylesheet" href="{% static 'css/accueil.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<section class="hero">
+    <div class="container-xl hero-grid">
+
+        <!-- Colonne gauche -->
+        <div class="hero-left">
+            <h1 class="hero-title">
+                Bienvenue dans votre
+                <span>espace de gestion</span>
+            </h1>
+            <p class="hero-text">
+                Gérez vos factures, relevés, paie et rapports
+                en toute simplicité.
+            </p>
+            <!-- Boutons et avantages -->
+        </div>
+
+        <!-- Colonne droite -->
+        <div class="hero-right">
+            {% include "includes/components/dashboard_preview.html" %}
+        </div>
+    </div>
+</section>
+
+<section class="modules">
+
+    <div class="container-xl">
+        <h2 class="section-title">
+            Tout pour gérer votre entreprise
+        </h2>
+        <div class="module-grid">
+            <article class="module-card">
+                <div class="module-icon purple">
+                    <i class="bi bi-receipt"></i>
+                </div>
+                <h4>Factures</h4>
+                <p>
+                    Créez, envoyez et assurez le suivi de vos factures
+                    en quelques clics.
+                </p>
+            </article>
+
+            <article class="module-card">
+                <div class="module-icon pink">
+                    <i class="bi bi-file-earmark-text"></i>
+                </div>
+                <h4>Relevés</h4>
+                <p>
+                    Consultez rapidement vos relevés et vos états
+                    de compte.
+                </p>
+            </article>
+
+            <article class="module-card">
+                <div class="module-icon blue">
+                    <i class="bi bi-people"></i>
+                </div>
+                <h4>Paie</h4>
+                <p>
+                    Gérez vos employés et préparez les périodes
+                    de paie.
+                </p>
+            </article>
+
+            <article class="module-card">
+                <div class="module-icon green">
+                    <i class="bi bi-bar-chart"></i>
+                </div>
+                <h4>Rapports</h4>
+                <p>
+                    Produisez vos rapports financiers
+                    instantanément.
+                </p>
+            </article>
+        </div>
+    </div>
+</section>
+
+{% endblock %}

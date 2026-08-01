@@ -1,0 +1,186 @@
+{% load static %}
+
+<aside class="sidebar">
+
+    <!-- Société -->
+
+    <div class="tenant-card">
+
+        <div class="tenant-logo">
+
+            {% if site_settings.logo %}
+                <img src="{% static 'images/logos/' %}{{ site_settings.logo }}"
+                     alt="{{ site_settings.nom }}">
+            {% else %}
+                <i class="bi bi-building"></i>
+            {% endif %}
+
+        </div>
+
+        <div class="tenant-name">
+
+            {{ site_settings.nom|default:"Mon carnet comptable" }}
+
+        </div>
+
+        {% if request.active_client %}
+            <span class="badge bg-secondary">
+                Tenant : {{ request.active_client.name }}
+            </span>
+            <a href="{% url 'select_client' %}" class="btn btn-sm btn-outline-light ms-2">
+                Changer de tenant
+            </a>
+        {% endif %}
+
+    </div>
+
+
+    <!-- Navigation -->
+
+    <nav class="sidebar-nav">
+
+        <a href="{% url 'dashboard' %}" class="sidebar-link">
+            <i class="bi bi-grid-1x2-fill"></i>
+            <span>Tableau de bord</span>
+        </a>
+
+        <a href="{% url 'facture' %}" class="sidebar-link">
+            <i class="bi bi-receipt"></i>
+            <span>Factures</span>
+        </a>
+
+        <a href="{% url 'releve_bancaire' %}" class="sidebar-link">
+            <i class="bi bi-bank"></i>
+            <span>Relevés bancaires</span>
+        </a>
+
+
+        <!-- PAIES -->
+
+        <details class="sidebar-group">
+            <summary class="sidebar-link">
+                <span>
+                    <i class="bi bi-cash-stack"></i>
+                    Paies
+                </span>
+                <i class="bi bi-chevron-down"></i>
+            </summary>
+
+            <div class="sidebar-submenu">
+                <a href="{% url 'paie:paie_employes' %}">
+                    Employés
+                </a>
+
+                <a href="{% url 'paie:paie_calendrier' %}">
+                    Calendrier de paie
+                </a>
+
+                <a href="{% url 'paie:paie_saisir' %}">
+                    Saisie d'une paie
+                </a>
+
+                <a href="#">
+                    Talons de paie
+                </a>
+
+                <a href="#">
+                    Rapport de paie
+                </a>
+
+                <a href="{% url 'paie:paie_remises_mensuelles' %}">
+                    Remises mensuelles
+                </a>
+
+                <a href="{% url 'paie:paie_parametres_taux' %}">
+                    Paramètres de taux
+                </a>
+            </div>
+        </details>
+
+
+        <!-- RAPPORTS -->
+
+        <details class="sidebar-group">
+
+            <summary class="sidebar-link">
+
+                <span>
+
+                    <i class="bi bi-bar-chart-line"></i>
+
+                    Rapports
+
+                </span>
+
+                <i class="bi bi-chevron-down"></i>
+
+            </summary>
+
+            <div class="sidebar-submenu">
+
+                <a href="{% url 'journal_general' %}">
+                    Journal général
+                </a>
+
+                <a href="{% url 'grand_livre' %}">
+                    Grand livre
+                </a>
+
+                <a href="{% url 'balance_de_verification' %}">
+                    Balance de vérification
+                </a>
+
+                <a href="{% url 'compte_a_recevoir' %}">
+                    Comptes à recevoir
+                </a>
+
+                <a href="{% url 'compte_a_payer' %}">
+                    Comptes à payer
+                </a>
+
+                <a href="{% url 'rapport_de_taxes' %}">
+                    Rapport de taxes
+                </a>
+
+            </div>
+
+        </details>
+
+    </nav>
+
+
+    <!-- Footer -->
+
+    <div class="sidebar-footer">
+
+        <div class="user-box">
+
+            <i class="bi bi-person-circle"></i>
+
+            <span>
+
+                {{ request.user.first_name|default:request.user.username }}
+
+            </span>
+
+        </div>
+
+        <a href="{% url 'logout' %}" class="logout-link">
+
+            <i class="bi bi-box-arrow-right"></i>
+
+            Déconnexion
+
+        </a>
+
+        <div class="sidebar-copyright">
+
+            © {{ now|date:"Y" }} Sylvie Méthot 2026<br>
+
+            Tous droits réservés
+
+        </div>
+
+    </div>
+
+</aside>

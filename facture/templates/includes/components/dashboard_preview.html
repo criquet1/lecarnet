@@ -1,0 +1,172 @@
+<div class="dashboard-preview">
+
+    <!-- Barre latérale -->
+    <aside class="dashboard-sidebar">
+
+        <div class="sidebar-icon active">
+            <i class="bi bi-house"></i>
+        </div>
+
+        <div class="sidebar-icon">
+            <i class="bi bi-receipt"></i>
+        </div>
+
+        <div class="sidebar-icon">
+            <i class="bi bi-file-earmark-text"></i>
+        </div>
+
+        <div class="sidebar-icon">
+            <i class="bi bi-calculator"></i>
+        </div>
+
+        <div class="sidebar-icon">
+            <i class="bi bi-people"></i>
+        </div>
+
+        <div class="sidebar-icon">
+            <i class="bi bi-bar-chart"></i>
+        </div>
+
+        <div class="sidebar-icon">
+            <i class="bi bi-gear"></i>
+        </div>
+
+    </aside>
+
+    <!-- Contenu -->
+    <section class="dashboard-content">
+
+        <!-- En-tête -->
+        <div class="dashboard-top">
+
+            <div>
+
+                <h3>Tableau de bord</h3>
+
+                <p>Vue d'ensemble de votre comptabilité pour le mois</p>
+
+            </div>
+
+            <div class="dashboard-date">
+
+                {% now "F Y" %}
+
+            </div>
+
+        </div>
+
+        <!-- Cartes statistiques -->
+        <div class="stats-grid">
+
+            <div class="stat-card">
+
+                <small>Factures</small>
+
+                <h2>15</h2>
+
+            </div>
+
+            <div class="stat-card">
+
+                <small>Relevés</small>
+
+                <h2>4</h2>
+
+            </div>
+
+            <div class="stat-card">
+
+                <small>Paie</small>
+
+                <h2>3</h2>
+
+            </div>
+
+            <div class="stat-card">
+
+                <small>Rapports</small>
+
+                <h2>2</h2>
+
+            </div>
+
+        </div>
+
+        <!-- Partie inférieure -->
+        <div class="dashboard-grid">
+
+            <!-- Factures -->
+            <div class="panel">
+
+                <h5>Factures récentes</h5>
+
+                <table class="preview-table">
+
+                    <tbody>
+
+                        <tr>
+                            <td>F-2026-015</td>
+                            <td>Construction ABC</td>
+                            <td class="text-end">1 250 $</td>
+                        </tr>
+
+                        <tr>
+                            <td>F-2026-014</td>
+                            <td>Garage Martin</td>
+                            <td class="text-end">980 $</td>
+                        </tr>
+
+                        <tr>
+                            <td>F-2026-013</td>
+                            <td>Clinique Horizon</td>
+                            <td class="text-end">3 450 $</td>
+                        </tr>
+
+                        <tr>
+                            <td>F-2026-012</td>
+                            <td>Librairie Centrale</td>
+                            <td class="text-end">640 $</td>
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            <!-- Activités -->
+            <div class="panel">
+
+                <h5>Activités</h5>
+
+                <ul class="activity-list">
+
+                    <li>
+                        <i class="bi bi-check-circle-fill"></i>
+                        Facture créée
+                    </li>
+
+                    <li>
+                        <i class="bi bi-cash-stack"></i>
+                        Paiement reçu
+                    </li>
+
+                    <li>
+                        <i class="bi bi-file-earmark-text"></i>
+                        Relevé généré
+                    </li>
+
+                    <li>
+                        <i class="bi bi-file-earmark-pdf"></i>
+                        Rapport PDF exporté
+                    </li>
+
+                </ul>
+
+            </div>
+
+        </div>
+
+    </section>
+
+</div>

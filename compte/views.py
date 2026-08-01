@@ -4,7 +4,6 @@ import json
 import logging
 import os
 import re
-from types import SimpleNamespace
 
 from django.conf import settings
 from django.contrib import messages
@@ -19,7 +18,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.connection import ConnectionDoesNotExist
 from django.utils import timezone
 
-from facture.models import Compagnie, CompagnieSoldeDepart, CompteReleve, Source, Tr_desc, Tr_detail
+from facture.models import Compagnie, CompagnieSoldeDepart, CompteReleve, SoldeFin, Source, Tr_desc, Tr_detail
 from facture.utils import ensure_tax_authority_companies, expert_required, get_settings, parse_decimal, read_csv_rows
 from tenancy.models import ClientDatabase, Societe, UserClientAccess, UserSocieteAccess
 from tenancy.services import mark_user_must_change_password, set_active_client_on_session, sync_user_client_accesses, user_must_change_password
@@ -52,34 +51,15 @@ def _ensure_default_frequences_paie():
 
 
 def _fetch_totaux_rows():
-	db_alias = Compte.objects.all().db
-	query = """
-		SELECT
-			c.numero AS compte_id,
-			c.numero AS compte_numero,
-			c.libelle AS compte_libelle,
-			COALESCE(v.solde_depart, 0) AS solde_depart,
-			COALESCE(v.debit, 0) AS debit,
-			COALESCE(v.credit, 0) AS credit
-		FROM compte_compte c
-		LEFT JOIN facture_v_balance_verification v ON v.compte_id = c.numero
-		ORDER BY c.numero
-	"""
-
 	rows = []
-	with connections[db_alias].cursor() as cursor:
-		cursor.execute(query)
-		for compte_id, compte_numero, compte_libelle, solde_depart, debit, credit in cursor.fetchall():
-			rows.append({
-				'compte': SimpleNamespace(
-					pk=compte_id,
-					numero=compte_numero,
-					libelle=compte_libelle,
-				),
-				'debit': Decimal(str(debit)) if debit not in (None, '') else Decimal('0'),
-				'credit': Decimal(str(credit)) if credit not in (None, '') else Decimal('0'),
-				'solde_depart': Decimal(str(solde_depart)) if solde_depart not in (None, '') else Decimal('0'),
-			})
+	for solde in SoldeFin.objects.select_related('compte_numero'):
+		solde_final = solde.solde_final or Decimal('0')
+		rows.append({
+			'compte': solde.compte_numero,
+			'debit': solde_final if solde_final >= 0 else Decimal('0'),
+			'credit': abs(solde_final) if solde_final < 0 else Decimal('0'),
+			'solde_depart': solde.solde_depart or Decimal('0'),
+		})
 
 	total_debit = sum((row['debit'] for row in rows), Decimal('0'))
 	total_credit = sum((row['credit'] for row in rows), Decimal('0'))
@@ -786,6 +766,7 @@ def transactions_page(request):
 		try:
 			compagnies = list(Compagnie.objects.order_by('nom'))
 			comptes = list(Compte.objects.order_by('numero'))
+			settings_instance = get_settings()
 		except (OperationalError, ProgrammingError, ConnectionDoesNotExist):
 			logger.exception('Transactions indisponible: tables facture/compte manquantes sur la base active.')
 			messages.error(
@@ -804,6 +785,8 @@ def transactions_page(request):
 				'title': 'Transactions',
 				'compagnies': compagnies,
 				'comptes': comptes,
+				'compte_cap_id': settings_instance.cap_id if settings_instance else None,
+				'compte_car_id': settings_instance.car_id if settings_instance else None,
 			})
 
 		if request.method == 'POST':
@@ -907,6 +890,24 @@ def transactions_page(request):
 
 			if not lines:
 				messages.error(request, 'Ajoutez au moins une ligne comptable.')
+				return _render_transactions_page()
+
+			company_required_account_ids = {
+				account_id
+				for account_id in (
+					settings_instance.cap_id if settings_instance else None,
+					settings_instance.car_id if settings_instance else None,
+				)
+				if account_id is not None
+			}
+			if compagnie is None and any(
+				line['compte'].pk in company_required_account_ids
+				for line in lines
+			):
+				messages.error(
+					request,
+					'Une compagnie est obligatoire lorsqu\'une ligne utilise le compte CAP ou CAR.'
+				)
 				return _render_transactions_page()
 
 			if total_debit.quantize(Decimal('0.01')) != total_credit.quantize(Decimal('0.01')):

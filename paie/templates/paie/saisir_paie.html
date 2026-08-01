@@ -2,8 +2,11 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block body %}
-<h2 class="fw-bold mb-4">{{ title }}</h2>
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}Calcul et enregistrement d'une paie pour un employé actif.{% endblock %}
+
+{% block content %}
 
 {% if messages %}
     {% for message in messages %}

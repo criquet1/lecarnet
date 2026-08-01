@@ -2,21 +2,20 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block body %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2 class="fw-bold mb-1">{{ title }}</h2>
-        <p class="text-muted mb-0">Saisie et consultation des paies du client actif.</p>
-    </div>
-    <div class="d-flex gap-2">
-        <a href="{% url 'paie:paie_employes' %}" class="btn btn-outline-primary">Employés</a>
-        <a href="{% url 'paie:paie_calendrier' %}" class="btn btn-outline-primary">Calendrier</a>
-        {% if request.user.is_superuser %}
-        <a href="{% url 'paie:paie_parametres_taux' %}" class="btn btn-outline-primary">Paramètres taux</a>
-        {% endif %}
-        <a href="{% url 'paie:paie_saisir' %}" class="btn btn-primary">Saisir une paie</a>
-    </div>
-</div>
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}Saisie et consultation des paies du client actif.{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'paie:paie_employes' %}" class="btn btn-outline-primary">Employés</a>
+<a href="{% url 'paie:paie_calendrier' %}" class="btn btn-outline-primary">Calendrier</a>
+{% if request.user.is_superuser %}
+<a href="{% url 'paie:paie_parametres_taux' %}" class="btn btn-outline-primary">Paramètres taux</a>
+{% endif %}
+<a href="{% url 'paie:paie_saisir' %}" class="btn btn-primary">Saisir une paie</a>
+{% endblock %}
+
+{% block content %}
 
 {% if messages %}
     {% for message in messages %}

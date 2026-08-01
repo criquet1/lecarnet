@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from holidays import country_holidays
 
 from facture.models import Source, Tr_desc, Tr_detail
-from facture.utils import get_setting
+from facture.utils import expert_required, get_setting, is_expert
 
 from .forms import EmployeForm, PaieForm, ParametresTauxPaieForm
 from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie
@@ -333,7 +333,7 @@ def _compute_employer_totals_for_period(paies, settings_instance):
 	return totals
 
 
-@login_required
+@expert_required
 def creer_ecriture_salaire(request, periode_id):
 	if request.method != 'POST':
 		return redirect('paie:paie_journal')
@@ -1006,6 +1006,7 @@ def journal_paies_page(request):
 		'total_net': total_net,
 		'total_charge_employeur': total_charge_employeur,
 		'employe_tabs': employe_tabs,
+		'can_create_salary_entry': is_expert(request.user),
 	})
 
 

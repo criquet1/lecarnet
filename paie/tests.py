@@ -5,6 +5,9 @@ from unittest.mock import patch
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
+from django.core.exceptions import PermissionDenied
+from django.http import Http404
 from django.test import RequestFactory
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -13,7 +16,7 @@ from compte.models import Compte, Setting, Total
 from facture.models import Tr_desc, Tr_detail
 from paie.forms import PaieForm
 from paie.models import Employe, FrequencePaie, Paie, PeriodePaie, ParametresTauxPaie
-from paie.views import creer_ecriture_salaire, _compute_employer_totals_for_period
+from paie.views import creer_ecriture_salaire, journal_paies_page, _compute_employer_totals_for_period
 from paie.services.das import DASInputs, calculer_das, calculer_rrq
 
 
@@ -847,6 +850,48 @@ class PaieModelTestCase(TestCase):
 		values = {item['value'] for item in options_payload}
 		self.assertNotIn('2026-06-24', values)
 		self.assertIn('2026-07-01', values)
+
+
+class PaieEcritureSalairePermissionTestCase(TestCase):
+	def setUp(self):
+		self.factory = RequestFactory()
+		self.user_model = get_user_model()
+
+	def test_utilisateur_ordinaire_ne_peut_pas_creer_ecriture_salaire(self):
+		user = self.user_model.objects.create_user(username='employe-paie', password='pass1234')
+		request = self.factory.post(reverse('paie:paie_creer_ecriture_salaire', args=[999999]))
+		request.user = user
+
+		with self.assertRaisesMessage(PermissionDenied, 'Accès réservé aux experts.'):
+			creer_ecriture_salaire(request, 999999)
+
+		self.assertFalse(Tr_desc.objects.exists())
+
+		journal_request = self.factory.get(reverse('paie:paie_journal'))
+		journal_request.user = user
+		SessionMiddleware(lambda req: None).process_request(journal_request)
+		response = journal_paies_page(journal_request)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertNotContains(response, 'form-creer-ecriture-salaire')
+		self.assertNotContains(response, 'js-creer-ecriture-salaire')
+
+	def test_membre_du_groupe_expert_franchit_la_protection(self):
+		user = self.user_model.objects.create_user(username='expert-groupe', password='pass1234')
+		user.groups.add(Group.objects.create(name='expert'))
+		request = self.factory.post(reverse('paie:paie_creer_ecriture_salaire', args=[999999]))
+		request.user = user
+
+		with self.assertRaises(Http404):
+			creer_ecriture_salaire(request, 999999)
+
+		journal_request = self.factory.get(reverse('paie:paie_journal'))
+		journal_request.user = user
+		SessionMiddleware(lambda req: None).process_request(journal_request)
+		response = journal_paies_page(journal_request)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, 'form-creer-ecriture-salaire')
 
 
 class PaieEcritureSalaireTestCase(TestCase):

@@ -1,12 +1,16 @@
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.core.exceptions import ValidationError
+from django.contrib.auth.decorators import login_required
 from django.db import transaction, connections, DatabaseError
-from django.db.models import Prefetch, Sum, Value, DecimalField, Case, When, IntegerField, F
-from django.db.models.functions import Coalesce
+from django.db.models import Prefetch, Q, Subquery, Sum, Value, DecimalField, F
+from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from calendar import monthrange
+import calendar
 from types import SimpleNamespace
 import re
 import csv
@@ -15,15 +19,21 @@ from io import TextIOWrapper
 import chardet
 from datetime import date, datetime
 from facture.constants import MONTH_LABELS_FR
-from facture.models import Compagnie, Tr_desc, Tr_detail, Source, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart
+from facture.models import Compagnie, Tr_desc, Tr_detail, Source, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, Facture, SoldeFin, TransactionListe
 from compte.models import Setting
-from facture.context_processors import build_fiscal_period_options
 from facture.forms import CompagnieForm, TrDescForm, TrDetailFormSet
+from facture.working_period import (
+    COOKIE_MAX_AGE,
+    get_working_period,
+    set_working_period as save_working_period,
+    working_period_cookie_name,
+)
 from facture.utils import (
     TAX_AUTHORITY_COMPANY_NAMES,
     ensure_tax_authority_companies,
     expert_required,
     get_setting,
+    is_expert,
     parse_decimal,
     split_debit_credit,
     tax_target_mode_from_setting,
@@ -42,26 +52,6 @@ def _solde_depart_par_compte():
     }
 
 
-def _aggregate_debit_credit(details_qs):
-    total_debit = details_qs.filter(montant__gte=0).aggregate(
-        total=Coalesce(
-            Sum('montant'),
-            Value(0),
-            output_field=DecimalField(max_digits=14, decimal_places=2),
-        )
-    ).get('total') or Decimal('0')
-
-    total_credit_raw = details_qs.filter(montant__lt=0).aggregate(
-        total=Coalesce(
-            Sum('montant'),
-            Value(0),
-            output_field=DecimalField(max_digits=14, decimal_places=2),
-        )
-    ).get('total') or Decimal('0')
-
-    return total_debit, abs(total_credit_raw)
-
-
 def _ledger_db_alias():
     return Tr_detail.objects.all().db
 
@@ -74,34 +64,18 @@ def _coerce_decimal(value):
     return Decimal(str(value))
 
 
-def _fetch_balance_rows_from_sql_view():
-    db_alias = _ledger_db_alias()
-    query = """
-        SELECT
-            compte_id,
-            compte_numero,
-            compte_libelle,
-            solde_depart,
-            debit,
-            credit
-        FROM facture_v_balance_verification
-        ORDER BY compte_numero
-    """
-
+def _fetch_balance_rows():
     rows = []
-    with connections[db_alias].cursor() as cursor:
-        cursor.execute(query)
-        for compte_id, compte_numero, compte_libelle, solde_depart, debit, credit in cursor.fetchall():
-            rows.append({
-                'compte': SimpleNamespace(
-                    pk=compte_id,
-                    numero=compte_numero,
-                    libelle=compte_libelle,
-                ),
-                'debit': _coerce_decimal(debit),
-                'credit': _coerce_decimal(credit),
-                'solde_depart': _coerce_decimal(solde_depart),
-            })
+    for solde in SoldeFin.objects.select_related('compte_numero'):
+        solde_final = _coerce_decimal(solde.solde_final)
+        if solde_final == Decimal('0') and solde.solde_depart == Decimal('0'):
+            continue
+        rows.append({
+            'compte': solde.compte_numero,
+            'debit': solde_final if solde_final >= 0 else Decimal('0'),
+            'credit': abs(solde_final) if solde_final < 0 else Decimal('0'),
+            'solde_depart': _coerce_decimal(solde.solde_depart),
+        })
 
     total_debit = sum((row['debit'] for row in rows), Decimal('0'))
     total_credit = sum((row['credit'] for row in rows), Decimal('0'))
@@ -131,8 +105,6 @@ def _fetch_grand_livre_from_sql_view():
     comptes = []
     grand_total_debit = Decimal('0')
     grand_total_credit = Decimal('0')
-    opening_total_debit = Decimal('0')
-    opening_total_credit = Decimal('0')
     current_compte_id = None
     current_block = None
     comptes_with_entries = set()
@@ -175,21 +147,17 @@ def _fetch_grand_livre_from_sql_view():
 
                 solde_depart = current_block['solde_depart']
                 if current_block['is_bilan']:
-                    opening_debit = solde_depart if solde_depart >= 0 else Decimal('0')
-                    opening_credit = abs(solde_depart) if solde_depart < 0 else Decimal('0')
                     current_block['entries'].append({
                         'date': None,
                         'no_ej': '',
                         'compagnie': None,
                         'description': 'Solde de depart',
                         'source': None,
-                        'debit': opening_debit,
-                        'credit': opening_credit,
+                        'debit': Decimal('0'),
+                        'credit': Decimal('0'),
                         'solde': solde_depart,
                         'is_solde_depart': True,
                     })
-                    opening_total_debit += opening_debit
-                    opening_total_credit += opening_credit
                     current_block['solde'] = solde_depart
 
             debit = _coerce_decimal(debit)
@@ -239,8 +207,6 @@ def _fetch_grand_livre_from_sql_view():
                 continue
 
             solde_depart = _coerce_decimal(solde_depart_par_compte.get(compte_id, Decimal('0')))
-            opening_debit = solde_depart if solde_depart >= 0 else Decimal('0')
-            opening_credit = abs(solde_depart) if solde_depart < 0 else Decimal('0')
             comptes.append({
                 'compte': compte,
                 'is_bilan': True,
@@ -250,8 +216,8 @@ def _fetch_grand_livre_from_sql_view():
                     'compagnie': None,
                     'description': 'Solde de depart',
                     'source': None,
-                    'debit': opening_debit,
-                    'credit': opening_credit,
+                    'debit': Decimal('0'),
+                    'credit': Decimal('0'),
                     'solde': solde_depart,
                     'is_solde_depart': True,
                 }],
@@ -260,35 +226,23 @@ def _fetch_grand_livre_from_sql_view():
                 'solde': solde_depart,
                 'solde_depart': solde_depart,
             })
-            opening_total_debit += opening_debit
-            opening_total_credit += opening_credit
-
     comptes.sort(key=lambda bloc: ((getattr(bloc['compte'], 'numero', None) or 0), bloc['compte'].pk or 0))
 
-    grand_total_debit += opening_total_debit
-    grand_total_credit += opening_total_credit
-    grand_total_solde = grand_total_debit - grand_total_credit
+    grand_total_solde = sum((bloc['solde'] for bloc in comptes), Decimal('0'))
     is_balanced = grand_total_debit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) == grand_total_credit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
     return comptes, grand_total_debit, grand_total_credit, grand_total_solde, is_balanced
 
 
-def _fetch_compte_solde_from_balance_view(compte_id):
+def _fetch_compte_solde(compte_id):
     if not compte_id:
         return Decimal('0')
 
-    db_alias = _ledger_db_alias()
-    query = """
-        SELECT solde
-        FROM facture_v_balance_verification
-        WHERE compte_id = %s
-    """
-
-    with connections[db_alias].cursor() as cursor:
-        cursor.execute(query, [compte_id])
-        row = cursor.fetchone()
-
-    return _coerce_decimal(row[0]) if row else Decimal('0')
+    return _coerce_decimal(
+        SoldeFin.objects.filter(compte_numero_id=compte_id)
+        .values_list('solde_final', flat=True)
+        .first()
+    )
 
 
 def _fetch_compte_mode_blocks_from_sql_view(mode, compte_id, compagnies):
@@ -372,32 +326,233 @@ def _closing_date_label(reference_date, settings_instance=None):
 
 
 def index(request):
-    return render(request, "facture/index.html", {'title': "Le carnet à Bibi"})
+    return render(request, "accueil/index.html", {
+        "title": "Mon carnet comptable"
+    })
+
+
+@login_required
+@require_POST
+def update_working_period(request):
+    period_value = save_working_period(request, request.POST.get('period'))
+    next_url = request.POST.get('next') or '/dashboard/'
+    if not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = '/dashboard/'
+
+    response = redirect(next_url)
+    if period_value:
+        response.set_cookie(
+            working_period_cookie_name(request),
+            period_value,
+            max_age=COOKIE_MAX_AGE,
+            samesite='Lax',
+        )
+    return response
+
+
+
+
+
+def dashboard(request):
+
+
+    working_period = get_working_period(request)
+    mois = working_period['month']
+    annee = working_period['year']
+
+    nom_mois = calendar.month_name[mois]
+
+    mois_liste = [
+        (i, calendar.month_name[i])
+        for i in range(1, 13)
+    ]
+
+    annees = list(
+        range(
+            annee - 5,
+            annee + 2
+        )
+    )
+
+    # Nombre de compagnies actives
+    nb_compagnies = Compagnie.objects.filter(
+        active=True
+    ).count()
+
+    # Factures du mois courant
+    factures_mois = Facture.objects.filter(
+        date__month=mois,
+        date__year=annee
+    )
+
+    nb_factures = factures_mois.values('no_ej').distinct().count()
+
+    # Liste des compagnies actives
+    compagnies_actives = Compagnie.objects.filter(
+        active=True
+    ).values_list(
+        "nom",
+        flat=True
+    )
+
+    # Nombre de compagnies actives ayant au moins une facture
+    compagnies_avec_facture = factures_mois.filter(
+        compagnie__in=compagnies_actives
+    ).values(
+        "compagnie"
+    ).distinct().count()
+
+    # Compagnies actives sans facture ce mois-ci
+    compagnies_sans_facture = (
+        nb_compagnies - compagnies_avec_facture
+    )
+
+    # Message du rappel
+    if compagnies_sans_facture == 0:
+        reminder_factures = (
+            "Toutes les compagnies actives ont une facture "
+            "enregistrée ce mois-ci."
+        )
+        badge_class = "status-success"
+
+    elif compagnies_sans_facture == 1:
+        reminder_factures = (
+            "1 compagnie active n'a aucune facture "
+            "enregistrée ce mois-ci."
+        )
+        badge_class = "status-warning"
+
+    else:
+        reminder_factures = (
+            f"{compagnies_sans_facture} compagnies actives "
+            "n'ont aucune facture enregistrée ce mois-ci."
+        )
+        badge_class = "status-warning"
+
+
+    # ==========================================================
+    # RELEVÉS
+    # ==========================================================
+
+    # Nombre de comptes de relevés actifs
+    nb_releves_attendus = CompteReleve.objects.filter(
+        actif=True
+    ).count()
+
+    # Nombre de comptes ayant au moins un relevé
+    # pour la période sélectionnée
+    nb_releves_importes = (
+        Releve.objects.filter(
+            date__month=mois,
+            date__year=annee,
+            compte_releve__isnull=False,
+            compte_releve__actif=True,
+        )
+        .values("compte_releve")
+        .distinct()
+        .count()
+    )
+
+    releves_manquants = (
+        nb_releves_attendus -
+        nb_releves_importes
+    )
+
+    # Message du rappel
+    if releves_manquants == 0:
+
+        reminder_releves = (
+            "Tous les relevés attendus ont été importés."
+        )
+
+        badge_releves = "status-success"
+
+    elif releves_manquants == 1:
+
+        reminder_releves = (
+            "1 relevé est toujours attendu."
+        )
+
+        badge_releves = "status-warning"
+
+    else:
+
+        reminder_releves = (
+            f"{releves_manquants} relevés sont toujours attendus."
+        )
+
+        badge_releves = "status-warning"
+
+# =====================================================
+# PAIE
+# =====================================================
+
+
+
+
+
+
+    context = {
+        "nb_compagnies": nb_compagnies,
+        "nb_factures": nb_factures,
+        "compagnies_sans_facture": compagnies_sans_facture,
+        "reminder_factures": reminder_factures,
+        "badge_class": badge_class,
+        "mois": mois,
+        "annee": annee,
+        "nom_mois": nom_mois,
+        "mois_liste": mois_liste,
+        "mois_selectionne": mois,
+        "annee_selectionnee": annee,
+        "annees": annees,
+        "nb_releves_attendus": nb_releves_attendus,
+        "nb_releves_importes": nb_releves_importes,
+        "releves_manquants": releves_manquants,
+        "reminder_releves": reminder_releves,
+        "badge_releves": badge_releves,
+        "nb_employes": 0,
+        "nb_paies": 0,
+        "badge_paie": "badge-neutral",
+        "reminder_paie": "Le module Paie sera disponible prochainement.",
+    }
+
+    return render(
+        request,
+        "dashboard/index.html",
+        context
+    )
+
 
 
 def journal_general(request):
-    details_queryset = Tr_detail.objects.select_related('compte').annotate(
-        debit_first=Case(
-            When(montant__gte=0, then=Value(0)),
-            default=Value(1),
-            output_field=IntegerField(),
-        )
-    ).order_by('debit_first', 'compte_id', 'id')
+    entries_by_no_ej = {}
+    total_debit = Decimal('0')
+    total_credit = Decimal('0')
 
-    total_debit, total_credit = _aggregate_debit_credit(Tr_detail.objects.all())
+    for row in TransactionListe.objects.all():
+        entry = entries_by_no_ej.setdefault(row.no_ej, SimpleNamespace(
+            no_ej=row.no_ej,
+            date=row.date,
+            description=row.description,
+            compagnie=row.compagnie,
+            source=row.source,
+            details=[],
+        ))
+        entry.details.append(row)
+        total_debit += row.debit or Decimal('0')
+        total_credit += row.credit or Decimal('0')
 
-    journal_entries = list(Tr_desc.objects.select_related(
-        'compagnie',
-        'source'
-    ).prefetch_related(
-        Prefetch('details', queryset=details_queryset),
-        'releves_sources',
-    ))
-
+    journal_entries = list(entries_by_no_ej.values())
     for entry in journal_entries:
-        releve_source = entry.releves_sources.all().first()
-        if releve_source and releve_source.desc_ctb:
-            entry.description = releve_source.desc_ctb
+        entry.details.sort(key=lambda detail: (
+            detail.credit > 0,
+            detail.compte_numero,
+            detail.transaction_id,
+        ))
 
     def no_ej_sort_value(entry):
         match = re.match(r'^EJ(\d+)$', entry.no_ej or '')
@@ -411,7 +566,7 @@ def journal_general(request):
     report_date = max((entry.date for entry in journal_entries if entry.date), default=None)
     report_year_label = _closing_date_label(report_date, settings_instance)
 
-    return render(request, "facture/journal_general.html", {
+    return render(request, "rapports/journal_general.html", {
         'title': "Journal général",
         'journal_entries': journal_entries,
         'total_debit': total_debit,
@@ -426,7 +581,8 @@ def grand_livre(request):
     report_date = Tr_desc.objects.order_by('-date').values_list('date', flat=True).first()
     report_year_label = _closing_date_label(report_date, settings_instance)
     try:
-        comptes, grand_total_debit, grand_total_credit, grand_total_solde, is_balanced = _fetch_grand_livre_from_sql_view()
+        with transaction.atomic(using=_ledger_db_alias()):
+            comptes, grand_total_debit, grand_total_credit, grand_total_solde, is_balanced = _fetch_grand_livre_from_sql_view()
     except DatabaseError:
         # Fallback temporaire tant que la migration SQL view n'est pas appliquee.
         def is_bilan_account(compte):
@@ -442,8 +598,6 @@ def grand_livre(request):
         comptes = []
         grand_total_debit = Decimal('0')
         grand_total_credit = Decimal('0')
-        opening_total_debit = Decimal('0')
-        opening_total_credit = Decimal('0')
         current_compte_id = None
         current_compte = None
         current_entries = []
@@ -457,21 +611,17 @@ def grand_livre(request):
                 current_compte = detail.compte
                 solde_depart = _coerce_decimal(solde_depart_par_compte.get(current_compte_id, Decimal('0')))
                 if is_bilan_account(current_compte):
-                    opening_debit = solde_depart if solde_depart >= 0 else Decimal('0')
-                    opening_credit = abs(solde_depart) if solde_depart < 0 else Decimal('0')
                     current_entries.append({
                         'date': None,
                         'no_ej': '',
                         'compagnie': None,
                         'description': 'Solde de depart',
                         'source': None,
-                        'debit': opening_debit,
-                        'credit': opening_credit,
+                        'debit': Decimal('0'),
+                        'credit': Decimal('0'),
                         'solde': solde_depart,
                         'is_solde_depart': True,
                     })
-                    opening_total_debit += opening_debit
-                    opening_total_credit += opening_credit
                 solde = solde_depart
 
             if detail.compte_id != current_compte_id:
@@ -491,21 +641,17 @@ def grand_livre(request):
                 total_credit = Decimal('0')
                 solde_depart = _coerce_decimal(solde_depart_par_compte.get(current_compte_id, Decimal('0')))
                 if is_bilan_account(current_compte):
-                    opening_debit = solde_depart if solde_depart >= 0 else Decimal('0')
-                    opening_credit = abs(solde_depart) if solde_depart < 0 else Decimal('0')
                     current_entries.append({
                         'date': None,
                         'no_ej': '',
                         'compagnie': None,
                         'description': 'Solde de depart',
                         'source': None,
-                        'debit': opening_debit,
-                        'credit': opening_credit,
+                        'debit': Decimal('0'),
+                        'credit': Decimal('0'),
                         'solde': solde_depart,
                         'is_solde_depart': True,
                     })
-                    opening_total_debit += opening_debit
-                    opening_total_credit += opening_credit
                 solde = solde_depart
 
             montant = detail.montant or Decimal('0')
@@ -559,8 +705,6 @@ def grand_livre(request):
                     continue
 
                 solde_depart = _coerce_decimal(solde_depart_par_compte.get(compte_id, Decimal('0')))
-                opening_debit = solde_depart if solde_depart >= 0 else Decimal('0')
-                opening_credit = abs(solde_depart) if solde_depart < 0 else Decimal('0')
                 comptes.append({
                     'compte': compte,
                     'is_bilan': True,
@@ -570,8 +714,8 @@ def grand_livre(request):
                         'compagnie': None,
                         'description': 'Solde de depart',
                         'source': None,
-                        'debit': opening_debit,
-                        'credit': opening_credit,
+                        'debit': Decimal('0'),
+                        'credit': Decimal('0'),
                         'solde': solde_depart,
                         'is_solde_depart': True,
                     }],
@@ -579,17 +723,12 @@ def grand_livre(request):
                     'total_credit': Decimal('0'),
                     'solde': solde_depart,
                 })
-                opening_total_debit += opening_debit
-                opening_total_credit += opening_credit
-
         comptes.sort(key=lambda bloc: ((getattr(bloc['compte'], 'numero', None) or 0), bloc['compte'].pk or 0))
 
-        grand_total_debit += opening_total_debit
-        grand_total_credit += opening_total_credit
-        grand_total_solde = grand_total_debit - grand_total_credit
+        grand_total_solde = sum((bloc['solde'] for bloc in comptes), Decimal('0'))
         is_balanced = grand_total_debit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) == grand_total_credit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-    return render(request, "facture/grand_livre.html", {
+    return render(request, "rapports/grand_livre.html", {
         'title': "Grand livre",
         'comptes': comptes,
         'grand_total_debit': grand_total_debit,
@@ -612,8 +751,15 @@ def _next_no_ej():
     return f"EJ{int(match.group(1)) + 1}"
 
 
-def _company_invoices_queryset(company):
-    return Tr_desc.objects.filter(compagnie=company).annotate(
+def _company_invoices_queryset(company=None):
+    invoice_detail_ids = Facture.objects.values('transaction_id')
+    queryset = Tr_desc.objects.filter(
+        details__id__in=Subquery(invoice_detail_ids),
+    )
+    if company is not None:
+        queryset = queryset.filter(compagnie=company)
+
+    return queryset.distinct().annotate(
         invoice_total=Coalesce(
             Sum('details__montant'),
             Value(0),
@@ -695,13 +841,7 @@ def facture(request):
         'comptes',
         Prefetch(
             'tr_desc',
-            queryset=Tr_desc.objects.annotate(
-                invoice_total=Coalesce(
-                    Sum('details__montant'),
-                    Value(0),
-                    output_field=DecimalField(max_digits=10, decimal_places=2)
-                )
-            ).prefetch_related('details__compte').order_by('-date', '-id')
+            queryset=_company_invoices_queryset()
         )
     ).exclude(nom__in=TAX_AUTHORITY_COMPANY_NAMES).all()
     comptes_queryset = Compte.objects.all()
@@ -789,13 +929,45 @@ def facture(request):
     selected_company_id = ''
     selected_company_name = ''
     editing_tr_desc_id = ''
+    invoice_action_error = ''
 
     if request.method == 'POST':
         action = request.POST.get('action')
 
         if action == 'add_company':
             if company_form.is_valid():
-                company_form.save()
+                company = company_form.save(commit=False)
+                company.created_by_non_expert = not is_expert(request.user)
+                company.save()
+                company_form.save_m2m()
+                return redirect('facture')
+
+        elif action == 'delete_tr_desc':
+            selected_company_id = request.POST.get('selected_company_id', '')
+            editing_tr_desc_id = (request.POST.get('editing_tr_desc_id') or '').strip()
+            selected_company = Compagnie.objects.filter(pk=selected_company_id).first()
+            editing_tr_desc = None
+
+            if selected_company:
+                selected_company_name = selected_company.nom
+                editing_tr_desc = _company_invoices_queryset(selected_company).filter(
+                    pk=editing_tr_desc_id,
+                ).first()
+
+            if not selected_company or not editing_tr_desc:
+                invoice_action_error = "Facture introuvable pour cette compagnie."
+                open_tr_modal = True
+            elif Tr_detail.objects.filter(
+                tr_desc=editing_tr_desc,
+                rapport_taxes__transmis_le__isnull=False,
+            ).exists():
+                invoice_action_error = (
+                    "Cette facture contient des lignes de taxes deja transmises. Elle ne peut pas etre supprimee."
+                )
+                open_tr_modal = True
+            else:
+                with transaction.atomic():
+                    editing_tr_desc.delete()
                 return redirect('facture')
 
         elif action == 'add_tr_desc':
@@ -866,6 +1038,37 @@ def facture(request):
                 )
 
             if selected_company and tr_desc_form.is_valid() and tr_detail_formset.is_valid():
+                detail_rows = []
+                for form in tr_detail_formset:
+                    cleaned_data = form.cleaned_data
+                    if not cleaned_data:
+                        continue
+                    compte = cleaned_data.get('compte')
+                    montant = cleaned_data.get('montant')
+                    if compte and montant is not None:
+                        detail_rows.append((compte, montant))
+
+                balance_rows = [
+                    (compte, montant)
+                    for compte, montant in detail_rows
+                    if not forced_compte or compte.pk != forced_compte.pk
+                ]
+                accounts_total = _money(sum(
+                    (abs(montant) for _, montant in balance_rows),
+                    Decimal('0'),
+                ))
+                invoice_total = _money(abs(facture_total_value))
+                balance_difference = _money(invoice_total - accounts_total)
+
+                if accounts_total != invoice_total:
+                    tr_desc_form.add_error(
+                        None,
+                        "La somme des comptes doit correspondre au total de la facture. "
+                        f"Comptes: {accounts_total:.2f}; total: {invoice_total:.2f}; "
+                        f"ecart: {abs(balance_difference):.2f}."
+                    )
+
+            if selected_company and tr_desc_form.is_valid() and tr_detail_formset.is_valid():
                 with transaction.atomic():
                     tr_desc = tr_desc_form.save(commit=False)
                     source_facture, _ = Source.objects.get_or_create(nom='Facture')
@@ -879,16 +1082,6 @@ def facture(request):
 
                     if editing_tr_desc:
                         Tr_detail.objects.filter(tr_desc=tr_desc).delete()
-
-                    detail_rows = []
-                    for form in tr_detail_formset:
-                        cleaned_data = form.cleaned_data
-                        if not cleaned_data:
-                            continue
-                        compte = cleaned_data.get('compte')
-                        montant = cleaned_data.get('montant')
-                        if compte and montant is not None:
-                            detail_rows.append((compte, montant))
 
                     # En mode CAP/CAR, le compte de contrepartie vient toujours de Setting.
                     if forced_compte:
@@ -930,7 +1123,7 @@ def facture(request):
 
             open_tr_modal = True
 
-    return render(request, "facture/facture.html", {
+    return render(request, "factures/index.html", {
         'title': title,
         'company_form': company_form,
         'comptes_count': comptes_count,
@@ -943,6 +1136,7 @@ def facture(request):
         'selected_company_id': selected_company_id,
         'selected_company_name': selected_company_name,
         'editing_tr_desc_id': editing_tr_desc_id,
+        'invoice_action_error': invoice_action_error,
         'all_comptes_json': json.dumps(all_comptes),
         'companies_comptes_json': json.dumps(companies_comptes),
         'companies_factures_json': json.dumps(companies_factures),
@@ -960,49 +1154,11 @@ def balance_de_verification(request):
     settings_instance = get_setting()
     report_date = Tr_desc.objects.order_by('-date').values_list('date', flat=True).first()
     report_year_label = _closing_date_label(report_date, settings_instance)
-    try:
-        rows, total_debit, total_credit = _fetch_balance_rows_from_sql_view()
-    except DatabaseError:
-        # Fallback temporaire tant que la migration SQL view n'est pas appliquee.
-        details_qs = Tr_detail.objects.all()
-        solde_depart_par_compte = _solde_depart_par_compte()
-        total_par_compte = dict(
-            details_qs.values('compte_id').annotate(
-                total=Coalesce(
-                    Sum('montant'),
-                    Value(0),
-                    output_field=DecimalField(max_digits=14, decimal_places=2),
-                )
-            ).values_list('compte_id', 'total')
-        )
-
-        rows = []
-        total_debit = Decimal('0')
-        total_credit = Decimal('0')
-
-        for compte in Compte.objects.select_related('no_total').order_by('numero'):
-            solde_depart = solde_depart_par_compte.get(compte.pk, Decimal('0'))
-            total_mouvements = total_par_compte.get(compte.pk, Decimal('0'))
-
-            if total_mouvements == Decimal('0') and solde_depart == Decimal('0'):
-                continue
-
-            solde = solde_depart + total_mouvements
-
-            debit = solde if solde >= 0 else Decimal('0')
-            credit = abs(solde) if solde < 0 else Decimal('0')
-            rows.append({
-                'compte': compte,
-                'debit': debit,
-                'credit': credit,
-                'solde_depart': solde_depart,
-            })
-            total_debit += debit
-            total_credit += credit
+    rows, total_debit, total_credit = _fetch_balance_rows()
 
     is_balanced = total_debit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) == total_credit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-    return render(request, "facture/balance_de_verification.html", {
+    return render(request, "rapports/balance_de_verification.html", {
         'title': "Balance de vérification",
         'rows': rows,
         'total_debit': total_debit,
@@ -1035,7 +1191,7 @@ def _build_compte_mode_context(mode, settings_instance):
 
     if compte_id:
         try:
-            compte_solde_grand_livre = _fetch_compte_solde_from_balance_view(compte_id)
+            compte_solde_grand_livre = _fetch_compte_solde(compte_id)
             blocks, total_des_soldes = _fetch_compte_mode_blocks_from_sql_view(
                 mode,
                 compte_id,
@@ -1138,29 +1294,17 @@ def compte_a_payer(request):
     settings_instance = get_setting()
     context = _build_compte_mode_context(Compagnie.MODE_CAP, settings_instance)
     context['title'] = "Comptes à payer"
-    return render(request, "facture/compte_mode.html", context)
+    return render(request, "rapports/compte_mode.html", context)
 
 
 def compte_a_recevoir(request):
     settings_instance = get_setting()
     context = _build_compte_mode_context(Compagnie.MODE_CAR, settings_instance)
     context['title'] = "Comptes à recevoir"
-    return render(request, "facture/compte_mode.html", context)
+    return render(request, "rapports/compte_mode.html", context)
 
 
 def rapport_de_taxes(request):
-    def parse_period(raw_value):
-        value = (raw_value or '').strip()
-        try:
-            year_str, month_str = value.split('-')
-            year = int(year_str)
-            month = int(month_str)
-            if 1 <= month <= 12:
-                return year, month, f"{year:04d}-{month:02d}"
-        except (ValueError, AttributeError):
-            pass
-        return None, None, None
-
     settings_instance = get_setting()
     tps_percue_id = None
     tps_payee_id = None
@@ -1256,19 +1400,10 @@ def rapport_de_taxes(request):
     feedback = []
     error_messages = []
 
-    default_now = timezone.localdate()
-    selected_year = default_now.year
-    selected_month = default_now.month
-    selected_month_value = f"{selected_year:04d}-{selected_month:02d}"
-
-    incoming_month = request.GET.get('mois') or request.POST.get('selected_month') or request.POST.get('periode_mensuelle')
-    parsed_year, parsed_month, parsed_value = parse_period(incoming_month)
-    if incoming_month and not parsed_value:
-        error_messages.append("Mois invalide. Utilise le format YYYY-MM.")
-    if parsed_value:
-        selected_year = parsed_year
-        selected_month = parsed_month
-        selected_month_value = parsed_value
+    working_period = get_working_period(request)
+    selected_year = working_period['year']
+    selected_month = working_period['month']
+    selected_month_value = working_period['value']
 
     month_tax_details = base_tax_details.filter(
         tr_desc__date__year=selected_year,
@@ -1484,7 +1619,7 @@ def rapport_de_taxes(request):
     if selected_report:
         selected_report.tax_blocks = build_tax_blocks(selected_report.details_taxes.all())
 
-    return render(request, "facture/rapport_de_taxe.html", {
+    return render(request, "rapports/rapport_de_taxe.html", {
         'title': "Rapport de taxes",
         'selected_report': selected_report,
         'tax_accounts_configured': bool(tax_account_ids),
@@ -1688,10 +1823,10 @@ def _find_releve_counterpart(current_releve, compte_cible, montant_cible):
 
     if depot_present:
         # Ligne courante: depot. Contrepartie attendue: retrait du meme montant.
-        base_qs = base_qs.filter(retrait=montant_cible)
+        base_qs = base_qs.filter(Q(retrait=montant_cible) | Q(retrait=-montant_cible))
     else:
         # Ligne courante: retrait. Contrepartie attendue: depot du meme montant.
-        base_qs = base_qs.filter(depot=montant_cible)
+        base_qs = base_qs.filter(Q(depot=montant_cible) | Q(depot=-montant_cible))
 
     candidates = list(base_qs.order_by('ecriture_creee', 'id'))
     if not candidates:
@@ -2011,30 +2146,11 @@ def releve_bancaire(request):
 
     _relink_releves_compte_type_mismatch()
 
-    settings_instance = get_setting()
-    fiscal_period_options = build_fiscal_period_options(settings_instance)
-    fiscal_period_map = {item['value']: item for item in fiscal_period_options}
-
-    selected_periode = (request.GET.get('periode') or '').strip()
-    cookie_periode = (request.COOKIES.get('releve_periode') or '').strip()
-
-    # Compatibilite avec anciens parametres ?mois=MM&annee=YYYY
-    legacy_mois = (request.GET.get('mois') or '').strip()
-    legacy_annee = (request.GET.get('annee') or '').strip()
-    legacy_periode = f"{legacy_annee}-{legacy_mois}" if legacy_mois and legacy_annee else ''
-    if not selected_periode and legacy_periode in fiscal_period_map:
-        selected_periode = legacy_periode
-
-    if not selected_periode and cookie_periode in fiscal_period_map:
-        selected_periode = cookie_periode
-
-    if selected_periode not in fiscal_period_map and fiscal_period_options:
-        selected_periode = fiscal_period_options[0]['value']
-
-    selected_period = fiscal_period_map.get(selected_periode, {})
-    mois_selectionne = selected_period.get('mois', '')
-    annee_selectionnee = selected_period.get('annee', '')
-    periode_label = selected_period.get('label', '')
+    working_period = get_working_period(request)
+    selected_periode = working_period['value']
+    mois_selectionne = str(working_period['month'])
+    annee_selectionnee = str(working_period['year'])
+    periode_label = working_period['label']
 
     comptes_releves = CompteReleve.objects.order_by('type_onglet', 'nom_affichage')
 
@@ -2118,9 +2234,9 @@ def releve_bancaire(request):
             for releve in releves_list:
                 # Pour les cartes: solde = solde_precedent + depot - retrait
                 if releve.depot:
-                    solde_cumulatif += releve.depot
+                    solde_cumulatif += abs(releve.depot)
                 if releve.retrait:
-                    solde_cumulatif -= releve.retrait
+                    solde_cumulatif -= abs(releve.retrait)
                 # On met à jour le solde de l'objet (pour l'affichage seulement)
                 releve.solde = solde_cumulatif
         
@@ -2153,7 +2269,7 @@ def releve_bancaire(request):
         for type_val, label in types_onglets
     ]
 
-    response = render(request, "facture/releve.html", {
+    response = render(request, "releves/index.html", {
         'title': "Relevé bancaire",
         'errors': errors,
         'unlinked_comptes_with_lines': unlinked_comptes_with_lines,
@@ -2165,21 +2281,12 @@ def releve_bancaire(request):
         'mois_selectionne': mois_selectionne,
         'annee_selectionnee': annee_selectionnee,
         'periode_label': periode_label,
-        'fiscal_period_options': fiscal_period_options,
         'tr_desc_form': tr_desc_form,
         'tr_detail_formset': tr_detail_formset,
         'groupes': groupes,
         'releves_par_compte': releves_par_compte,
         'fichiers_par_compte': fichiers_par_compte,
     })
-
-    if selected_periode:
-        response.set_cookie(
-            'releve_periode',
-            selected_periode,
-            max_age=365 * 24 * 60 * 60,
-            samesite='Lax',
-        )
 
     return response
 

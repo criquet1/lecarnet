@@ -1,0 +1,24 @@
+/* ==========================================================
+   Mon carnet comptable
+   Variables globales
+   ========================================================== */
+
+:root {
+
+    /* Couleurs principales */
+
+    --mcc-primary: #0d6efd;
+
+    /* Gris */
+
+    --mcc-white: #ffffff;
+    --mcc-border: #dee2e6;
+    --mcc-text: #212529;
+    --mcc-muted: #6c757d;
+
+    /* Ombres */
+
+    --mcc-shadow:
+        0 .15rem .5rem rgba(0,0,0,.05);
+
+}

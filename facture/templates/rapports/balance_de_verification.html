@@ -2,11 +2,13 @@
 
 {% block title %} {{ title }} {% endblock %}
 
-{% block body %}
-<h2 class="fw-bold text-center mb-2">{{ title }}</h2>
-{% if report_year_label %}
-<h2 class="fw-bold text-center mb-4">{{ report_year_label }}</h2>
-{% endif %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}
+    {% if report_year_label %}{{ report_year_label }}{% else %}Synthèse des soldes débiteurs et créditeurs.{% endif %}
+{% endblock %}
+
+{% block content %}
 
 <div class="mx-auto w-100" style="max-width: 840px;">
 <div class="table-responsive">

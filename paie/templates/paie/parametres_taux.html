@@ -2,14 +2,15 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block body %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2 class="fw-bold mb-1">{{ title }}</h2>
-        <p class="text-muted mb-0">Periodes d'effet par bloc (RRQ, RQAP, AE). Les taux doivent etre saisis en pourcentage (ex.: 2.5 = 2.5%).</p>
-    </div>
-    <a href="{% url 'paie:paie_dashboard' %}" class="btn btn-outline-secondary">Retour paie</a>
-</div>
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}Périodes d'effet par bloc (RRQ, RQAP, AE). Les taux sont saisis en pourcentage.{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'paie:paie_dashboard' %}" class="btn btn-outline-secondary">Retour paie</a>
+{% endblock %}
+
+{% block content %}
 
 {% if messages %}
     {% for message in messages %}

@@ -2,7 +2,11 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block body %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}Calendrier des jours de paie et des jours fériés.{% endblock %}
+
+{% block page_css %}
 <style>
     .calendar-grid {
         table-layout: fixed;
@@ -56,9 +60,10 @@
         font-size: 0.78rem;
     }
 </style>
+{% endblock %}
 
+{% block content %}
 <div class="text-center mb-4">
-    <h2 class="fw-bold mb-3">{{ title }}</h2>
     <div class="d-flex justify-content-center align-items-center gap-2 flex-wrap">
         <a href="?mois={{ previous_year_value }}" class="btn btn-outline-secondary btn-sm">Année précédente</a>
         <a href="?mois={{ previous_month_value }}" class="btn btn-outline-secondary">Précédent</a>

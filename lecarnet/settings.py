@@ -42,8 +42,9 @@ def _env_list(name):
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = _env('SECRET_KEY', 'django-insecure-4yu1pvs&-g1oz$+skhpve!8*+45_efkzq752#!u15h+nj^&kp=')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = _env_bool('DEBUG', default=False)
+# # SECURITY WARNING: don't run with debug turned on in production!
+# DEBUG = _env_bool('DEBUG', default=False)
+DEBUG = True
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 ALLOWED_HOSTS.extend(_env_list('ALLOWED_HOSTS'))
@@ -207,7 +208,7 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / "media"
 
 LOGIN_URL = 'login'
-LOGIN_REDIRECT_URL = 'accueil'
+LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'login'
 
 AUTHENTICATION_BACKENDS = [

@@ -1,0 +1,25 @@
+{% load static %}
+
+<header style="background:#18204b;padding:20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;max-width:1400px;margin:auto;">
+
+        <a href="{% url 'accueil_public' %}"
+           style="color:white;text-decoration:none;font-size:32px;font-weight:bold;">
+
+            📒 Mon carnet comptable
+
+        </a>
+
+        <a href="{% url 'login' %}"
+           style="background:#ff4d9b;
+                  color:white;
+                  padding:12px 24px;
+                  border-radius:10px;
+                  text-decoration:none;">
+
+            Se connecter
+
+        </a>
+
+    </div>
+</header>

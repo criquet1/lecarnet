@@ -1,15 +1,21 @@
 {% extends "layouts/app_base.html" %}
 {% load static %}
 
-{% block title %} {{ title }} {% endblock %}
+{% block title %} Facture {% endblock %}
 
-{% block body %}
+{% block page_title %}
+    Factures
+{% endblock %}
 
-<!-- Filtre par période -->
-<div class="d-flex align-items-center gap-3 mb-4">
-        <label for="filter-period" class="form-label mb-0 fw-semibold">Période :</label>
-        <select id="filter-period" class="form-select form-select-sm w-auto"></select>
-</div>
+{% block page_subtitle %}
+Gestion des factures des fournisseurs.
+{% endblock %}
+
+{% block content %}
+
+
+
+<input type="hidden" id="filter-period" value="{{ working_period.value }}">
 
 <!-- Bouton pour déclencher la modale -->
 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#exampleModal">
@@ -49,7 +55,7 @@
     <div class="row g-3">
         {% for compagnie in compagnies %}
             <div class="col-md-4">
-                <div class="card company-card h-100" role="button" data-bs-toggle="modal" data-bs-target="#invoiceModal" data-company-id="{{ compagnie.id }}" data-company-name="{{ compagnie.nom|escape }}" data-company-mode="{{ compagnie.cap_ou_car|default:'' }}" data-company-logo="{% if compagnie.logo %}{% static 'images/logos/'|add:compagnie.logo %}{% endif %}">
+                <div class="card company-card h-100" role="button" data-bs-toggle="modal" data-bs-target="#invoiceModal" data-company-id="{{ compagnie.id }}" data-company-name="{{ compagnie.nom|escape }}" data-company-mode="{{ compagnie.cap_ou_car|default:'' }}" data-company-created-by-non-expert="{{ compagnie.created_by_non_expert|yesno:'1,0' }}" data-company-logo="{% if compagnie.logo %}{% static 'images/logos/'|add:compagnie.logo %}{% endif %}">
                     {% if compagnie.logo %}
                         <img src="{% static 'images/logos/'|add:compagnie.logo %}" class="company-logo" alt="Logo de {{ compagnie.nom }}" style="width:100px;height:100px;object-fit:contain;display:block;margin:0 auto 1rem;">
                     {% endif %}
@@ -89,6 +95,11 @@
             {% csrf_token %}
             {{ tr_desc_form.non_field_errors }}
             {{ tr_detail_formset.non_form_errors }}
+            {% if invoice_action_error %}
+                <div class="alert alert-danger invoice-action-error" role="alert">
+                    {{ invoice_action_error }}
+                </div>
+            {% endif %}
 
             <input type="hidden" name="selected_company_id" id="id_selected_company_id" value="{{ selected_company_id }}">
             <input type="hidden" name="editing_tr_desc_id" id="id_editing_tr_desc_id" value="{{ editing_tr_desc_id }}">
@@ -108,6 +119,7 @@
             <div class="mb-3">
                 <label for="id_facture_total" class="form-label">Total</label>
                 <input type="number" step="0.01" class="form-control form-control-sm w-auto text-end" style="max-width: 180px;" id="id_facture_total" name="facture_total" placeholder="0.00">
+                <div id="invoice-balance-feedback" class="form-text" aria-live="polite"></div>
             </div>
 
             {{ tr_detail_formset.management_form }}
@@ -132,6 +144,15 @@
 
             <div class="d-flex gap-2 mt-3">
                 <button type="submit" class="btn btn-primary" name="action" value="add_tr_desc">Enregistrer la facture</button>
+                <button type="submit"
+                        class="btn btn-outline-danger d-none"
+                        name="action"
+                        value="delete_tr_desc"
+                        id="delete-invoice-btn"
+                        formnovalidate>
+                    <i class="bi bi-trash"></i>
+                    Supprimer la facture
+                </button>
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
             </div>
         </form>
@@ -164,23 +185,6 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             var filterPeriod = document.getElementById('filter-period');
-            var monthNames = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-            var today = new Date();
-
-            for (var i = 0; i < 15; i++) {
-                var d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-                var m = d.getMonth() + 1;
-                var y = d.getFullYear();
-                var opt = document.createElement('option');
-                opt.value = y + '-' + String(m).padStart(2, '0');
-                opt.textContent = monthNames[m - 1] + ' ' + y;
-                filterPeriod.appendChild(opt);
-            }
-
-            var cookieMatch = document.cookie.match(/(?:^|;\s*)filter_period=([^;]+)/);
-            if (cookieMatch) {
-                filterPeriod.value = decodeURIComponent(cookieMatch[1]);
-            }
 
             var companiesFacturesRaw = '{{ companies_factures_json|escapejs }}';
             var companiesFactures = companiesFacturesRaw ? JSON.parse(companiesFacturesRaw) : {};
@@ -201,11 +205,6 @@
             }
 
             if (filterPeriod) {
-                filterPeriod.addEventListener('change', function () {
-                    document.cookie = 'filter_period=' + encodeURIComponent(filterPeriod.value) + '; path=/; max-age=' + (365 * 24 * 3600);
-                    updateChecks();
-                });
-
                 updateChecks();
             }
 
@@ -216,6 +215,7 @@
             // Vérifier s'il y a des erreurs et rouvrir le modal si nécessaire
             var hasErrors = invoiceForm && (
                 invoiceForm.querySelector('[class*="errorlist"]') ||
+                invoiceForm.querySelector('.invoice-action-error') ||
                 invoiceForm.querySelectorAll('[class*="invalid"]').length > 0 ||
                 document.querySelectorAll('#invoiceModal [class*="errorlist"]').length > 0
             );
@@ -227,8 +227,10 @@
             var editingTrDescInput = document.getElementById('id_editing_tr_desc_id');
             var invoiceModalLabel = document.getElementById('invoiceModalLabel');
             var saveInvoiceBtn = invoiceForm ? invoiceForm.querySelector('button[name="action"][value="add_tr_desc"]') : null;
+            var deleteInvoiceBtn = document.getElementById('delete-invoice-btn');
             var addDetailRowBtn = document.getElementById('add-detail-row');
             var totalInput = document.getElementById('id_facture_total');
+            var balanceFeedback = document.getElementById('invoice-balance-feedback');
             var trDescDateInput = invoiceForm ? invoiceForm.querySelector('input[name="trdesc-date"]') : null;
             var trDescDescriptionInput = invoiceForm ? invoiceForm.querySelector('input[name="trdesc-description"]') : null;
             var trDescNoteDeCreditInput = invoiceForm ? invoiceForm.querySelector('input[name="trdesc-note_de_credit"]') : null;
@@ -270,6 +272,56 @@
 
             function fromCents(cents) {
                 return (Number(cents) || 0) / 100;
+            }
+
+            function updateInvoiceBalance() {
+                if (!invoiceForm || !totalInput || !balanceFeedback) {
+                    return;
+                }
+
+                var forcedCompteId = Number(getForcedCompteIdForActiveCompany() || 0);
+                var accountTotalCents = 0;
+                var amountInputs = invoiceForm.querySelectorAll('input[name$="-montant"]');
+
+                for (var i = 0; i < amountInputs.length; i++) {
+                    var input = amountInputs[i];
+                    if (!input.value.trim()) {
+                        continue;
+                    }
+                    var row = input.closest('.invoice-detail-row');
+                    var accountInput = row ? row.querySelector('input[type="hidden"][name$="-compte"]') : null;
+                    if (forcedCompteId && accountInput && Number(accountInput.value) === forcedCompteId) {
+                        continue;
+                    }
+                    accountTotalCents += Math.abs(toCents(parseAmount(input.value)));
+                }
+
+                var invoiceTotalCents = Math.abs(toCents(parseAmount(totalInput.value)));
+                var differenceCents = accountTotalCents - invoiceTotalCents;
+                var hasValues = totalInput.value.trim() || accountTotalCents !== 0;
+
+                balanceFeedback.classList.remove('text-success', 'text-danger');
+                if (!hasValues) {
+                    balanceFeedback.textContent = '';
+                    if (saveInvoiceBtn) {
+                        saveInvoiceBtn.disabled = false;
+                    }
+                    return;
+                }
+
+                if (differenceCents === 0) {
+                    balanceFeedback.classList.add('text-success');
+                    balanceFeedback.textContent = 'Équilibré : les comptes correspondent au total.';
+                    if (saveInvoiceBtn) {
+                        saveInvoiceBtn.disabled = false;
+                    }
+                } else {
+                    balanceFeedback.classList.add('text-danger');
+                    balanceFeedback.textContent = 'Écart de ' + fromCents(Math.abs(differenceCents)).toFixed(2) + ' entre les comptes et le total.';
+                    if (saveInvoiceBtn) {
+                        saveInvoiceBtn.disabled = true;
+                    }
+                }
             }
 
             function findMontantInputByCompteId(compteId) {
@@ -696,6 +748,7 @@
                 if (applyOptions.forNewInvoice) {
                     recalculateInvertedTaxes();
                 }
+                updateInvoiceBalance();
             }
 
             function loadInvoiceForEdit(invoice) {
@@ -725,6 +778,9 @@
 
                 if (saveInvoiceBtn) {
                     saveInvoiceBtn.textContent = 'Mettre à jour la facture';
+                }
+                if (deleteInvoiceBtn) {
+                    deleteInvoiceBtn.classList.remove('d-none');
                 }
 
                 editedInvoiceId = String(invoice.id || '');
@@ -785,6 +841,10 @@
                 if (saveInvoiceBtn) {
                     saveInvoiceBtn.textContent = 'Enregistrer la facture';
                 }
+                if (deleteInvoiceBtn) {
+                    deleteInvoiceBtn.classList.add('d-none');
+                }
+                updateInvoiceBalance();
 
                 var companyLogoImg = document.getElementById('company-logo');
                 var companyHeader = document.getElementById('company-header');
@@ -841,6 +901,7 @@
                     var companyId = button.getAttribute('data-company-id');
                     var companyName = button.getAttribute('data-company-name');
                     var companyMode = (button.getAttribute('data-company-mode') || '').toUpperCase();
+                    var companyCreatedByNonExpert = button.getAttribute('data-company-created-by-non-expert') === '1';
                     var companyLogo = button.getAttribute('data-company-logo');
                     activeCompanyMode = companyMode;
 
@@ -871,6 +932,9 @@
                     }
                     if (saveInvoiceBtn) {
                         saveInvoiceBtn.textContent = 'Enregistrer la facture';
+                    }
+                    if (deleteInvoiceBtn) {
+                        deleteInvoiceBtn.classList.add('d-none');
                     }
                     if (editingTrDescInput) {
                         editingTrDescInput.value = '';
@@ -923,6 +987,7 @@
                             var amountBtn = document.createElement('button');
                             amountBtn.type = 'button';
                             amountBtn.className = 'btn btn-link btn-sm p-0 fw-semibold text-decoration-none';
+                            amountBtn.classList.add(companyCreatedByNonExpert ? 'text-warning' : 'text-success');
                             amountBtn.textContent = Number(f.total || 0).toFixed(2);
                             amountBtn.title = 'Reprendre cette facture dans le formulaire';
                             amountBtn.addEventListener('click', function (invoiceData) {
@@ -935,6 +1000,9 @@
                                     }
                                     if (saveInvoiceBtn) {
                                         saveInvoiceBtn.textContent = 'Enregistrer la facture';
+                                    }
+                                    if (deleteInvoiceBtn) {
+                                        deleteInvoiceBtn.classList.add('d-none');
                                     }
                                     if (trDescNoteDeCreditInput) {
                                         trDescNoteDeCreditInput.checked = !!invoiceData.noteDeCredit;
@@ -1042,6 +1110,7 @@
 
                     bindFrRetardListener();
                     recalculateInvertedTaxes();
+                    updateInvoiceBalance();
                 });
 
                 invoiceModal.addEventListener('hidden.bs.modal', function () {
@@ -1098,16 +1167,45 @@
             }
 
             if (totalInput) {
-                totalInput.addEventListener('input', recalculateInvertedTaxes);
-                totalInput.addEventListener('change', recalculateInvertedTaxes);
+                totalInput.addEventListener('input', function () {
+                    recalculateInvertedTaxes();
+                    updateInvoiceBalance();
+                });
+                totalInput.addEventListener('change', function () {
+                    recalculateInvertedTaxes();
+                    updateInvoiceBalance();
+                });
             }
 
             if (trDescNoteDeCreditInput) {
                 trDescNoteDeCreditInput.addEventListener('change', syncDocumentSignDisplay);
             }
 
+            if (deleteInvoiceBtn) {
+                deleteInvoiceBtn.addEventListener('click', function (event) {
+                    if (!editingTrDescInput || !editingTrDescInput.value) {
+                        event.preventDefault();
+                        return;
+                    }
+
+                    var invoiceNumber = trDescDescriptionInput ? trDescDescriptionInput.value.trim() : '';
+                    var message = invoiceNumber
+                        ? 'Supprimer définitivement la facture « ' + invoiceNumber + ' » ?'
+                        : 'Supprimer définitivement cette facture ?';
+                    if (!window.confirm(message)) {
+                        event.preventDefault();
+                    }
+                });
+            }
+
             // Nettoyer les lignes non-remplies avant soumission
             if (invoiceForm) {
+                invoiceForm.addEventListener('input', function (event) {
+                    if (event.target.matches('input[name$="-montant"]')) {
+                        updateInvoiceBalance();
+                    }
+                });
+
                 invoiceForm.addEventListener('submit', function (e) {
                     var rows = invoiceForm.querySelectorAll('.invoice-detail-row');
                     for (var i = 0; i < rows.length; i++) {
@@ -1137,6 +1235,7 @@
 
                     var row = target.closest('.invoice-detail-row');
                     syncHiddenCompteFromSelect(row);
+                    updateInvoiceBalance();
                 });
             }
         });

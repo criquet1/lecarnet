@@ -1,5 +1,5 @@
 from django.contrib import admin
-from facture.models import Compagnie, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin
+from facture.models import Compagnie, Facture, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
 from compte.models import Setting
 from import_export.admin import ImportExportModelAdmin
 
@@ -71,10 +71,45 @@ class SoldeFinAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
-    
+
     def has_delete_permission(self, request, obj=None):
         return False
 
+
+
+
+class TransactionListeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('transaction_id', 'no_ej', 'date', 'compagnie', 'description', 'source', 'compte_numero', 'compte_libelle', 'rapport_taxes_id', 'debit', 'credit')
+    ordering = ('transaction_id',)
+    readonly_fields = ('transaction_id', 'no_ej', 'date', 'compagnie', 'description', 'source', 'compte_numero', 'compte_libelle', 'rapport_taxes_id', 'debit', 'credit')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+class FactureAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('transaction_id', 'no_ej', 'date', 'compagnie', 'description', 'source', 'compte_numero', 'compte_libelle', 'rapport_taxes_id', 'debit', 'credit')
+    ordering = ('transaction_id',)
+    readonly_fields = ('transaction_id', 'no_ej', 'date', 'compagnie', 'description', 'source', 'compte_numero', 'compte_libelle', 'rapport_taxes_id', 'debit', 'credit')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+admin.site.register(Facture, FactureAdmin)
+admin.site.register(TransactionListe, TransactionListeAdmin)
 admin.site.register(Compagnie, CompagnieAdmin)
 admin.site.register(Setting, SettingAdmin)
 admin.site.register(Tr_desc, TrDescAdmin)

@@ -1,0 +1,40 @@
+/* TABLEAU PRINCIPAL */
+.table-rapport {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 40px;
+    font-size: 1rem;
+}
+
+.table-rapport th,
+.table-rapport td {
+    border: 1px solid black;
+    padding: 6px 10px;
+}
+
+.table-rapport th {
+    background: #F4ECF7;
+    font-weight: bold;
+    text-align: center;
+}
+
+/* COLONNES */
+.table-rapport .col-small {
+    width: 60px;
+}
+
+.table-rapport .col-medium {
+    width: 120px;
+}
+
+.table-rapport .col-large {
+    width: 250px;
+}
+
+/* TOTaux */
+.table-rapport tfoot td {
+    border-top: 1px solid black;
+    border-bottom: double black;
+    font-weight: bold;
+}
+

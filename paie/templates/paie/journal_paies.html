@@ -2,11 +2,15 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block body %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="fw-bold mb-0">{{ title }}</h2>
-    <a href="{% url 'paie:paie_saisir' %}" class="btn btn-primary">Saisir une paie</a>
-</div>
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}Sommaire des paies et des retenues par période et par employé.{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'paie:paie_saisir' %}" class="btn btn-primary">Saisir une paie</a>
+{% endblock %}
+
+{% block content %}
 
 <ul class="nav nav-tabs mb-3" id="journalTabs" role="tablist">
     <li class="nav-item" role="presentation">
@@ -20,9 +24,11 @@
 </ul>
 
 <div class="tab-content" id="journalTabsContent">
-    <form id="form-creer-ecriture-salaire" method="post" class="d-none">
-        {% csrf_token %}
-    </form>
+    {% if can_create_salary_entry %}
+        <form id="form-creer-ecriture-salaire" method="post" class="d-none">
+            {% csrf_token %}
+        </form>
+    {% endif %}
 
     <div class="tab-pane fade show active" id="journal-total" role="tabpanel" aria-labelledby="journal-total-tab" tabindex="0">
         <div class="row g-3 mb-4">
@@ -73,7 +79,7 @@
                         <tbody>
                             {% for row in total_rows %}
                                 {% if row.type == 'period' %}
-                                    <tr class="js-creer-ecriture-salaire" data-create-url="{% url 'paie:paie_creer_ecriture_salaire' row.totals.periode.id %}">
+                                    <tr{% if can_create_salary_entry %} class="js-creer-ecriture-salaire" data-create-url="{% url 'paie:paie_creer_ecriture_salaire' row.totals.periode.id %}" role="button" tabindex="0"{% endif %}>
                                         <td>{{ row.period_index }}</td>
                                         <td>{{ row.date_fin|date:"Y-m-d" }}</td>
                                         <td class="text-end">{{ row.totals.heures|floatformat:2 }}</td>
@@ -231,6 +237,7 @@
     {% endfor %}
 </div>
 
+{% if can_create_salary_entry %}
 <script>
     (function () {
         const form = document.getElementById('form-creer-ecriture-salaire');
@@ -259,7 +266,14 @@
                 form.action = createUrl;
                 form.submit();
             });
+            row.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    row.click();
+                }
+            });
         });
     })();
 </script>
+{% endif %}
 {% endblock %}

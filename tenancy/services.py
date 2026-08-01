@@ -58,8 +58,14 @@ def get_user_client_accesses(user):
 
 
 def pick_default_access(accesses):
-    ordered = list(accesses.order_by('-is_default', 'client__name', 'id'))
-    return ordered[0] if ordered else None
+    """
+    Retourne toujours le premier client par ordre alphabétique.
+    """
+
+    return accesses.order_by(
+        'client__name',
+        'id',
+    ).first()
 
 
 def set_active_client_on_session(request, access):

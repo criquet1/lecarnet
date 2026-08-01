@@ -3,18 +3,18 @@
 
 {% block title %} {{ title }} {% endblock %}
 
-{% block body %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}
+    {% if report_year_label %}{{ report_year_label }}{% else %}Détail chronologique des écritures comptables.{% endif %}
+{% endblock %}
+
+{% block content %}
 
 {% if request.user.is_expert or request.user.is_superuser %}
 <div class="border rounded p-3 mb-4 bg-light" style="overflow:hidden;">
     {% include "compte/transactions_form.html" %}
 </div>
-{% endif %}
-
-<h2 class="fw-bold text-center mb-2">{{ title }}</h2>
-
-{% if report_year_label %}
-<h2 class="fw-bold text-center mb-4">{{ report_year_label }}</h2>
 {% endif %}
 
 <!-- IMPORTANT : on enlève le flex qui masquait les transactions -->
@@ -25,11 +25,12 @@
             <div class="d-flex align-items-center gap-3 flex-wrap mb-2">
                 <span>{{ entry.no_ej }}</span>
                 <span>{{ entry.date|date:"Y-m-d" }}</span>
-                <span>{{ entry.description }}</span>
-                <span>{% if entry.compagnie %}{{ entry.compagnie.nom }}{% endif %}</span>
+                <span>
+                    {% if entry.compagnie %}{{ entry.compagnie }}{% if entry.description %} - {% endif %}{% endif %}{{ entry.description|default:"" }}
+                </span>
                 <span class="ms-auto text-end">
                     <strong>Source :</strong>
-                    {% if entry.source %}{{ entry.source.nom }}{% endif %}
+                    {{ entry.source|default:"" }}
                 </span>
             </div>
 
@@ -48,21 +49,21 @@
                         </tr>
                     </thead>
 <tbody>
-    {% for detail in entry.details.all %}
+    {% for detail in entry.details %}
         <tr>
-            <td class="{% if detail.montant < 0 %}indent-credit{% endif %}">
-                {{ detail.compte.numero }} - {{ detail.compte.libelle }}
+            <td class="{% if detail.credit %}indent-credit{% endif %}">
+                {{ detail.compte_numero }} - {{ detail.compte_libelle }}
             </td>
 
             <td class="text-end text-nowrap font-monospace">
-                {% if detail.montant >= 0 %}
-                    {{ detail.montant|floatformat:2 }}
+                {% if detail.debit %}
+                    {{ detail.debit|floatformat:2 }}
                 {% endif %}
             </td>
 
             <td class="text-end text-nowrap font-monospace">
-                {% if detail.montant < 0 %}
-                    {{ detail.montant|floatformat:2|slice:"1:" }}
+                {% if detail.credit %}
+                    {{ detail.credit|floatformat:2 }}
                 {% endif %}
             </td>
         </tr>

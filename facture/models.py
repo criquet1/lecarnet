@@ -7,7 +7,7 @@ from paie.models import FrequencePaie
 
 
 class Source(models.Model):
-    nom = models.CharField(max_length=15, blank=False, null=False)
+    nom = models.CharField(max_length=30, blank=False, null=False)
 
     def __str__(self):
         return self.nom
@@ -39,6 +39,8 @@ class Compagnie(models.Model):
         blank=True,
         null=True,
     )
+    active = models.BooleanField(default=True)
+    created_by_non_expert = models.BooleanField(default=False)
 
     def __str__(self):
         return self.nom
@@ -320,6 +322,7 @@ class CompteReleve(models.Model):
     nom_affichage = models.CharField(max_length=60, blank=True)
     type_onglet = models.CharField(max_length=20, choices=TYPE_ONGLET_CHOICES, default='banque')
     nom_institut = models.CharField(max_length=60, blank=True)
+    actif = models.BooleanField(default=True)
     compte_comptable = models.ForeignKey(
         Compte,
         on_delete=models.SET_NULL,
@@ -373,6 +376,13 @@ class Releve(models.Model):
         null=True,
     )
 
+    def save(self, *args, **kwargs):
+        if self.retrait is not None:
+            self.retrait = abs(self.retrait)
+        if self.depot is not None:
+            self.depot = abs(self.depot)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.no_compte} {self.type_compte} {self.date} #{self.no_ligne}"
 
@@ -397,12 +407,12 @@ class SoldeFin(models.Model):
 
 class TransactionListe(models.Model):
     transaction_id = models.IntegerField(primary_key=True)
-    no_ej = models.IntegerField()
+    no_ej = models.CharField(max_length=30)
     date = models.DateField()
     compagnie = models.CharField(max_length=255, null=True)
     description = models.CharField(max_length=255, null=True)
     source = models.CharField(max_length=255, null=True)
-    compte_numero = models.CharField(max_length=50)
+    compte_numero = models.IntegerField()
     compte_libelle = models.CharField(max_length=255)
     rapport_taxes_id = models.IntegerField(null=True)
     debit = models.DecimalField(max_digits=12, decimal_places=2)
@@ -415,12 +425,12 @@ class TransactionListe(models.Model):
 
 class Facture(models.Model):
     transaction_id = models.IntegerField(primary_key=True)
-    no_ej = models.IntegerField()
+    no_ej = models.CharField(max_length=30)
     date = models.DateField()
     compagnie = models.CharField(max_length=255, null=True)
     description = models.CharField(max_length=255, null=True)
     source = models.CharField(max_length=255, null=True)
-    compte_numero = models.CharField(max_length=50)
+    compte_numero = models.IntegerField()
     compte_libelle = models.CharField(max_length=255)
     rapport_taxes_id = models.IntegerField(null=True)
     debit = models.DecimalField(max_digits=12, decimal_places=2)
