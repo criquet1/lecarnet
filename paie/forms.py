@@ -63,6 +63,8 @@ class EmployeForm(forms.ModelForm):
             self.initial['taux_vacances'] = str(display_value)
 
         if not self.instance.pk:
+            self.initial.setdefault('e_prov', 18952)
+            self.initial.setdefault('e_fed', '16452')
             settings_instance = get_setting('frequence_paie')
             if settings_instance and settings_instance.frequence_paie_id:
                 self.fields['frequence_paie'].initial = settings_instance.frequence_paie_id

@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
@@ -16,7 +17,7 @@ from django.utils import timezone
 from compte.models import Compte, SoldeAuxLivres, Total
 from facture.models import Compagnie, CompteReleve, Facture, RapportTaxes, Releve, SoldeFin, Source, TransactionListe, Tr_desc, Tr_detail
 from facture.templatetags.facture_extras import accounting_amount
-from facture.views import _company_invoices_queryset, dashboard, facture, grand_livre, journal_general, rapport_de_taxes, releve_bancaire, update_working_period
+from facture.views import _company_invoices_queryset, dashboard, facture, grand_livre, journal_general, rapport_de_taxes, releve_bancaire, releve_ecriture_similaire, update_working_period
 from facture.working_period import set_working_period
 from compte.models import Setting
 from tenancy.models import ClientDatabase, UserClientAccess
@@ -526,6 +527,203 @@ class AccountingSqlViewsTests(TestCase):
 
 		statement.refresh_from_db(using=self.alias)
 		self.assertEqual(statement.retrait, Decimal('35.70'))
+
+	def test_similar_entry_endpoint_returns_applicable_details(self):
+		bank_account = Compte.objects.using(self.alias).create(
+			numero=1100,
+			libelle='Banque recherche similaire',
+			no_total=self.compte.no_total,
+		)
+		expense_account = Compte.objects.using(self.alias).create(
+			numero=6100,
+			libelle='Fournitures recherche similaire',
+			no_total=self.compte.no_total,
+		)
+		statement_account = CompteReleve.objects.using(self.alias).create(
+			no_compte='SIMILAR-01',
+			type_compte='CC',
+			nom_affichage='Carte recherche similaire',
+			compte_comptable=bank_account,
+		)
+		historical_entry = Tr_desc.objects.using(self.alias).create(
+			no_ej='EJ-SIM-1',
+			date=date(2026, 6, 1),
+			desc_ctb='Papeterie du centre',
+		)
+		Tr_detail.objects.using(self.alias).create(
+			tr_desc=historical_entry,
+			compte=bank_account,
+			montant=Decimal('-42.50'),
+		)
+		Tr_detail.objects.using(self.alias).create(
+			tr_desc=historical_entry,
+			compte=expense_account,
+			montant=Decimal('42.50'),
+		)
+		Releve.objects.using(self.alias).create(
+			compte_releve=statement_account,
+			fichier_source='historique-similaire.csv',
+			nom_institut='Banque test',
+			no_compte='SIMILAR-01',
+			type_compte='CC',
+			date=date(2026, 6, 1),
+			no_ligne='1',
+			desc_releve='PAPETERIE DU CENTRE',
+			retrait=Decimal('42.50'),
+			solde=Decimal('0'),
+			ecriture_creee=True,
+			ecriture_tr_desc=historical_entry,
+		)
+		current_statement = Releve.objects.using(self.alias).create(
+			compte_releve=statement_account,
+			fichier_source='courant-similaire.csv',
+			nom_institut='Banque test',
+			no_compte='SIMILAR-01',
+			type_compte='CC',
+			date=date(2026, 7, 1),
+			no_ligne='2',
+			desc_releve='PAPETERIE DU CENTRE',
+			retrait=Decimal('42.50'),
+			solde=Decimal('0'),
+		)
+
+		token = set_current_tenant_alias(self.alias)
+		try:
+			response = releve_ecriture_similaire(
+				RequestFactory().get(f'/releves/similaire/{current_statement.pk}/'),
+				current_statement.pk,
+			)
+		finally:
+			reset_current_tenant_alias(token)
+
+		payload = json.loads(response.content)
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(payload['resultats'][0]['no_ej'], 'EJ-SIM-1')
+		self.assertEqual(payload['resultats'][0]['details'], [{
+			'compte_id': expense_account.pk,
+			'compte_label': str(expense_account),
+			'montant': '42.50',
+		}])
+
+		near_match_statement = Releve.objects.using(self.alias).create(
+			compte_releve=statement_account,
+			fichier_source='presque-similaire.csv',
+			nom_institut='Banque test',
+			no_compte='SIMILAR-01',
+			type_compte='CC',
+			date=date(2026, 7, 2),
+			no_ligne='3',
+			desc_releve='PAPETERIE DU CENTRE QC',
+			retrait=Decimal('42.50'),
+			solde=Decimal('0'),
+		)
+		token = set_current_tenant_alias(self.alias)
+		try:
+			near_match_response = releve_ecriture_similaire(
+				RequestFactory().get(f'/releves/similaire/{near_match_statement.pk}/'),
+				near_match_statement.pk,
+			)
+		finally:
+			reset_current_tenant_alias(token)
+
+		self.assertEqual(json.loads(near_match_response.content)['resultats'], [])
+
+	def test_similar_entry_endpoint_includes_inter_statement_transfer(self):
+		source_account = Compte.objects.using(self.alias).create(
+			numero=1100,
+			libelle='Banque EOP',
+			no_total=self.compte.no_total,
+		)
+		target_account = Compte.objects.using(self.alias).create(
+			numero=1110,
+			libelle='Banque ET2',
+			no_total=self.compte.no_total,
+		)
+		source_statement_account = CompteReleve.objects.using(self.alias).create(
+			no_compte='EOP-SIMILAR',
+			type_compte='BANQUE',
+			nom_affichage='EOP',
+			compte_comptable=source_account,
+		)
+		target_statement_account = CompteReleve.objects.using(self.alias).create(
+			no_compte='ET2-SIMILAR',
+			type_compte='BANQUE',
+			nom_affichage='ET2',
+			compte_comptable=target_account,
+		)
+		historical_entry = Tr_desc.objects.using(self.alias).create(
+			no_ej='EJ-TRANSFER-1',
+			date=date(2026, 5, 18),
+			desc_ctb='Virement AccesD vers ET2',
+		)
+		Tr_detail.objects.using(self.alias).create(
+			tr_desc=historical_entry,
+			compte=source_account,
+			montant=Decimal('-500.00'),
+		)
+		Tr_detail.objects.using(self.alias).create(
+			tr_desc=historical_entry,
+			compte=target_account,
+			montant=Decimal('500.00'),
+		)
+		for statement_account, line_number, description, withdrawal, deposit in (
+			(source_statement_account, '1', 'Virement - AccesD Internet /a ET 2', Decimal('500.00'), None),
+			(target_statement_account, '1', 'Virement - AccesD Internet /de EOP', None, Decimal('500.00')),
+		):
+			Releve.objects.using(self.alias).create(
+				compte_releve=statement_account,
+				fichier_source='virement-historique.csv',
+				nom_institut='Banque test',
+				no_compte=statement_account.no_compte,
+				type_compte='BANQUE',
+				date=date(2026, 5, 18),
+				no_ligne=line_number,
+				desc_releve=description,
+				retrait=withdrawal,
+				depot=deposit,
+				solde=Decimal('0'),
+				ecriture_creee=True,
+				ecriture_tr_desc=historical_entry,
+			)
+
+		current_statement = Releve.objects.using(self.alias).create(
+			compte_releve=source_statement_account,
+			fichier_source='virement-courant-eop.csv',
+			nom_institut='Banque test',
+			no_compte=source_statement_account.no_compte,
+			type_compte='BANQUE',
+			date=date(2026, 5, 21),
+			no_ligne='2',
+			desc_releve='Virement - AccesD Internet /a ET 2',
+			retrait=Decimal('250.00'),
+			solde=Decimal('0'),
+		)
+		Releve.objects.using(self.alias).create(
+			compte_releve=target_statement_account,
+			fichier_source='virement-courant-et2.csv',
+			nom_institut='Banque test',
+			no_compte=target_statement_account.no_compte,
+			type_compte='BANQUE',
+			date=date(2026, 5, 21),
+			no_ligne='2',
+			desc_releve='Virement - AccesD Internet /de EOP',
+			depot=Decimal('250.00'),
+			solde=Decimal('0'),
+		)
+
+		token = set_current_tenant_alias(self.alias)
+		try:
+			response = releve_ecriture_similaire(
+				RequestFactory().get(f'/releves/similaire/{current_statement.pk}/'),
+				current_statement.pk,
+			)
+		finally:
+			reset_current_tenant_alias(token)
+
+		payload = json.loads(response.content)
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(payload['resultats'][0]['no_ej'], 'EJ-TRANSFER-1')
+		self.assertEqual(payload['resultats'][0]['details'][0]['compte_id'], target_account.pk)
 
 	def test_existing_negative_withdrawal_reduces_credit_card_running_balance(self):
 		statement_account = CompteReleve.objects.using(self.alias).create(

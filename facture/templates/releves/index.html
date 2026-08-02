@@ -71,6 +71,11 @@ Téléchargement des relevés bancaires
         {% endfor %}
     </ul>
 
+    <p class="text-muted small mb-2">
+        <span class="badge bg-info text-dark">≈ no EJ</span>
+        indique qu'une écriture similaire existe déjà pour cette description; ouvre la ligne pour la voir et l'appliquer.
+    </p>
+
     <div class="tab-content" id="releveTabsContent">
         {% for groupe in groupes %}
             <div class="tab-pane fade {% if forloop.first %}show active{% endif %}"
@@ -133,10 +138,22 @@ Téléchargement des relevés bancaires
                                         data-ecriture-date="{{ r.ecriture_date|default:'' }}"
                                         data-ecriture-description="{{ r.ecriture_description|default:''|escape }}"
                                         data-ecriture-compagnie-id="{{ r.ecriture_compagnie_id|default:'' }}"
-                                        data-ecriture-details="{{ r.ecriture_details_json|default:'[]'|escape }}">
+                                        data-ecriture-details="{{ r.ecriture_details_json|default:'[]'|escape }}"
+                                        data-similaire-disponible="{% if r.similaire_disponible %}1{% else %}0{% endif %}"
+                                        data-similaire-no-ej="{{ r.similaire_no_ej|default:''|escape }}"
+                                        data-similaire-desc-ctb="{{ r.similaire_desc_ctb|default:''|escape }}"
+                                        data-similaire-compagnie-id="{{ r.similaire_compagnie_id|default:'' }}"
+                                        data-similaire-details="{{ r.similaire_details_json|default:'[]'|escape }}">
                                         <td>{{ r.date }}</td>
                                         <td>{{ r.no_ligne }}</td>
-                                        <td>{{ r.desc_releve }}</td>
+                                        <td>
+                                            {{ r.desc_releve }}
+                                            {% if r.similaire_disponible %}
+                                                <span class="badge bg-info text-dark ms-1" title="Écriture similaire trouvée: {{ r.similaire_no_ej }}{% if r.similaire_desc_ctb %} — {{ r.similaire_desc_ctb }}{% endif %}">
+                                                    ≈ {{ r.similaire_no_ej }}
+                                                </span>
+                                            {% endif %}
+                                        </td>
                                         <td class="text-end">{% if r.retrait %}{{ r.retrait }}{% endif %}</td>
                                         <td class="text-end">{% if r.depot %}{{ r.depot }}{% endif %}</td>
                                         <td class="text-end">{{ r.solde }}</td>
@@ -158,7 +175,7 @@ Téléchargement des relevés bancaires
     </div>
 
     <div class="modal fade" id="releveDetailModal" tabindex="-1" aria-labelledby="releveDetailModalLabel" aria-hidden="true" data-open-releve-modal="{{ open_releve_modal|yesno:'1,0' }}" data-modal-releve-id="{{ modal_releve_id|default:''|escape }}">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="releveDetailModalLabel">Détail de la ligne de relevé</h5>
@@ -194,6 +211,13 @@ Téléchargement des relevés bancaires
                         <dt class="col-sm-4">No EJ</dt>
                         <dd class="col-sm-8" id="modal-no-ej"></dd>
                     </dl>
+
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="find-similar-btn">
+                            🔍 Chercher une écriture similaire
+                        </button>
+                        <div id="similar-results" class="mt-2 d-none" role="status" aria-live="polite"></div>
+                    </div>
 
                     <form method="post" id="create-ecriture-form">
                         {% csrf_token %}
@@ -288,6 +312,10 @@ Téléchargement des relevés bancaires
         var statutText = document.getElementById('modal-statut-ecriture');
         var noEjText = document.getElementById('modal-no-ej');
         var compagnieSelect = document.getElementById('id_compagnie_id');
+        var findSimilarBtn = document.getElementById('find-similar-btn');
+        var similarResultsDiv = document.getElementById('similar-results');
+        // Gabarit d'URL: on remplace l'id 0 par le vrai releve_id au moment de l'appel.
+        var similarUrlTemplate = "{% url 'releve_ecriture_similaire' releve_id=0 %}";
 
         function getField(id) {
             return document.getElementById(id);
@@ -298,6 +326,12 @@ Téléchargement des relevés bancaires
             if (el) {
                 el.textContent = value || '-';
             }
+        }
+
+        function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.textContent = str === null || str === undefined ? '' : String(str);
+            return div.innerHTML;
         }
 
         function normalizeAmount(raw) {
@@ -369,6 +403,27 @@ Téléchargement des relevés bancaires
             }
         }
 
+        // Remplit les lignes Tr_detail du formulaire à partir d'une liste
+        // [{compte_id, montant}, ...] — utilisée à la fois pour l'écriture
+        // existante de la ligne courante et pour une écriture similaire choisie.
+        function applyDetailsToForm(details) {
+            clearDetailRows();
+            (details || []).forEach(function (item, index) {
+                var detailRow = detailRows[index];
+                var compteField = getDetailField(index, 'compte');
+                var montantField = getDetailField(index, 'montant');
+                if (detailRow) {
+                    detailRow.classList.remove('d-none');
+                }
+                if (compteField) {
+                    setSelectValue(compteField, item.compte_id);
+                }
+                if (montantField) {
+                    montantField.value = normalizeAmount(item.montant || '');
+                }
+            });
+        }
+
         function prefillFormFromRow(row) {
             var trDate = getField('id_trdesc_releve-date');
             var trDescription = getField('id_trdesc_releve-desc_ctb');
@@ -392,9 +447,6 @@ Téléchargement des relevés bancaires
 
             clearDetailRows();
 
-            var firstCompte = getDetailField(0, 'compte');
-            var firstMontant = getDetailField(0, 'montant');
-
             if (ecritureExiste) {
                 var rawDetails = row.dataset.ecritureDetails || '[]';
                 var details = [];
@@ -404,29 +456,13 @@ Téléchargement des relevés bancaires
                     details = [];
                 }
 
-                details.forEach(function (item, index) {
-                    var detailRow = detailRows[index];
-                    var compteField = getDetailField(index, 'compte');
-                    var montantField = getDetailField(index, 'montant');
-                    if (detailRow) {
-                        detailRow.classList.remove('d-none');
-                    }
-                    if (compteField) {
-                        setSelectValue(compteField, item.compte_id);
-                    }
-                    if (montantField) {
-                        montantField.value = normalizeAmount(item.montant || '');
-                    }
-                });
-
                 if (details.length > 0) {
+                    applyDetailsToForm(details);
                     return;
                 }
             }
 
-            if (firstCompte) {
-                firstCompte.value = '';
-            }
+            var firstMontant = getDetailField(0, 'montant');
             if (firstMontant) {
                 var retraitValue = row.dataset.retrait || '';
                 var depotValue = row.dataset.depot || '';
@@ -441,6 +477,136 @@ Téléchargement des relevés bancaires
                 if (hidden) {
                     hidden.classList.remove('d-none');
                 }
+            });
+        }
+
+        function buildSimilarUrl(releveId) {
+            return similarUrlTemplate.replace(/\/0\/?$/, '/' + encodeURIComponent(releveId) + '/');
+        }
+
+        function getCurrentReleveAmountCents() {
+            var releveId = releveIdInput ? releveIdInput.value : '';
+            var currentRow = releveRows.find(function (row) {
+                return row.dataset.releveId === releveId;
+            });
+            if (!currentRow) {
+                return null;
+            }
+
+            var rawAmount = currentRow.dataset.retrait || currentRow.dataset.depot || currentRow.dataset.suggestedMontant || '';
+            var amount = Number(normalizeAmount(rawAmount));
+            return Number.isFinite(amount) ? Math.round(Math.abs(amount) * 100) : null;
+        }
+
+        function adaptDetailsToCurrentAmount(details) {
+            var adapted = (details || []).map(function (detail) {
+                return Object.assign({}, detail);
+            });
+            var targetCents = getCurrentReleveAmountCents();
+            if (!adapted.length || targetCents === null) {
+                return adapted;
+            }
+
+            var sourceCents = adapted.map(function (detail) {
+                var amount = Number(normalizeAmount(detail.montant || ''));
+                return Number.isFinite(amount) ? Math.round(Math.abs(amount) * 100) : 0;
+            });
+            var sourceTotal = sourceCents.reduce(function (total, amount) {
+                return total + amount;
+            }, 0);
+
+            if (sourceTotal <= 0) {
+                adapted[0].montant = (targetCents / 100).toFixed(2);
+                return adapted;
+            }
+
+            var allocatedCents = 0;
+            adapted.forEach(function (detail, index) {
+                var amountCents = index === adapted.length - 1
+                    ? targetCents - allocatedCents
+                    : Math.round(targetCents * sourceCents[index] / sourceTotal);
+                allocatedCents += amountCents;
+                detail.montant = (amountCents / 100).toFixed(2);
+            });
+            return adapted;
+        }
+
+        function applySimilarResult(chosen) {
+            if (!chosen) {
+                return;
+            }
+
+            var trDescription = getField('id_trdesc_releve-desc_ctb');
+            if (trDescription) {
+                trDescription.value = chosen.desc_ctb || chosen.desc_releve || '';
+            }
+            if (compagnieSelect) {
+                setSelectValue(compagnieSelect, chosen.compagnie_id || '');
+            }
+            applyDetailsToForm(adaptDetailsToCurrentAmount(chosen.details || []));
+        }
+
+        function showSimilarStatus(message, cssClass) {
+            similarResultsDiv.classList.remove('d-none');
+            similarResultsDiv.innerHTML = '<div class="small ' + cssClass + '">' + escapeHtml(message) + '</div>';
+            similarResultsDiv.scrollIntoView({ block: 'nearest' });
+        }
+
+        if (findSimilarBtn) {
+            findSimilarBtn.addEventListener('click', function () {
+                var releveId = releveIdInput ? releveIdInput.value : '';
+                if (!releveId) {
+                    return;
+                }
+
+                findSimilarBtn.disabled = true;
+                var originalLabel = findSimilarBtn.textContent;
+                findSimilarBtn.textContent = 'Recherche...';
+                similarResultsDiv.classList.remove('d-none');
+                similarResultsDiv.innerHTML = '<div class="text-muted small">Recherche en cours...</div>';
+
+                fetch(buildSimilarUrl(releveId), {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                    .then(function (resp) {
+                        if (!resp.ok) {
+                            throw new Error('HTTP ' + resp.status);
+                        }
+                        var contentType = resp.headers.get('content-type') || '';
+                        if (contentType.indexOf('application/json') === -1) {
+                            throw new Error('Réponse inattendue du serveur');
+                        }
+                        return resp.json();
+                    })
+                    .then(function (data) {
+                        findSimilarBtn.disabled = false;
+                        findSimilarBtn.textContent = originalLabel;
+                        similarResultsDiv.classList.remove('d-none');
+
+                        if (data.error) {
+                            similarResultsDiv.innerHTML = '<div class="text-danger small">' + escapeHtml(data.error) + '</div>';
+                            return;
+                        }
+
+                        var resultats = Array.isArray(data.resultats) ? data.resultats : [];
+                        if (!resultats.length) {
+                            showSimilarStatus('Aucune correspondance exacte trouvée.', 'text-muted');
+                            return;
+                        }
+
+                        applySimilarResult(resultats[0]);
+                        showSimilarStatus(
+                            'Écriture ' + resultats[0].no_ej + ' appliquée dans la transaction.',
+                            'text-success'
+                        );
+                    })
+                    .catch(function (error) {
+                        findSimilarBtn.disabled = false;
+                        findSimilarBtn.textContent = originalLabel;
+                        similarResultsDiv.classList.remove('d-none');
+                        similarResultsDiv.innerHTML = '<div class="text-danger small">Erreur lors de la recherche: ' +
+                            escapeHtml(error.message || 'réponse invalide') + '.</div>';
+                    });
             });
         }
 
@@ -470,8 +636,39 @@ Téléchargement des relevés bancaires
                 createBtn.textContent = ecritureExiste ? "Mettre à jour l'écriture" : "Créer l'écriture";
             }
 
+            if (similarResultsDiv) {
+                similarResultsDiv.classList.add('d-none');
+                similarResultsDiv.innerHTML = '';
+            }
+
             if (!preserveFormValues) {
                 prefillFormFromRow(row);
+            }
+
+            // Une correspondance exacte déjà calculée côté serveur est appliquée
+            // directement dans la transaction, sans afficher de liste intermédiaire.
+            if (!ecritureExiste && row.dataset.similaireDisponible === '1' && similarResultsDiv) {
+                var rawDetailsSimilaire = row.dataset.similaireDetails || '[]';
+                var detailsSimilaire = [];
+                try {
+                    detailsSimilaire = JSON.parse(rawDetailsSimilaire);
+                } catch (error) {
+                    detailsSimilaire = [];
+                }
+                var similarResult = {
+                    no_ej: row.dataset.similaireNoEj || '',
+                    desc_releve: row.dataset.descReleve || '',
+                    date_releve: '',
+                    compagnie_id: row.dataset.similaireCompagnieId || '',
+                    compagnie_label: '',
+                    desc_ctb: row.dataset.similaireDescCtb || '',
+                    details: detailsSimilaire
+                };
+                applySimilarResult(similarResult);
+                showSimilarStatus(
+                    'Écriture ' + similarResult.no_ej + ' appliquée dans la transaction.',
+                    'text-success'
+                );
             }
 
             detailModal.show();

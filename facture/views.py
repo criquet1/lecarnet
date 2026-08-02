@@ -1860,6 +1860,113 @@ def _find_releve_counterpart(current_releve, compte_cible, montant_cible):
     return scored[0][3]
 
 
+def _normalize_desc_releve(text):
+    """Normalise une description de relevé pour la comparaison de similarité."""
+    return re.sub(r'\s+', ' ', (text or '').strip().upper())
+
+
+def _tr_desc_detail_rows_hors_compte_lie(tr_desc, compte_lie_id, montant_compte_lie):
+    """Retourne les lignes Tr_detail d'une écriture, en excluant la ligne du compte lié
+    (compte de banque/carte lui-même) quand elle est identifiable."""
+    detail_rows = []
+    ligne_compte_lie_ignoree = False
+    for detail in tr_desc.details.all():
+        if (
+            not ligne_compte_lie_ignoree
+            and compte_lie_id
+            and montant_compte_lie is not None
+            and detail.compte_id == compte_lie_id
+            and detail.montant == montant_compte_lie
+        ):
+            ligne_compte_lie_ignoree = True
+            continue
+        detail_rows.append({
+            'compte_id': detail.compte_id,
+            'compte_label': str(detail.compte),
+            'montant': str(abs(detail.montant or Decimal('0'))),
+        })
+    return detail_rows
+
+
+def _candidats_ecriture_similaire(max_candidats=500):
+    """Precalcule une fois (par requete) la liste des lignes de relevé qui ont deja une
+    ecriture, avec leurs lignes de detail hors compte lie. Les virements inter-relevés
+    restent des modèles valides: leur contrepartie est reliée à la même écriture lors
+    de la création, ce qui évite de comptabiliser le virement deux fois."""
+    candidats_qs = Releve.objects.filter(
+        ecriture_creee=True,
+        ecriture_tr_desc__isnull=False,
+    ).select_related(
+        'ecriture_tr_desc',
+        'ecriture_tr_desc__compagnie',
+        'compte_releve',
+        'compte_releve__compte_comptable',
+    ).prefetch_related(
+        Prefetch('ecriture_tr_desc__details', queryset=Tr_detail.objects.select_related('compte').order_by('id')),
+    ).order_by('-date', '-id')[:max_candidats]
+
+    enrichis = []
+    for candidat in candidats_qs:
+        tr_desc = candidat.ecriture_tr_desc
+        if not tr_desc:
+            continue
+
+        compte_lie_id = None
+        if candidat.compte_releve_id and candidat.compte_releve and candidat.compte_releve.compte_comptable_id:
+            compte_lie_id = candidat.compte_releve.compte_comptable_id
+
+        montant_compte_lie = None
+        if candidat.depot is not None and candidat.depot != 0 and not (candidat.retrait is not None and candidat.retrait != 0):
+            montant_compte_lie = abs(candidat.depot)
+        elif candidat.retrait is not None and candidat.retrait != 0 and not (candidat.depot is not None and candidat.depot != 0):
+            montant_compte_lie = -abs(candidat.retrait)
+
+        details = _tr_desc_detail_rows_hors_compte_lie(tr_desc, compte_lie_id, montant_compte_lie)
+
+        enrichis.append({
+            'releve_pk': candidat.pk,
+            'desc_releve_normalisee': _normalize_desc_releve(candidat.desc_releve),
+            'releve_id': candidat.pk,
+            'desc_releve': candidat.desc_releve,
+            'date_releve': candidat.date.strftime('%Y-%m-%d') if candidat.date else '',
+            'no_ej': tr_desc.no_ej,
+            'desc_ctb': tr_desc.desc_ctb or '',
+            'compagnie_id': str(tr_desc.compagnie_id or ''),
+            'compagnie_label': str(tr_desc.compagnie) if tr_desc.compagnie_id else '',
+            'details': details,
+        })
+    return enrichis
+
+
+def _meilleures_correspondances(releve, candidats_enrichis, limit=1):
+    """Retourne les écritures dont la description normalisée est strictement identique."""
+    if not releve or not releve.desc_releve or releve.ecriture_creee:
+        return []
+
+    cible = _normalize_desc_releve(releve.desc_releve)
+    correspondances = []
+    for candidat in candidats_enrichis:
+        if candidat['releve_pk'] == releve.pk:
+            continue
+        if cible == candidat['desc_releve_normalisee']:
+            correspondances.append(candidat)
+
+    correspondances.sort(key=lambda candidat: -candidat['releve_pk'])
+    return correspondances[:limit]
+
+
+def releve_ecriture_similaire(request, releve_id):
+    """Vue AJAX: retourne, pour une ligne de relevé donnée, les écritures déjà créées
+    sur des lignes de relevé dont la description est semblable."""
+    releve = Releve.objects.select_related('compte_releve').filter(pk=releve_id).first()
+    if not releve:
+        return JsonResponse({'error': "Ligne de relevé introuvable."}, status=404)
+
+    candidats = _candidats_ecriture_similaire()
+    resultats = _meilleures_correspondances(releve, candidats, limit=1)
+    return JsonResponse({'resultats': resultats})
+
+
 def _import_releve_csv(csv_file):
     errors = []
 
@@ -2176,6 +2283,10 @@ def releve_bancaire(request):
         if compte.compte_comptable_id is None and compte.pk in compte_releve_ids_with_lines
     ]
 
+    # Precalcule une seule fois (pas par ligne) les ecritures existantes utilisables comme
+    # modele, pour la suggestion automatique "ecriture similaire" affichee dans le tableau.
+    candidats_ecriture_similaire = _candidats_ecriture_similaire()
+
     releves_par_compte = {}
     for compte in comptes_releves:
         releves_list = list(releves_qs.filter(compte_releve=compte))
@@ -2190,6 +2301,21 @@ def releve_bancaire(request):
             releve.ecriture_description = ''
             releve.ecriture_compagnie_id = ''
             releve.ecriture_details_json = '[]'
+            releve.similaire_disponible = False
+            releve.similaire_no_ej = ''
+            releve.similaire_desc_ctb = ''
+            releve.similaire_compagnie_id = ''
+            releve.similaire_details_json = '[]'
+
+            if not releve.ecriture_creee:
+                meilleures = _meilleures_correspondances(releve, candidats_ecriture_similaire, limit=1)
+                if meilleures:
+                    meilleure = meilleures[0]
+                    releve.similaire_disponible = True
+                    releve.similaire_no_ej = meilleure['no_ej']
+                    releve.similaire_desc_ctb = meilleure['desc_ctb']
+                    releve.similaire_compagnie_id = meilleure['compagnie_id']
+                    releve.similaire_details_json = json.dumps(meilleure['details'])
 
             tr_desc = releve.ecriture_tr_desc
             if tr_desc:
@@ -2197,7 +2323,6 @@ def releve_bancaire(request):
                 releve.ecriture_description = tr_desc.desc_ctb or ''
                 releve.ecriture_compagnie_id = str(tr_desc.compagnie_id or '')
 
-                detail_rows = []
                 montant_releve = abs(releve.depot) if (releve.depot is not None and releve.depot != 0) else abs(releve.retrait) if (releve.retrait is not None and releve.retrait != 0) else None
                 montant_compte_lie = None
                 if montant_releve is not None:
@@ -2210,22 +2335,7 @@ def releve_bancaire(request):
                 if releve.compte_releve_id and releve.compte_releve and releve.compte_releve.compte_comptable_id:
                     compte_lie_id = releve.compte_releve.compte_comptable_id
 
-                ligne_compte_lie_ignoree = False
-                for detail in tr_desc.details.all():
-                    if (
-                        not ligne_compte_lie_ignoree
-                        and compte_lie_id
-                        and montant_compte_lie is not None
-                        and detail.compte_id == compte_lie_id
-                        and detail.montant == montant_compte_lie
-                    ):
-                        ligne_compte_lie_ignoree = True
-                        continue
-                    detail_rows.append({
-                        'compte_id': detail.compte_id,
-                        'montant': str(abs(detail.montant or Decimal('0'))),
-                    })
-
+                detail_rows = _tr_desc_detail_rows_hors_compte_lie(tr_desc, compte_lie_id, montant_compte_lie)
                 releve.ecriture_details_json = json.dumps(detail_rows)
         
         # Calculer le solde cumulatif pour les cartes de crédit
@@ -2289,6 +2399,3 @@ def releve_bancaire(request):
     })
 
     return response
-
-
-
