@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
@@ -9,9 +10,9 @@ from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import DatabaseError
 from django.http import HttpResponse
-from django.test import TestCase
-from django.test import RequestFactory
-from django.urls import reverse
+from django.template.loader import render_to_string
+from django.test import RequestFactory, SimpleTestCase, TestCase
+from django.urls import resolve, reverse
 from django.utils import timezone
 
 from compte.models import Compte, SoldeAuxLivres, Total
@@ -23,6 +24,103 @@ from compte.models import Setting
 from tenancy.models import ClientDatabase, UserClientAccess
 from tenancy.db_context import reset_current_tenant_alias, set_current_tenant_alias
 from tenancy.services import SESSION_CLIENT_ALIAS_KEY, SESSION_CLIENT_ID_KEY
+
+
+class SidebarNavigationTests(SimpleTestCase):
+	def test_payroll_directory_contains_payroll_links_only(self):
+		request = RequestFactory().get('/paie/')
+		request.user = AnonymousUser()
+		request.resolver_match = resolve('/paie/')
+		context = {
+			'site_settings': None,
+			'working_period': {'tenant_key': 'test', 'value': '2026-08'},
+		}
+
+		payroll_html = render_to_string('paie/dashboard.html', context, request=request)
+		for url_name in (
+			'paie:paie_saisir',
+			'paie:paie_journal',
+			'paie:paie_employes',
+			'paie:paie_calendrier',
+			'paie:paie_remises_mensuelles',
+		):
+			self.assertIn(f'href="{reverse(url_name)}"', payroll_html)
+
+		reports_html = render_to_string('rapports/index.html', context, request=request)
+		self.assertNotIn(reverse('paie:paie_remises_mensuelles'), reports_html)
+
+	def test_topbar_logout_uses_csrf_protected_post(self):
+		request = RequestFactory().get('/dashboard/')
+		request.user = AnonymousUser()
+		html = render_to_string(
+			'includes/navigation/app_topbar.html',
+			{
+				'site_settings': None,
+				'working_period': {'tenant_key': 'test', 'value': '2026-08'},
+			},
+			request=request,
+		)
+
+		self.assertIn(
+			'<form method="post" action="/logout/" class="topbar-logout-form">',
+			html,
+		)
+		self.assertIn('name="csrfmiddlewaretoken"', html)
+		self.assertNotIn('href="/logout/"', html)
+
+		response = self.client.post(reverse('logout'))
+
+		self.assertRedirects(response, reverse('login'), fetch_redirect_response=False)
+
+	def test_current_section_has_one_distinct_active_link(self):
+		sections = (
+			('/dashboard/', '/dashboard/'),
+			('/facture/', '/facture/'),
+			('/releve-bancaire/', '/releve-bancaire/'),
+			('/paie/', '/paie/'),
+			('/paie/employes/', '/paie/'),
+			('/grand-livre/', '/rapports/'),
+			('/paie/remises-mensuelles/', '/paie/'),
+		)
+
+		for current_path, active_href in sections:
+			with self.subTest(current_path=current_path):
+				request = RequestFactory().get(current_path)
+				request.resolver_match = resolve(current_path)
+				html = render_to_string(
+					'includes/navigation/app_sidebar.html',
+					request=request,
+				)
+
+				self.assertEqual(html.count('sidebar-link active'), 1)
+				self.assertEqual(html.count('aria-current="page"'), 1)
+				self.assertRegex(
+					html,
+					rf'href="{re.escape(active_href)}"\s+class="sidebar-link active"',
+				)
+
+
+class ReleveTemplateBehaviorTests(SimpleTestCase):
+	def test_entry_submission_restores_processed_row_position(self):
+		request = RequestFactory().get('/releve-bancaire/')
+		request.user = AnonymousUser()
+		request.resolver_match = resolve('/releve-bancaire/')
+
+		html = render_to_string(
+			'releves/index.html',
+			{
+				'groupes': [],
+				'working_period': {'tenant_key': 'test', 'value': '2026-08'},
+			},
+			request=request,
+		)
+
+		self.assertIn("createEcritureForm.addEventListener('submit', saveReturnPosition)", html)
+		self.assertIn("sessionStorage.setItem(returnPositionKey", html)
+		self.assertIn("bootstrap.Tab.getOrCreateInstance(tabButton).show()", html)
+		self.assertIn("window.scrollTo(0, targetTop", html)
+		self.assertIn('compagnieSelect.required = companyRequired', html)
+		self.assertIn('obligatoire pour CAP/CAR', html)
 
 
 class FactureMultiTenantTests(TestCase):
@@ -173,6 +271,83 @@ class AccountingSqlViewsTests(TestCase):
 		self.assertEqual(row.compte_numero, self.compte.numero)
 		self.assertEqual(row.debit, Decimal('125.50'))
 		self.assertEqual(row.credit, Decimal('0'))
+
+	def test_releve_cap_account_requires_company(self):
+		bank_account = Compte.objects.using(self.alias).create(
+			numero=1105,
+			libelle='Banque validation CAP',
+			no_total=self.compte.no_total,
+		)
+		cap_account = Compte.objects.using(self.alias).create(
+			numero=2105,
+			libelle='CAP validation releve',
+			no_total=self.compte.no_total,
+		)
+		Setting.objects.using(self.alias).create(
+			nom='Test CAP relevé',
+			adresse='1 rue Test',
+			ville='Québec',
+			code_postal='G1G 1G1',
+			pays='Canada',
+			phone='418-555-0100',
+			email='cap-releve@example.com',
+			cap=cap_account,
+		)
+		statement_account = CompteReleve.objects.using(self.alias).create(
+			no_compte='CAP-RELEVE',
+			type_compte='BANQUE',
+			nom_affichage='Banque CAP',
+			compte_comptable=bank_account,
+		)
+		statement = Releve.objects.using(self.alias).create(
+			compte_releve=statement_account,
+			fichier_source='cap-releve.csv',
+			nom_institut='Banque test',
+			no_compte='CAP-RELEVE',
+			type_compte='BANQUE',
+			date=date(2026, 8, 1),
+			no_ligne='1',
+			desc_releve='Paiement fournisseur CAP',
+			retrait=Decimal('100.00'),
+			solde=Decimal('0'),
+		)
+		request = RequestFactory().post('/releve-bancaire/', {
+			'action': 'create_ecriture',
+			'releve_id': str(statement.pk),
+			'compagnie_id': '',
+			'trdesc_releve-date': '2026-08-01',
+			'trdesc_releve-desc_ctb': 'Paiement fournisseur CAP',
+			'detail_releve-TOTAL_FORMS': '1',
+			'detail_releve-INITIAL_FORMS': '0',
+			'detail_releve-MIN_NUM_FORMS': '0',
+			'detail_releve-MAX_NUM_FORMS': '1000',
+			'detail_releve-0-compte': str(cap_account.pk),
+			'detail_releve-0-montant': '100.00',
+		})
+		request.active_client_alias = self.alias
+		SessionMiddleware(lambda req: None).process_request(request)
+
+		captured = {}
+		def capture_render(_request, _template, context):
+			captured.update(context)
+			return HttpResponse('invalid')
+
+		token = set_current_tenant_alias(self.alias)
+		try:
+			with patch('facture.views.render', side_effect=capture_render):
+				response = releve_bancaire(request)
+		finally:
+			reset_current_tenant_alias(token)
+
+		statement.refresh_from_db(using=self.alias)
+		self.assertEqual(response.status_code, 200)
+		self.assertFalse(statement.ecriture_creee)
+		self.assertFalse(Tr_desc.objects.using(self.alias).filter(desc_ctb='Paiement fournisseur CAP').exists())
+		self.assertIn(
+			"Une compagnie est obligatoire lorsqu'une ligne utilise le compte CAP ou CAR.",
+			captured['errors'],
+		)
+		self.assertTrue(captured['open_releve_modal'])
 
 	def test_journal_and_ledger_merge_company_into_description(self):
 		negative_account = Compte.objects.using(self.alias).create(
@@ -573,6 +748,35 @@ class AccountingSqlViewsTests(TestCase):
 			solde=Decimal('0'),
 			ecriture_creee=True,
 			ecriture_tr_desc=historical_entry,
+		)
+		old_entry = Tr_desc.objects.using(self.alias).create(
+			no_ej='EJ-OLD',
+			date=date(2024, 12, 31),
+			desc_ctb='Papeterie trop ancienne',
+		)
+		Tr_detail.objects.using(self.alias).create(
+			tr_desc=old_entry,
+			compte=bank_account,
+			montant=Decimal('-42.50'),
+		)
+		Tr_detail.objects.using(self.alias).create(
+			tr_desc=old_entry,
+			compte=expense_account,
+			montant=Decimal('42.50'),
+		)
+		Releve.objects.using(self.alias).create(
+			compte_releve=statement_account,
+			fichier_source='historique-trop-ancien.csv',
+			nom_institut='Banque test',
+			no_compte='SIMILAR-01',
+			type_compte='CC',
+			date=date(2024, 12, 31),
+			no_ligne='ancien',
+			desc_releve='PAPETERIE DU CENTRE',
+			retrait=Decimal('42.50'),
+			solde=Decimal('0'),
+			ecriture_creee=True,
+			ecriture_tr_desc=old_entry,
 		)
 		current_statement = Releve.objects.using(self.alias).create(
 			compte_releve=statement_account,

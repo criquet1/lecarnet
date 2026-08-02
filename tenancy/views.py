@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.db.models import Count
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -14,7 +15,7 @@ from .forms import (
     SocieteUserCreateForm,
 )
 from .models import ClientDatabase, Societe, UserClientAccess, UserSocieteAccess
-from .services import get_user_client_accesses, mark_user_must_change_password, set_active_client_on_session, sync_user_client_accesses
+from .services import get_user_client_accesses, mark_user_must_change_password, resolve_database_alias, set_active_client_on_session, sync_user_client_accesses
 
 
 @login_required
@@ -38,7 +39,24 @@ def set_active_client(request):
     sync_user_client_accesses(request.user)
     accesses = get_user_client_accesses(request.user)
     access = get_object_or_404(accesses, client_id=request.POST.get('client_id'))
+    is_async = request.headers.get('x-requested-with') == 'XMLHttpRequest'
+
+    if not resolve_database_alias(access.client.db_alias):
+        error = f"Le tenant {access.client.name} n'est pas configure sur ce serveur."
+        if is_async:
+            return JsonResponse({'ok': False, 'error': error}, status=400)
+        messages.error(request, error)
+        return redirect(request.POST.get('next') or 'accueil')
+
     set_active_client_on_session(request, access)
+
+    if is_async:
+        return JsonResponse({
+            'ok': True,
+            'client_id': access.client_id,
+            'client_name': access.client.name,
+        })
+
     return redirect(request.POST.get('next') or 'accueil')
 
 

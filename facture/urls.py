@@ -22,6 +22,7 @@ urlpatterns = [
     path('facture/', login_required(views.facture), name='facture'),
     path('releve-bancaire/', login_required(views.releve_bancaire), name='releve_bancaire'),
     path('releves/similaire/<int:releve_id>/', views.releve_ecriture_similaire, name='releve_ecriture_similaire'),
+    path('rapports/', login_required(views.rapports), name='rapports'),
     path('journal-general/', login_required(views.journal_general), name='journal_general'),
     path('grand-livre/', login_required(views.grand_livre), name='grand_livre'),
     path('balance-de-verification/', login_required(views.balance_de_verification), name='balance_de_verification'),

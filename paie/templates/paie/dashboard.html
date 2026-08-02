@@ -1,79 +1,99 @@
 {% extends "layouts/app_base.html" %}
+{% load static %}
 
-{% block title %}{{ title }}{% endblock %}
+{% block title %}Paie{% endblock %}
 
-{% block page_title %}{{ title }}{% endblock %}
+{% block page_css %}
+<link rel="stylesheet" href="{% static 'css/pages/reports.css' %}?v=20260802">
+{% endblock %}
 
-{% block page_subtitle %}Saisie et consultation des paies du client actif.{% endblock %}
+{% block page_title %}Paie{% endblock %}
 
-{% block page_actions %}
-<a href="{% url 'paie:paie_employes' %}" class="btn btn-outline-primary">Employés</a>
-<a href="{% url 'paie:paie_calendrier' %}" class="btn btn-outline-primary">Calendrier</a>
-{% if request.user.is_superuser %}
-<a href="{% url 'paie:paie_parametres_taux' %}" class="btn btn-outline-primary">Paramètres taux</a>
-{% endif %}
-<a href="{% url 'paie:paie_saisir' %}" class="btn btn-primary">Saisir une paie</a>
+{% block page_subtitle %}
+    Gérez les employés, la production des paies et les remises.
 {% endblock %}
 
 {% block content %}
-
-{% if messages %}
-    {% for message in messages %}
-        <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
-    {% endfor %}
-{% endif %}
-
-<div class="row g-3 mb-4">
-    <div class="col-md-3">
-        <div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Employés actifs</div><div class="display-6">{{ resume.employes_actifs }}</div></div></div>
-    </div>
-    <div class="col-md-3">
-        <div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Périodes ouvertes</div><div class="display-6">{{ resume.periodes_ouvertes }}</div></div></div>
-    </div>
-    <div class="col-md-3">
-        <div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Paies saisies</div><div class="display-6">{{ resume.paies_total }}</div></div></div>
-    </div>
-    <div class="col-md-3">
-        <div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Total net</div><div class="display-6">{{ resume.total_net|default:0|floatformat:2 }}</div></div></div>
-    </div>
-</div>
-
-<div class="card shadow-sm">
-    <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">Dernières paies</h5>
-            <a href="{% url 'paie:paie_journal' %}" class="btn btn-sm btn-outline-secondary">Voir le journal complet</a>
-        </div>
-        {% if paies_recentes %}
-            <div class="table-responsive">
-                <table class="table table-sm align-middle">
-                    <thead>
-                        <tr>
-                            <th>Employé</th>
-                            <th>Période</th>
-                            <th>Fréquence</th>
-                            <th>Brut</th>
-                            <th>Retenues</th>
-                            <th>Net</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for paie in paies_recentes %}
-                            <tr>
-                                <td>{{ paie.employe }}</td>
-                                <td>{{ paie.periode.date_fin|date:"Y-m-d" }}</td>
-                                <td>{{ paie.periode.frequence_paie }}</td>
-                                <td>{{ paie.salaire_brut_periode|floatformat:2 }}</td>
-                                <td>{{ paie.total_retenues|floatformat:2 }}</td>
-                                <td>{{ paie.salaire_net|floatformat:2 }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+<div class="reports-directory">
+    <section class="report-group" aria-labelledby="payroll-operations">
+        <div class="report-group-heading">
+            <span class="report-group-icon"><i class="bi bi-cash-stack"></i></span>
+            <div>
+                <h2 id="payroll-operations">Opérations</h2>
+                <p>Produire les paies et consulter les résultats.</p>
             </div>
-        {% else %}
-            <div class="alert alert-light border mb-0">Aucune paie enregistrée pour ce client.</div>
-        {% endif %}
-    </div>
+        </div>
+
+        <div class="report-list">
+            <a class="report-item" href="{% url 'paie:paie_saisir' %}">
+                <span class="report-item-icon"><i class="bi bi-calculator"></i></span>
+                <span class="report-item-copy">
+                    <strong>Saisir une paie</strong>
+                    <small>Calculer et enregistrer une paie pour un employé.</small>
+                </span>
+                <i class="bi bi-arrow-right report-item-arrow"></i>
+            </a>
+
+            <a class="report-item" href="{% url 'paie:paie_journal' %}">
+                <span class="report-item-icon"><i class="bi bi-journal-text"></i></span>
+                <span class="report-item-copy">
+                    <strong>Journal des paies</strong>
+                    <small>Consulter les paies et les retenues par période.</small>
+                </span>
+                <i class="bi bi-arrow-right report-item-arrow"></i>
+            </a>
+        </div>
+    </section>
+
+    <section class="report-group" aria-labelledby="payroll-team">
+        <div class="report-group-heading">
+            <span class="report-group-icon"><i class="bi bi-people"></i></span>
+            <div>
+                <h2 id="payroll-team">Équipe et planification</h2>
+                <p>Gérer les employés et les dates de paie.</p>
+            </div>
+        </div>
+
+        <div class="report-list">
+            <a class="report-item" href="{% url 'paie:paie_employes' %}">
+                <span class="report-item-icon"><i class="bi bi-person-vcard"></i></span>
+                <span class="report-item-copy">
+                    <strong>Employés</strong>
+                    <small>Créer, modifier et désactiver les employés.</small>
+                </span>
+                <i class="bi bi-arrow-right report-item-arrow"></i>
+            </a>
+
+            <a class="report-item" href="{% url 'paie:paie_calendrier' %}">
+                <span class="report-item-icon"><i class="bi bi-calendar3"></i></span>
+                <span class="report-item-copy">
+                    <strong>Calendrier de paie</strong>
+                    <small>Voir les jours de paie et les jours fériés.</small>
+                </span>
+                <i class="bi bi-arrow-right report-item-arrow"></i>
+            </a>
+        </div>
+    </section>
+
+    <section class="report-group" aria-labelledby="payroll-remittances">
+        <div class="report-group-heading">
+            <span class="report-group-icon"><i class="bi bi-bank"></i></span>
+            <div>
+                <h2 id="payroll-remittances">Obligations</h2>
+                <p>Consulter les retenues et cotisations à remettre.</p>
+            </div>
+        </div>
+
+        <div class="report-list">
+            <a class="report-item" href="{% url 'paie:paie_remises_mensuelles' %}">
+                <span class="report-item-icon"><i class="bi bi-calendar2-check"></i></span>
+                <span class="report-item-copy">
+                    <strong>Remises mensuelles</strong>
+                    <small>Consulter les montants fédéraux et provinciaux à remettre.</small>
+                </span>
+                <i class="bi bi-arrow-right report-item-arrow"></i>
+            </a>
+        </div>
+    </section>
 </div>
 {% endblock %}

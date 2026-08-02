@@ -21,6 +21,7 @@ body{
     display:flex;
     flex-direction:column;
     min-width:0;
+  margin-left:58px;
 }
 
 /*=====================================================
@@ -29,7 +30,13 @@ body{
 
 .app-content{
     flex:1;
-  padding:32px;
+    padding:32px;
+}
+
+@media (max-width:992px){
+  .app-main{
+    margin-left:54px;
+  }
 }
 
 /*=====================================================
@@ -86,6 +93,7 @@ body{
   .app-main {
     display: block;
     min-height: auto;
+    margin-left: 0;
   }
 
   .app-content {

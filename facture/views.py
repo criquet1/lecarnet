@@ -527,6 +527,12 @@ def dashboard(request):
     )
 
 
+def rapports(request):
+    return render(request, "rapports/index.html", {
+        "title": "Rapports",
+    })
+
+
 
 def journal_general(request):
     entries_by_no_ej = {}
@@ -1888,7 +1894,15 @@ def _tr_desc_detail_rows_hors_compte_lie(tr_desc, compte_lie_id, montant_compte_
     return detail_rows
 
 
-def _candidats_ecriture_similaire(max_candidats=500):
+def _date_moins_mois(value, months):
+    target_month_index = value.year * 12 + value.month - 1 - months
+    target_year, target_month_index = divmod(target_month_index, 12)
+    target_month = target_month_index + 1
+    target_day = min(value.day, monthrange(target_year, target_month)[1])
+    return date(target_year, target_month, target_day)
+
+
+def _candidats_ecriture_similaire(releve=None, max_candidats=500):
     """Precalcule une fois (par requete) la liste des lignes de relevé qui ont deja une
     ecriture, avec leurs lignes de detail hors compte lie. Les virements inter-relevés
     restent des modèles valides: leur contrepartie est reliée à la même écriture lors
@@ -1896,7 +1910,14 @@ def _candidats_ecriture_similaire(max_candidats=500):
     candidats_qs = Releve.objects.filter(
         ecriture_creee=True,
         ecriture_tr_desc__isnull=False,
-    ).select_related(
+    )
+    if releve and releve.date:
+        candidats_qs = candidats_qs.filter(
+            date__gte=_date_moins_mois(releve.date, 18),
+            date__lte=releve.date,
+        )
+
+    candidats_qs = candidats_qs.select_related(
         'ecriture_tr_desc',
         'ecriture_tr_desc__compagnie',
         'compte_releve',
@@ -1940,13 +1961,17 @@ def _candidats_ecriture_similaire(max_candidats=500):
 
 def _meilleures_correspondances(releve, candidats_enrichis, limit=1):
     """Retourne les écritures dont la description normalisée est strictement identique."""
-    if not releve or not releve.desc_releve or releve.ecriture_creee:
+    if not releve or not releve.date or not releve.desc_releve or releve.ecriture_creee:
         return []
 
     cible = _normalize_desc_releve(releve.desc_releve)
+    date_minimum = _date_moins_mois(releve.date, 18).isoformat()
+    date_maximum = releve.date.isoformat()
     correspondances = []
     for candidat in candidats_enrichis:
         if candidat['releve_pk'] == releve.pk:
+            continue
+        if not date_minimum <= candidat['date_releve'] <= date_maximum:
             continue
         if cible == candidat['desc_releve_normalisee']:
             correspondances.append(candidat)
@@ -1962,7 +1987,7 @@ def releve_ecriture_similaire(request, releve_id):
     if not releve:
         return JsonResponse({'error': "Ligne de relevé introuvable."}, status=404)
 
-    candidats = _candidats_ecriture_similaire()
+    candidats = _candidats_ecriture_similaire(releve)
     resultats = _meilleures_correspondances(releve, candidats, limit=1)
     return JsonResponse({'resultats': resultats})
 
@@ -2076,6 +2101,15 @@ def releve_bancaire(request):
     selected_compagnie_id = ''
     comptes_queryset = Compte.objects.all().order_by('numero')
     compagnies = Compagnie.objects.order_by('nom')
+    settings_instance = get_setting()
+    company_required_account_ids = {
+        account_id
+        for account_id in (
+            settings_instance.cap_id if settings_instance else None,
+            settings_instance.car_id if settings_instance else None,
+        )
+        if account_id is not None
+    }
 
     tr_desc_form = TrDescForm(prefix='trdesc_releve')
     tr_detail_formset = TrDetailFormSet(
@@ -2148,11 +2182,23 @@ def releve_bancaire(request):
                             .values_list('compte_comptable_id', flat=True)
                         )
                         is_virement_inter_releves = any(compte.pk in compte_ids_releves for compte, _ in detail_rows)
-                        compagnie_ecriture = None if is_virement_inter_releves else selected_compagnie
+                        used_account_ids = {compte.pk for compte, _ in detail_rows}
+                        if compte_lie:
+                            used_account_ids.add(compte_lie.pk)
+                        company_is_required = bool(used_account_ids & company_required_account_ids)
+                        if company_is_required and selected_compagnie is None:
+                            errors.append(
+                                "Une compagnie est obligatoire lorsqu'une ligne utilise le compte CAP ou CAR."
+                            )
+                        compagnie_ecriture = selected_compagnie if company_is_required else (
+                            None if is_virement_inter_releves else selected_compagnie
+                        )
 
                         montant_releve = abs(releve.depot) if depot_present else abs(releve.retrait)
                         total_contrepartie = sum((montant for _, montant in detail_rows), Decimal('0'))
-                        if total_contrepartie != montant_releve:
+                        if company_is_required and selected_compagnie is None:
+                            return_open = True
+                        elif total_contrepartie != montant_releve:
                             errors.append(
                                 f"La somme des lignes Tr_detail ({total_contrepartie:.2f}) doit egaler le montant du relevé ({montant_releve:.2f})."
                             )
@@ -2296,6 +2342,11 @@ def releve_bancaire(request):
             suggested_montant = _suggest_montant_from_releve(releve)
             releve.suggested_compte_id = suggested_compte.pk if suggested_compte else ''
             releve.suggested_compte_label = str(suggested_compte) if suggested_compte else ''
+            releve.compte_lie_id = (
+                releve.compte_releve.compte_comptable_id
+                if releve.compte_releve_id and releve.compte_releve
+                else releve.suggested_compte_id
+            )
             releve.suggested_montant = suggested_montant
             releve.ecriture_date = ''
             releve.ecriture_description = ''
@@ -2387,6 +2438,8 @@ def releve_bancaire(request):
         'modal_releve_id': modal_releve_id,
         'selected_compagnie_id': selected_compagnie_id,
         'compagnies': compagnies,
+        'compte_cap_id': settings_instance.cap_id if settings_instance else '',
+        'compte_car_id': settings_instance.car_id if settings_instance else '',
         'selected_periode': selected_periode,
         'mois_selectionne': mois_selectionne,
         'annee_selectionnee': annee_selectionnee,

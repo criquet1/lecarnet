@@ -1,264 +1,170 @@
 /*=====================================================
- SIDEBAR
-======================================================*/
+    SIDEBAR
+=====================================================*/
 
 .sidebar{
-    width:280px;
-    background:#172046;
-    color:white;
+    position:fixed;
+    top:0;
+    left:0;
+    width:58px;
+    height:100vh;
     display:flex;
     flex-direction:column;
-    padding:24px;
-}
-
-/*=====================================================
- CLIENT ACTIF
-======================================================*/
-
-.tenant-card{
-
-    background:rgba(255,255,255,.05);
-
-    border-radius:20px;
-
-    padding:24px;
-
-    text-align:center;
-
-    margin-bottom:35px;
-
-}
-
-.tenant-label{
-
-    display:block;
-
-    font-size:.72rem;
-
-    letter-spacing:.12rem;
-
-    text-transform:uppercase;
-
-    color:#9aa6d3;
-
-    margin-bottom:14px;
-
-}
-
-.tenant-logo{
-
-    width:90px;
-
-    height:90px;
-
-    margin:auto;
-
-    margin-bottom:18px;
-
-    background:white;
-
-    border-radius:20px;
-
-    display:flex;
-
     justify-content:center;
-
     align-items:center;
-
-    overflow:hidden;
-
-    box-shadow:0 10px 30px rgba(0,0,0,.18);
-
-}
-
-.tenant-logo img{
-
-    width:100%;
-
-    height:100%;
-
-    object-fit:contain;
-
-}
-
-.tenant-logo i{
-
-    font-size:42px;
-
-    color:#5b63ff;
-
-}
-
-.tenant-name{
-
-    font-size:1.15rem;
-
-    font-weight:700;
-
-    color:white;
-
-    line-height:1.3;
-
-}
-
-.change-client{
-
-    display:inline-flex;
-
-    align-items:center;
-
-    gap:8px;
-
-    margin-top:14px;
-
-    color:#b8c2ff;
-
-    font-size:.88rem;
-
-    text-decoration:none;
-
-}
-
-.change-client:hover{
-
-    color:white;
-
+    background:#1B2240;
+    border-right:1px solid rgba(255,255,255,.05);
+    z-index:1000;
 }
 
 /*=====================================================
- MENU
-======================================================*/
+    NAVIGATION
+=====================================================*/
 
 .sidebar-nav{
-
     display:flex;
-
     flex-direction:column;
-
-    gap:8px;
-
+    align-items:center;
+    gap:16px;
 }
+
+/*=====================================================
+    LIENS
+=====================================================*/
 
 .sidebar-link{
-
+    position:relative;
+    width:40px;
+    height:40px;
     display:flex;
-
+    justify-content:center;
     align-items:center;
-
-    gap:14px;
-
-    padding:14px 18px;
-
-    border-radius:14px;
-
-    color:#cfd6ff;
-
-    text-decoration:none;
-
-    transition:.25s;
-
+    border-radius:10px;
+    color:#8F9BB8;
+    transition:all .25s ease;
 }
+
+/*=====================================================
+    ICÔNES
+=====================================================*/
 
 .sidebar-link i{
-
-    font-size:1.15rem;
-
-    width:22px;
-
-    text-align:center;
-
+    font-size:1.35rem;
 }
+
+/*=====================================================
+    SURVOL
+=====================================================*/
 
 .sidebar-link:hover{
 
     background:rgba(255,255,255,.08);
 
-    color:white;
-
+    color:#ffffff;
 }
+
+/*=====================================================
+    MENU ACTIF
+=====================================================*/
 
 .sidebar-link.active{
+    background:#5965e8;
+    color:#ffffff;
+    box-shadow:
+        0 6px 14px rgba(0,0,0,.22),
+        0 0 0 1px rgba(255,255,255,.14) inset;
+}
 
-    background:#5b63ff;
+.sidebar-link.active i{
+    text-shadow:0 1px 3px rgba(0,0,0,.28);
+}
 
-    color:white;
+.sidebar-link.active::before{
+    content:"";
+    position:absolute;
+    left:-8px;
+    top:8px;
+    bottom:8px;
+    width:3px;
+    background:#ffffff;
+    border-radius:6px;
+}
 
-    font-weight:600;
+.sidebar-link.active:hover{
+    background:#6570ee;
+}
 
+.sidebar-link:hover{
+    color:#ffffff;
+    background:rgba(255,255,255,.06);
 }
 
 /*=====================================================
- FOOTER
-======================================================*/
+    INFO-BULLE
+=====================================================*/
 
-.sidebar-footer{
+.sidebar-link::after{
 
-    margin-top:auto;
-
-    padding-top:24px;
-
-    border-top:1px solid rgba(255,255,255,.08);
-
+    content:attr(data-tooltip);
+    position:absolute;
+    left:58px;
+    top:50%;
+    transform:translateY(-50%);
+    background:#202846;
+    color:#fff;
+    font-size:.80rem;
+    padding:7px 11px;
+    border-radius:8px;
+    white-space:nowrap;
+    opacity:0;
+    pointer-events:none;
+    transition:.20s;
 }
 
-.user-box{
+.sidebar-link:hover::after{
 
-    display:flex;
-
-    align-items:center;
-
-    gap:12px;
-
-    margin-bottom:18px;
-
-}
-
-.user-box i{
-
-    font-size:2rem;
-
-    color:#cfd6ff;
-
-}
-
-.user-box span{
-
-    font-weight:600;
-
-}
-
-.logout-link{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:10px;
-
-    color:#ffbcbc;
-
-    text-decoration:none;
-
-    transition:.25s;
-
-}
-
-.logout-link:hover{
-
-    color:white;
-
+    opacity:1;
 }
 
 /*=====================================================
- RESPONSIVE
-======================================================*/
+    SCROLL
+=====================================================*/
+
+.sidebar::-webkit-scrollbar{
+
+    width:5px;
+}
+
+.sidebar::-webkit-scrollbar-thumb{
+
+    background:rgba(255,255,255,.12);
+
+    border-radius:20px;
+}
+
+/*=====================================================
+    RESPONSIVE
+=====================================================*/
 
 @media (max-width:992px){
 
     .sidebar{
 
-        width:240px;
+        width:54px;
+        min-width:54px;
+        max-width:54px;
+        flex-basis:54px;
+    }
 
+    .sidebar-link{
+
+        width:38px;
+        height:38px;
+    }
+
+    .sidebar-link i{
+
+        font-size:1.2rem;
     }
 
 }

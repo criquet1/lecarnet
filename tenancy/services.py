@@ -8,7 +8,7 @@ SESSION_CLIENT_ID_KEY = 'active_client_id'
 SESSION_CLIENT_ALIAS_KEY = 'active_client_alias'
 
 
-def _is_expert(user):
+def is_expert(user):
     return user.is_superuser or user.groups.filter(name__iexact='expert').exists()
 
 
@@ -51,7 +51,7 @@ def get_user_client_accesses(user):
 
     scoped_qs = base_qs.filter(client__societe_id__in=allowed_societe_ids)
 
-    if _is_expert(user):
+    if is_expert(user):
         return scoped_qs
 
     return scoped_qs
@@ -174,7 +174,7 @@ def sync_user_client_accesses(user):
 
     UserClientAccess.objects.filter(user=user).exclude(client_id__in=allowed_client_ids).delete()
 
-    if _is_expert(user):
+    if is_expert(user):
         for client in active_clients:
             UserClientAccess.objects.get_or_create(
                 user=user,

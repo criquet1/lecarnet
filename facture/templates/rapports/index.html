@@ -1,0 +1,109 @@
+{% extends "layouts/app_base.html" %}
+{% load static %}
+
+{% block title %}Rapports{% endblock %}
+
+{% block page_css %}
+<link rel="stylesheet" href="{% static 'css/pages/reports.css' %}?v=20260802">
+{% endblock %}
+
+{% block page_title %}Rapports{% endblock %}
+
+{% block page_subtitle %}
+    Consultez les états comptables de la période de travail.
+{% endblock %}
+
+{% block content %}
+<div class="reports-directory">
+    <section class="report-group" aria-labelledby="reports-accounting">
+        <div class="report-group-heading">
+            <span class="report-group-icon"><i class="bi bi-journal-text"></i></span>
+            <div>
+                <h2 id="reports-accounting">Comptabilité</h2>
+                <p>Écritures, mouvements et soldes des comptes.</p>
+            </div>
+        </div>
+
+        <div class="report-list">
+            <a class="report-item" href="{% url 'journal_general' %}">
+                <span class="report-item-icon"><i class="bi bi-list-columns-reverse"></i></span>
+                <span class="report-item-copy">
+                    <strong>Journal général</strong>
+                    <small>Consulter les écritures dans l’ordre chronologique.</small>
+                </span>
+                <i class="bi bi-arrow-right report-item-arrow"></i>
+            </a>
+
+            <a class="report-item" href="{% url 'grand_livre' %}">
+                <span class="report-item-icon"><i class="bi bi-book"></i></span>
+                <span class="report-item-copy">
+                    <strong>Grand livre</strong>
+                    <small>Voir les mouvements et le solde de chaque compte.</small>
+                </span>
+                <i class="bi bi-arrow-right report-item-arrow"></i>
+            </a>
+
+            <a class="report-item" href="{% url 'balance_de_verification' %}">
+                <span class="report-item-icon"><i class="bi bi-sliders"></i></span>
+                <span class="report-item-copy">
+                    <strong>Balance de vérification</strong>
+                    <small>Comparer les soldes débiteurs et créditeurs.</small>
+                </span>
+                <i class="bi bi-arrow-right report-item-arrow"></i>
+            </a>
+        </div>
+    </section>
+
+    <section class="report-group" aria-labelledby="reports-auxiliary">
+        <div class="report-group-heading">
+            <span class="report-group-icon"><i class="bi bi-people"></i></span>
+            <div>
+                <h2 id="reports-auxiliary">Comptes auxiliaires</h2>
+                <p>Soldes détaillés par compagnie.</p>
+            </div>
+        </div>
+
+        <div class="report-list">
+            <a class="report-item" href="{% url 'compte_a_payer' %}">
+                <span class="report-item-icon"><i class="bi bi-box-arrow-up-right"></i></span>
+                <span class="report-item-copy">
+                    <strong>Comptes à payer</strong>
+                    <small>Suivre les montants dus aux fournisseurs.</small>
+                </span>
+                <i class="bi bi-arrow-right report-item-arrow"></i>
+            </a>
+
+            <a class="report-item" href="{% url 'compte_a_recevoir' %}">
+                <span class="report-item-icon"><i class="bi bi-box-arrow-in-down-left"></i></span>
+                <span class="report-item-copy">
+                    <strong>Comptes à recevoir</strong>
+                    <small>Suivre les montants dus par les clients.</small>
+                </span>
+                <i class="bi bi-arrow-right report-item-arrow"></i>
+            </a>
+        </div>
+    </section>
+
+    <section class="report-group" aria-labelledby="reports-tax">
+        <div class="report-group-heading">
+            <span class="report-group-icon"><i class="bi bi-bank"></i></span>
+            <div>
+                <h2 id="reports-tax">Fiscalité</h2>
+                <p>Préparation et transmission des taxes.</p>
+            </div>
+        </div>
+
+        <div class="report-list">
+            <a class="report-item" href="{% url 'rapport_de_taxes' %}">
+                <span class="report-item-icon"><i class="bi bi-percent"></i></span>
+                <span class="report-item-copy">
+                    <strong>Rapport de taxes</strong>
+                    <small>Préparer les montants de TPS et de TVQ de la période.</small>
+                </span>
+                <i class="bi bi-arrow-right report-item-arrow"></i>
+            </a>
+        </div>
+    </section>
+
+</div>
+{% endblock %}

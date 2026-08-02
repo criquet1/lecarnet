@@ -2,41 +2,158 @@
 
 <header class="app-topbar">
 
-    <div class="topbar-left">
+    <!-- Partie gauche -->
 
-        <img
-            src="{% static 'images/logos/' %}{{ site_settings.logo }}"
-            alt="{{ site_settings.nom }}"
-            class="topbar-company-logo">
+    <div class="topbar-left">
 
         <div class="topbar-company">
 
+            {% if site_settings.logo %}
+
+                <img
+                    src="{% static 'images/logos/' %}{{ site_settings.logo }}"
+                    alt=""
+                    class="topbar-company-bg">
+
+            {% else %}
+
+                <i class="bi bi-building topbar-company-bg"></i>
+
+            {% endif %}
+
             <span class="company-label">
+
+                {% if request.active_client %}
+                    {{ request.active_client.name }}
+                {% else %}
+                    {{ site_settings.nom }}
+                {% endif %}
+
+            </span>
+
+            <span class="company-tenant">
+
                 {{ site_settings.nom }}
+
             </span>
 
         </div>
 
     </div>
 
+    <!-- Partie droite -->
+
     <div class="topbar-right">
+
+        {% if can_switch_tenant and active_client_accesses|length > 1 %}
+
+            <form method="post"
+                  action="{% url 'set_active_client' %}"
+                  class="topbar-tenant-form">
+
+                {% csrf_token %}
+
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+
+                <label for="topbar-tenant" class="topbar-tenant-label">
+
+                    <i class="bi bi-database"></i>
+                    <span>Tenant</span>
+
+                </label>
+
+                <select id="topbar-tenant"
+                        name="client_id"
+                        class="topbar-tenant-select"
+                        aria-label="Tenant actif">
+
+                    {% for access in active_client_accesses %}
+
+                        <option value="{{ access.client_id }}"{% if active_client and access.client_id == active_client.id %} selected{% endif %}>
+                            {{ access.client.name }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+                <button type="submit"
+                        class="topbar-tenant-submit"
+                        title="Changer de tenant"
+                        aria-label="Changer de tenant">
+
+                    <i class="bi bi-arrow-left-right"></i>
+
+                </button>
+
+            </form>
+
+        {% endif %}
 
         <form method="post"
               action="{% url 'update_working_period' %}"
               class="topbar-period-form"
               data-storage-key="working_period_{{ working_period.tenant_key }}">
+
             {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <label for="working-period" class="topbar-period-label">
+
+            <input
+                type="hidden"
+                name="next"
+                value="{{ request.get_full_path }}">
+
+            <label for="working-period"
+                   class="topbar-period-label">
+
                 <i class="bi bi-calendar3"></i>
-                <span>Période de travail</span>
+
+                <span>Période</span>
+
             </label>
-            <input id="working-period"
-                   type="month"
-                   name="period"
-                   value="{{ working_period.value }}"
-                   class="form-control form-control-sm topbar-period-input"
-                   aria-label="Période de travail">
+
+            <input
+                id="working-period"
+                type="month"
+                name="period"
+                value="{{ working_period.value }}"
+                class="form-control form-control-sm topbar-period-input">
+
+            <button
+                type="submit"
+                class="topbar-period-submit"
+                title="Appliquer">
+
+                <i class="bi bi-check-lg"></i>
+
+            </button>
+
+        </form>
+
+        <div class="topbar-user">
+
+            <i class="bi bi-person-circle"></i>
+
+            <span>
+
+                {{ request.user.first_name|default:request.user.username }}
+
+            </span>
+
+        </div>
+
+        <form method="post" action="{% url 'logout' %}" class="topbar-logout-form">
+
+            {% csrf_token %}
+
+            <button type="submit"
+                    class="topbar-logout"
+                    title="Déconnexion"
+                    aria-label="Déconnexion">
+
+                <i class="bi bi-box-arrow-right"></i>
+
+            </button>
+
         </form>
 
     </div>
@@ -44,17 +161,85 @@
 </header>
 
 <script>
-    (function () {
-        var form = document.querySelector('.topbar-period-form');
-        var input = document.getElementById('working-period');
-        if (!form || !input) {
+(function () {
+
+    const form = document.querySelector('.topbar-tenant-form');
+    const select = document.getElementById('topbar-tenant');
+    let isSubmitting = false;
+
+    if (!form || !select)
+        return;
+
+    async function switchTenant() {
+
+        if (isSubmitting)
             return;
+
+        isSubmitting = true;
+        const formData = new FormData(form);
+        select.disabled = true;
+
+        try {
+
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || !data.ok)
+                throw new Error(data.error || 'Le changement de tenant a échoué.');
+
+            window.location.reload();
+
+        } catch (error) {
+
+            isSubmitting = false;
+            select.disabled = false;
+            window.alert(error.message);
+
         }
 
+    }
+
+    form.addEventListener('submit', function (event) {
+
+        event.preventDefault();
+        switchTenant();
+
+    });
+
+    select.addEventListener('change', function () {
+
+        form.requestSubmit();
+
+    });
+
+})();
+
+(function () {
+
+    const form = document.querySelector('.topbar-period-form');
+    const input = document.getElementById('working-period');
+
+    if (!form || !input)
+        return;
+
+    localStorage.setItem(form.dataset.storageKey, input.value);
+
+    input.addEventListener('change', function () {
+
         localStorage.setItem(form.dataset.storageKey, input.value);
-        input.addEventListener('change', function () {
-            localStorage.setItem(form.dataset.storageKey, input.value);
-            form.requestSubmit();
-        });
-    })();
+
+        form.requestSubmit();
+
+    });
+
+})();
 </script>

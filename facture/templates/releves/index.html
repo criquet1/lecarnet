@@ -121,6 +121,7 @@ Téléchargement des relevés bancaires
                                         tabindex="0"
                                         data-releve-id="{{ r.id }}"
                                         data-compte="{{ compte.nom_affichage|escape }}"
+                                        data-compte-lie-id="{{ r.compte_lie_id|default:'' }}"
                                         data-suggested-compte-id="{{ r.suggested_compte_id }}"
                                         data-suggested-compte-label="{{ r.suggested_compte_label|escape }}"
                                         data-suggested-montant="{% if r.suggested_montant is not None %}{{ r.suggested_montant }}{% endif %}"
@@ -243,14 +244,14 @@ Téléchargement des relevés bancaires
                                     <div class="form-text">La valeur est initialisée depuis la description relevé et peut être modifiée.</div>
                                 </div>
                                 <div class="col-12">
-                                    <label for="id_compagnie_id" class="form-label">Compagnie (optionnelle)</label>
+                                    <label for="id_compagnie_id" class="form-label">Compagnie <span id="compagnie-required-label" class="text-danger d-none">(obligatoire pour CAP/CAR)</span></label>
                                     <select name="compagnie_id" id="id_compagnie_id" class="form-select">
                                         <option value="">-- aucune --</option>
                                         {% for compagnie in compagnies %}
                                             <option value="{{ compagnie.id }}" {% if selected_compagnie_id == compagnie.id|stringformat:'s' %}selected{% endif %}>{{ compagnie.nom }}</option>
                                         {% endfor %}
                                     </select>
-                                    <div class="form-text">Pour un virement d'un relevé vers un autre, laissez ce champ vide.</div>
+                                    <div class="form-text">Pour un virement entre relevés, laissez ce champ vide sauf si l'écriture utilise CAP ou CAR.</div>
                                 </div>
                             </div>
                         </div>
@@ -312,10 +313,85 @@ Téléchargement des relevés bancaires
         var statutText = document.getElementById('modal-statut-ecriture');
         var noEjText = document.getElementById('modal-no-ej');
         var compagnieSelect = document.getElementById('id_compagnie_id');
+        var compagnieRequiredLabel = document.getElementById('compagnie-required-label');
+        var activeCompteLieId = '';
+        var companyRequiredAccountIds = [
+            '{{ compte_cap_id|default:"" }}',
+            '{{ compte_car_id|default:"" }}'
+        ].filter(Boolean);
         var findSimilarBtn = document.getElementById('find-similar-btn');
         var similarResultsDiv = document.getElementById('similar-results');
+        var createEcritureForm = document.getElementById('create-ecriture-form');
+        var returnPositionKey = 'releve-return-position:' + window.location.pathname;
         // Gabarit d'URL: on remplace l'id 0 par le vrai releve_id au moment de l'appel.
         var similarUrlTemplate = "{% url 'releve_ecriture_similaire' releve_id=0 %}";
+
+        function saveReturnPosition() {
+            if (!releveIdInput || !releveIdInput.value) {
+                return;
+            }
+
+            var row = releveRows.find(function (candidate) {
+                return candidate.dataset.releveId === releveIdInput.value;
+            });
+            if (!row) {
+                return;
+            }
+
+            var pane = row.closest('.tab-pane');
+            try {
+                sessionStorage.setItem(returnPositionKey, JSON.stringify({
+                    releveId: row.dataset.releveId,
+                    viewportTop: row.getBoundingClientRect().top,
+                    tabId: pane ? pane.getAttribute('aria-labelledby') : ''
+                }));
+            } catch (error) {
+                // La soumission reste fonctionnelle si le stockage navigateur est indisponible.
+            }
+        }
+
+        function restoreReturnPosition() {
+            var savedPosition = null;
+            try {
+                savedPosition = JSON.parse(sessionStorage.getItem(returnPositionKey) || 'null');
+                sessionStorage.removeItem(returnPositionKey);
+            } catch (error) {
+                savedPosition = null;
+            }
+
+            if (!savedPosition || !savedPosition.releveId) {
+                return;
+            }
+
+            var row = releveRows.find(function (candidate) {
+                return candidate.dataset.releveId === String(savedPosition.releveId);
+            });
+            if (!row) {
+                return;
+            }
+
+            function scrollToRow() {
+                window.requestAnimationFrame(function () {
+                    var viewportTop = Number(savedPosition.viewportTop);
+                    var targetTop = row.getBoundingClientRect().top + window.scrollY;
+                    window.scrollTo(0, targetTop - (Number.isFinite(viewportTop) ? viewportTop : 120));
+                });
+            }
+
+            var tabButton = savedPosition.tabId
+                ? document.getElementById(savedPosition.tabId)
+                : null;
+            if (tabButton && !tabButton.classList.contains('active')) {
+                tabButton.addEventListener('shown.bs.tab', scrollToRow, { once: true });
+                bootstrap.Tab.getOrCreateInstance(tabButton).show();
+            } else {
+                scrollToRow();
+            }
+        }
+
+        if (createEcritureForm) {
+            createEcritureForm.addEventListener('submit', saveReturnPosition);
+        }
 
         function getField(id) {
             return document.getElementById(id);
@@ -347,6 +423,26 @@ Téléchargement des relevés bancaires
 
         function getDetailField(index, name) {
             return getField('id_detail_releve-' + index + '-' + name);
+        }
+
+        function syncCompanyRequirement() {
+            if (!compagnieSelect) {
+                return;
+            }
+
+            var selectedAccountIds = detailRows.map(function (_row, index) {
+                var accountSelect = getDetailField(index, 'compte');
+                return accountSelect ? accountSelect.value : '';
+            });
+            selectedAccountIds.push(activeCompteLieId);
+
+            var companyRequired = selectedAccountIds.some(function (accountId) {
+                return companyRequiredAccountIds.includes(String(accountId || ''));
+            });
+            compagnieSelect.required = companyRequired;
+            if (compagnieRequiredLabel) {
+                compagnieRequiredLabel.classList.toggle('d-none', !companyRequired);
+            }
         }
 
         function setSelectValue(selectField, rawValue) {
@@ -422,6 +518,7 @@ Téléchargement des relevés bancaires
                     montantField.value = normalizeAmount(item.montant || '');
                 }
             });
+            syncCompanyRequirement();
         }
 
         function prefillFormFromRow(row) {
@@ -611,6 +708,7 @@ Téléchargement des relevés bancaires
         }
 
         function openDetail(row, preserveFormValues) {
+            activeCompteLieId = row.dataset.compteLieId || '';
             setText('modal-compte', row.dataset.compte);
             setText('modal-desc-releve', row.dataset.descReleve || '');
 
@@ -644,6 +742,7 @@ Téléchargement des relevés bancaires
             if (!preserveFormValues) {
                 prefillFormFromRow(row);
             }
+            syncCompanyRequirement();
 
             // Une correspondance exacte déjà calculée côté serveur est appliquée
             // directement dans la transaction, sans afficher de liste intermédiaire.
@@ -688,6 +787,15 @@ Téléchargement des relevés bancaires
                 }
             });
         });
+
+        detailRows.forEach(function (_row, index) {
+            var accountSelect = getDetailField(index, 'compte');
+            if (accountSelect) {
+                accountSelect.addEventListener('change', syncCompanyRequirement);
+            }
+        });
+
+        restoreReturnPosition();
 
         var shouldReopen = modalElement.dataset.openReleveModal === '1';
         var reopenReleveId = modalElement.dataset.modalReleveId || '';
