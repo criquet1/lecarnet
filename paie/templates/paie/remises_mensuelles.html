@@ -4,36 +4,13 @@
 
 {% block page_title %}{{ title }}{% endblock %}
 
-{% block page_subtitle %}Sommaire mensuel des retenues fédérales et provinciales.{% endblock %}
+{% block page_subtitle %}Sommaire des retenues fédérales et provinciales pour {{ working_period.label }}.{% endblock %}
 
 {% block page_actions %}
 {% include "includes/components/print_button.html" %}
 {% endblock %}
 
 {% block content %}
-<div class="text-center mb-4 no-print">
-    <div class="d-inline-flex align-items-center gap-2 justify-content-center flex-wrap">
-        <a href="?mois={{ previous_year_value }}" class="btn btn-outline-secondary btn-sm">
-            Année précédente
-        </a>
-        <form method="get" class="d-inline-flex align-items-center gap-2 justify-content-center">
-        <input
-            type="month"
-            id="mois-select"
-            name="mois"
-            class="form-control fw-bold text-center"
-            style="max-width: 220px;"
-            value="{{ selected_month_value }}"
-            aria-label="Choisir un mois"
-            onchange="this.form.submit()"
-        >
-        </form>
-        <a href="?mois={{ next_year_value }}" class="btn btn-outline-secondary btn-sm">
-            Année suivante
-        </a>
-    </div>
-</div>
-
 {% if paies_count %}
     <div class="alert alert-light border mb-4">
         {{ paies_count }} paie{% if paies_count > 1 %}s{% endif %} incluse{% if paies_count > 1 %}s{% endif %} pour cette période.

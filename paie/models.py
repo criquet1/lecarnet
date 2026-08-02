@@ -1,15 +1,20 @@
-from datetime import date as date_type
+import logging
+from datetime import date as date_type, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Sum
+from django.db.utils import OperationalError, ProgrammingError
+from django.utils.connection import ConnectionDoesNotExist
 
 from paie.services.das import DASInputs, calculer_das
 
 from django.core.cache import cache
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
+
+logger = logging.getLogger(__name__)
 
 
 class FrequencePaie(models.Model):
@@ -122,8 +127,34 @@ class PeriodePaie(models.Model):
 
     def save(self, *args, **kwargs):
         if self.date_paie is None:
-            self.date_paie = self.date_fin
+            self.date_paie = self._prochaine_date_paie_depuis_settings(kwargs.get('using'))
         super().save(*args, **kwargs)
+
+    def _prochaine_date_paie_depuis_settings(self, using=None):
+        from compte.models import Setting
+        from paie.services.periodes import (
+            DEFAULT_PAYDAY_WEEKDAY,
+            next_payday_after,
+            payday_weekday_from_anchor,
+        )
+
+        db_alias = using or self._state.db or 'default'
+        payday_weekday = DEFAULT_PAYDAY_WEEKDAY
+        try:
+            settings_instance = (
+                Setting.objects
+                .using(db_alias)
+                .only('date_premier_paiement_paie_annee')
+                .first()
+            )
+            payday_weekday = payday_weekday_from_anchor(
+                settings_instance.date_premier_paiement_paie_annee if settings_instance else None
+            )
+        except (ConnectionDoesNotExist, OperationalError, ProgrammingError):
+            payday_weekday = DEFAULT_PAYDAY_WEEKDAY
+
+        date_fin = self._meta.get_field('date_fin').to_python(self.date_fin)
+        return next_payday_after(date_fin, payday_weekday)
 
     def __str__(self):
         return f'{self.frequence_paie} - {self.date_fin:%Y-%m-%d}'
@@ -348,6 +379,41 @@ class Paie(models.Model):
     def _taux_effectifs(date_reference):
         rows = Paie._get_taux_rows()
 
+        fallback = {
+            'taux_rrq_employe': Decimal('6.30000'),
+            'taux_rrq_supplementaire_2_employe': Decimal('4.00000'),
+            'exemption_base_rrq': Decimal('3500.00'),
+            'max_assurable_rrq': Decimal('74600.00'),
+            'max_supplementaire_rrq': Decimal('85000.00'),
+            'taux_rqap_employe': Decimal('0.43000'),
+            'max_assurable_rqap': Decimal('98700.00'),
+            'taux_ae_employe': Decimal('1.30000'),
+            'max_assurable_ae': Decimal('67500.00'),
+            'credit_personnel_federal_min': Decimal('16452.00'),
+            'taux_credit_federal': Decimal('14.00000'),
+            'montant_canadien_pour_emploi': Decimal('1501.00'),
+            'abattement_federal_quebec': Decimal('16.50000'),
+            'seuil_federal_1': Decimal('58523.00'),
+            'seuil_federal_2': Decimal('117045.00'),
+            'seuil_federal_3': Decimal('181440.00'),
+            'seuil_federal_4': Decimal('258482.00'),
+            'taux_federal_1': Decimal('14.00000'),
+            'taux_federal_2': Decimal('20.50000'),
+            'taux_federal_3': Decimal('26.00000'),
+            'taux_federal_4': Decimal('29.00000'),
+            'taux_federal_5': Decimal('33.00000'),
+            'credit_personnel_quebec_min': Decimal('18952.00'),
+            'deduction_travailleur_qc_max_annuelle': Decimal('1450.00'),
+            'seuil_qc_1': Decimal('54345.00'),
+            'seuil_qc_2': Decimal('108680.00'),
+            'seuil_qc_3': Decimal('132245.00'),
+            'taux_qc_1': Decimal('14.00000'),
+            'taux_qc_2': Decimal('19.00000'),
+            'taux_qc_3': Decimal('24.00000'),
+            'taux_qc_4': Decimal('25.75000'),
+            'taux_credit_quebec': Decimal('14.00000'),
+        }
+
         def _pick(start_field, end_field):
             active_candidates = [
                 row for row in rows
@@ -355,62 +421,85 @@ class Paie(models.Model):
             ]
             if active_candidates:
                 return sorted(active_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
+
+            started_candidates = [
+                row for row in rows
+                if getattr(row, start_field) <= date_reference
+            ]
+            if started_candidates:
+                return sorted(started_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
+
+            future_candidates = [
+                row for row in rows
+                if getattr(row, start_field) > date_reference
+            ]
+            if future_candidates:
+                return sorted(future_candidates, key=lambda row: (getattr(row, start_field), row.id))[0]
             return None
 
         rrq_row = _pick('rrq_date_debut_effet', 'rrq_date_fin_effet')
         rqap_row = _pick('rqap_date_debut_effet', 'rqap_date_fin_effet')
         ae_row = _pick('ae_date_debut_effet', 'ae_date_fin_effet')
 
-        manquants = []
-        if rrq_row is None:
-            manquants.append('RRQ')
-        if rqap_row is None:
-            manquants.append('RQAP')
-        if ae_row is None:
-            manquants.append('AE')
+        fiscal_row = rrq_row or rqap_row or ae_row
 
-        if manquants:
-            raise ValidationError(
-                f"Aucune configuration de taux ({', '.join(manquants)}) ne couvre la date de paie "
-                f"{date_reference.isoformat()}. Ajoutez une nouvelle ligne dans "
-                f"Paramètres de taux de paie avant de calculer cette paie."
-            )
+        def _value(row, field_name):
+            value = getattr(row, field_name, None) if row else None
+            return fallback[field_name] if value is None else value
 
-        fiscal_row = rrq_row
+        rrq_exemption = Decimal(str(_value(rrq_row, 'exemption_base_rrq')))
+        rrq_max_assurable = Decimal(str(_value(rrq_row, 'max_assurable_rrq')))
+        rrq_max_supplementaire = Decimal(str(_value(rrq_row, 'max_supplementaire_rrq')))
+
+        if rrq_exemption < 0 or rrq_exemption > Decimal('10000'):
+            rrq_exemption = fallback['exemption_base_rrq']
+        if rrq_max_assurable < Decimal('10000'):
+            rrq_max_assurable = fallback['max_assurable_rrq']
+        if rrq_max_supplementaire < Decimal('10000'):
+            rrq_max_supplementaire = fallback['max_supplementaire_rrq']
+        if rrq_max_supplementaire < rrq_max_assurable:
+            rrq_max_supplementaire = rrq_max_assurable
+
+        rrq_rate = Paie._rate_to_ratio(_value(rrq_row, 'taux_rrq_employe'))
+        rrq_supp2_rate = Paie._rate_to_ratio(_value(rrq_row, 'taux_rrq_supplementaire_2_employe'))
+        if rrq_rate <= 0 or rrq_rate <= rrq_supp2_rate:
+            rrq_rate = Paie._rate_to_ratio(fallback['taux_rrq_employe'])
+        if rrq_supp2_rate < 0:
+            rrq_supp2_rate = Paie._rate_to_ratio(fallback['taux_rrq_supplementaire_2_employe'])
 
         return {
-            'taux_rrq_employe': Paie._rate_to_ratio(rrq_row.taux_rrq_employe),
-            'taux_rrq_supplementaire_2_employe': Paie._rate_to_ratio(rrq_row.taux_rrq_supplementaire_2_employe),
-            'exemption_base_rrq': rrq_row.exemption_base_rrq,
-            'max_assurable_rrq': rrq_row.max_assurable_rrq,
-            'max_supplementaire_rrq': rrq_row.max_supplementaire_rrq,
-            'taux_rqap_employe': Paie._percent_to_ratio(rqap_row.taux_rqap_employe),
-            'max_assurable_rqap': rqap_row.max_assurable_rqap,
-            'taux_ae_employe': Paie._percent_to_ratio(ae_row.taux_ae_employe),
-            'max_assurable_ae': ae_row.max_assurable_ae,
-            'credit_personnel_federal_min': fiscal_row.credit_personnel_federal_min,
-            'taux_credit_federal': Paie._percent_to_ratio(fiscal_row.taux_credit_federal),
-            'montant_canadien_pour_emploi': fiscal_row.montant_canadien_pour_emploi,
-            'abattement_federal_quebec': Paie._percent_to_ratio(fiscal_row.abattement_federal_quebec),
-            'seuil_federal_1': fiscal_row.seuil_federal_1,
-            'seuil_federal_2': fiscal_row.seuil_federal_2,
-            'seuil_federal_3': fiscal_row.seuil_federal_3,
-            'seuil_federal_4': fiscal_row.seuil_federal_4,
-            'taux_federal_1': Paie._percent_to_ratio(fiscal_row.taux_federal_1),
-            'taux_federal_2': Paie._percent_to_ratio(fiscal_row.taux_federal_2),
-            'taux_federal_3': Paie._percent_to_ratio(fiscal_row.taux_federal_3),
-            'taux_federal_4': Paie._percent_to_ratio(fiscal_row.taux_federal_4),
-            'taux_federal_5': Paie._percent_to_ratio(fiscal_row.taux_federal_5),
-            'credit_personnel_quebec_min': fiscal_row.credit_personnel_quebec_min,
-            'deduction_travailleur_qc_max_annuelle': fiscal_row.deduction_travailleur_qc_max_annuelle,
-            'seuil_qc_1': fiscal_row.seuil_qc_1,
-            'seuil_qc_2': fiscal_row.seuil_qc_2,
-            'seuil_qc_3': fiscal_row.seuil_qc_3,
-            'taux_qc_1': Paie._percent_to_ratio(fiscal_row.taux_qc_1),
-            'taux_qc_2': Paie._percent_to_ratio(fiscal_row.taux_qc_2),
-            'taux_qc_3': Paie._percent_to_ratio(fiscal_row.taux_qc_3),
-            'taux_qc_4': Paie._percent_to_ratio(fiscal_row.taux_qc_4),
-            'taux_credit_quebec': Paie._percent_to_ratio(fiscal_row.taux_credit_quebec),
+            'taux_rrq_employe': rrq_rate,
+            'taux_rrq_supplementaire_2_employe': rrq_supp2_rate,
+            'exemption_base_rrq': rrq_exemption,
+            'max_assurable_rrq': rrq_max_assurable,
+            'max_supplementaire_rrq': rrq_max_supplementaire,
+            'taux_rqap_employe': Paie._percent_to_ratio(_value(rqap_row, 'taux_rqap_employe')),
+            'max_assurable_rqap': _value(rqap_row, 'max_assurable_rqap'),
+            'taux_ae_employe': Paie._percent_to_ratio(_value(ae_row, 'taux_ae_employe')),
+            'max_assurable_ae': _value(ae_row, 'max_assurable_ae'),
+            'credit_personnel_federal_min': _value(fiscal_row, 'credit_personnel_federal_min'),
+            'taux_credit_federal': Paie._percent_to_ratio(_value(fiscal_row, 'taux_credit_federal')),
+            'montant_canadien_pour_emploi': _value(fiscal_row, 'montant_canadien_pour_emploi'),
+            'abattement_federal_quebec': Paie._percent_to_ratio(_value(fiscal_row, 'abattement_federal_quebec')),
+            'seuil_federal_1': _value(fiscal_row, 'seuil_federal_1'),
+            'seuil_federal_2': _value(fiscal_row, 'seuil_federal_2'),
+            'seuil_federal_3': _value(fiscal_row, 'seuil_federal_3'),
+            'seuil_federal_4': _value(fiscal_row, 'seuil_federal_4'),
+            'taux_federal_1': Paie._percent_to_ratio(_value(fiscal_row, 'taux_federal_1')),
+            'taux_federal_2': Paie._percent_to_ratio(_value(fiscal_row, 'taux_federal_2')),
+            'taux_federal_3': Paie._percent_to_ratio(_value(fiscal_row, 'taux_federal_3')),
+            'taux_federal_4': Paie._percent_to_ratio(_value(fiscal_row, 'taux_federal_4')),
+            'taux_federal_5': Paie._percent_to_ratio(_value(fiscal_row, 'taux_federal_5')),
+            'credit_personnel_quebec_min': _value(fiscal_row, 'credit_personnel_quebec_min'),
+            'deduction_travailleur_qc_max_annuelle': _value(fiscal_row, 'deduction_travailleur_qc_max_annuelle'),
+            'seuil_qc_1': _value(fiscal_row, 'seuil_qc_1'),
+            'seuil_qc_2': _value(fiscal_row, 'seuil_qc_2'),
+            'seuil_qc_3': _value(fiscal_row, 'seuil_qc_3'),
+            'taux_qc_1': Paie._percent_to_ratio(_value(fiscal_row, 'taux_qc_1')),
+            'taux_qc_2': Paie._percent_to_ratio(_value(fiscal_row, 'taux_qc_2')),
+            'taux_qc_3': Paie._percent_to_ratio(_value(fiscal_row, 'taux_qc_3')),
+            'taux_qc_4': Paie._percent_to_ratio(_value(fiscal_row, 'taux_qc_4')),
+            'taux_credit_quebec': Paie._percent_to_ratio(_value(fiscal_row, 'taux_credit_quebec')),
         }
     
     def recalculer(self):
@@ -536,3 +625,35 @@ class Paie(models.Model):
 @receiver(post_delete, sender=ParametresTauxPaie)
 def invalider_cache_taux_paie(sender, **kwargs):
     cache.delete(Paie.CACHE_KEY_TAUX_ROWS)
+
+
+@receiver(post_save, sender=ParametresTauxPaie)
+def prefill_periodes_sur_nouveaux_taux(sender, instance, created, **kwargs):
+    """
+    Quand un nouveau bloc de taux est créé, pré-remplit les PeriodePaie
+    pour toutes les années couvertes par ce bloc dans chaque tenant actif.
+    """
+    if not created:
+        return
+
+    from tenancy.models import ClientDatabase
+    from paie.services.periodes import generate_periodes_annee
+
+    start_year = instance.rrq_date_debut_effet.year
+    end_year = instance.rrq_date_fin_effet.year if instance.rrq_date_fin_effet else start_year
+
+    tenant_aliases = list(
+        ClientDatabase.objects.filter(is_active=True).values_list('db_alias', flat=True)
+    )
+
+    for annee in range(start_year, end_year + 1):
+        for db_alias in tenant_aliases:
+            try:
+                generate_periodes_annee(annee, db_alias)
+            except (ConnectionDoesNotExist, OperationalError, ProgrammingError) as exc:
+                logger.warning(
+                    "Pré-remplissage des périodes impossible pour tenant=%s annee=%s: %s",
+                    db_alias,
+                    annee,
+                    exc,
+                )

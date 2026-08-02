@@ -142,6 +142,21 @@ class DASTestCase(SimpleTestCase):
 
 
 class PaieModelTestCase(TestCase):
+	def test_periode_sans_date_paie_accepte_des_dates_iso(self):
+		frequence = FrequencePaie.objects.create(
+			code=FrequencePaie.AUX_2_SEMAINES,
+			nom='Aux 2 semaines',
+			nombre_periodes_par_annee=26,
+		)
+
+		periode = PeriodePaie.objects.create(
+			frequence_paie=frequence,
+			date_debut='2026-01-01',
+			date_fin='2026-01-14',
+		)
+
+		self.assertEqual(periode.date_paie, date(2026, 1, 15))
+
 	def test_taux_horaire_employe_accepte_la_virgule_decimale(self):
 		employe = Employe(salH='25,50 $')
 
@@ -691,7 +706,7 @@ class PaieModelTestCase(TestCase):
 			frequence_paie=frequence,
 			date_debut='2026-02-01',
 			date_fin='2026-02-07',
-			date_paie='2026-02-08',
+			date_paie='2026-02-06',
 		)
 
 		self.assertTrue(form.is_valid(), form.errors)

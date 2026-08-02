@@ -15,6 +15,7 @@ from holidays import country_holidays
 
 from facture.models import Source, Tr_desc, Tr_detail
 from facture.utils import expert_required, get_setting, is_expert
+from facture.working_period import get_working_period
 
 from .forms import EmployeForm, PaieForm, ParametresTauxPaieForm
 from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie
@@ -46,39 +47,7 @@ def _superuser_required(request):
 @login_required
 def paie_dashboard(request):
 	_ensure_default_frequences_paie()
-	paies_agg = Paie.objects.aggregate(
-		paies_total=Count('id'),
-		total_net=Sum('salaire_net'),
-	)
-	resume = {
-		'employes_actifs': Employe.objects.filter(actif=True).count(),
-		'periodes_ouvertes': PeriodePaie.objects.filter(fermee=False).count(),
-		'paies_total': paies_agg.get('paies_total'),
-		'total_net': paies_agg.get('total_net'),
-	}
-	paies_recentes = (
-		Paie.objects
-		.select_related('employe', 'periode', 'periode__frequence_paie')
-		.only(
-			'id',
-			'employe__id',
-			'employe__nom',
-			'employe__prenom',
-			'periode__id',
-			'periode__date_fin',
-			'periode__frequence_paie__code',
-			'salaire_brut_periode',
-			'total_retenues',
-			'salaire_net',
-		)
-		.order_by('-periode__date_fin', '-id')[:10]
-	)
-
-	return render(request, 'paie/dashboard.html', {
-		'title': 'Paie',
-		'resume': resume,
-		'paies_recentes': paies_recentes,
-	})
+	return render(request, 'paie/dashboard.html', {'title': 'Paie'})
 
 
 @login_required
@@ -1013,31 +982,12 @@ def journal_paies_page(request):
 @login_required
 def remises_mensuelles_page(request):
 	_ensure_default_frequences_paie()
-	mois_fr = {
-		1: 'Janvier',
-		2: 'Fevrier',
-		3: 'Mars',
-		4: 'Avril',
-		5: 'Mai',
-		6: 'Juin',
-		7: 'Juillet',
-		8: 'Aout',
-		9: 'Septembre',
-		10: 'Octobre',
-		11: 'Novembre',
-		12: 'Decembre',
-	}
-
-	selected_month_raw = request.GET.get('mois')
-	try:
-		if selected_month_raw and len(selected_month_raw) == 7:
-			selected_year = int(selected_month_raw[:4])
-			selected_month = int(selected_month_raw[5:7])
-			selected_date = date_type(selected_year, selected_month, 1)
-		else:
-			selected_date = date_type.today().replace(day=1)
-	except (TypeError, ValueError):
-		selected_date = date_type.today().replace(day=1)
+	working_period = get_working_period(request)
+	selected_date = date_type(
+		working_period['year'],
+		working_period['month'],
+		1,
+	)
 
 	if selected_date.month == 12:
 		next_month_date = date_type(selected_date.year + 1, 1, 1)
@@ -1179,16 +1129,8 @@ def remises_mensuelles_page(request):
 		provincial_total['impot_provincial'] += _d(paie.impot_provincial)
 		provincial_total['total'] += _d(paie.rrq) + rrq_employeur + _d(paie.rqap) + rqap_employeur + _d(paie.impot_provincial) + cnesst_employeur
 
-	month_value = selected_date.strftime('%Y-%m')
-	previous_year_value = PaieForm._add_months(selected_date, -12).strftime('%Y-%m')
-	next_year_value = PaieForm._add_months(selected_date, 12).strftime('%Y-%m')
-
 	return render(request, 'paie/remises_mensuelles.html', {
 		'title': 'Remises mensuelles',
-		'selected_date': selected_date,
-		'selected_month_value': month_value,
-		'previous_year_value': previous_year_value,
-		'next_year_value': next_year_value,
 		'federal_total': federal_total,
 		'provincial_total': provincial_total,
 		'paies_count': len(paies),
@@ -1243,10 +1185,11 @@ def calendrier_paie_page(request):
 
 	projected = []
 	if settings_instance and settings_instance.frequence_paie_id and settings_instance.date_debut_periode_paie_annee and settings_instance.date_premier_paiement_paie_annee:
+		payday_weekday = settings_instance.date_premier_paiement_paie_annee.weekday()
 		projected = PaieForm._build_projected_periods(
 			settings_instance.frequence_paie,
 			settings_instance.date_debut_periode_paie_annee,
-			settings_instance.date_premier_paiement_paie_annee,
+			payday_weekday=payday_weekday,
 			count=2600,
 		)
 

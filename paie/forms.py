@@ -11,6 +11,7 @@ from holidays import country_holidays
 from facture.utils import get_setting
 
 from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie
+from .services.periodes import DEFAULT_PAYDAY_WEEKDAY, next_payday_after, payday_weekday_from_anchor
 
 
 class EmployeForm(forms.ModelForm):
@@ -242,37 +243,17 @@ class PaieForm(forms.ModelForm):
         return date_type(year, month, day)
 
     @classmethod
-    def _build_projected_periods(cls, frequence, date_debut_anchor, date_paiement_anchor, count=160):
+    def _build_projected_periods(cls, frequence, date_debut_anchor, payday_weekday=DEFAULT_PAYDAY_WEEKDAY, count=160):
+        """Génère les périodes projetées selon le jour de paie configuré."""
         periods = []
         code = frequence.code
-        delai_paiement = timedelta(0)
-
-        # Calcul du delai paiement base sur la premiere periode.
-        if code == FrequencePaie.HEBDOMADAIRE:
-            first_end = date_debut_anchor + timedelta(days=6)
-        elif code == FrequencePaie.AUX_2_SEMAINES:
-            first_end = date_debut_anchor + timedelta(days=13)
-        elif code == FrequencePaie.PAR_MOIS:
-            next_start = cls._add_months(date_debut_anchor, 1)
-            first_end = next_start - timedelta(days=1)
-        elif code == FrequencePaie.DEUX_FOIS_MOIS:
-            if date_debut_anchor.day <= 15:
-                first_end = date_debut_anchor.replace(day=15)
-            else:
-                last_day = monthrange(date_debut_anchor.year, date_debut_anchor.month)[1]
-                first_end = date_debut_anchor.replace(day=last_day)
-        else:
-            return periods
-
-        if date_paiement_anchor:
-            delai_paiement = date_paiement_anchor - first_end
 
         if code in (FrequencePaie.HEBDOMADAIRE, FrequencePaie.AUX_2_SEMAINES):
             step_days = 7 if code == FrequencePaie.HEBDOMADAIRE else 14
             for idx in range(count):
                 date_debut = date_debut_anchor + timedelta(days=idx * step_days)
                 date_fin = date_debut + timedelta(days=step_days - 1)
-                date_paie = cls._to_business_day(date_fin + delai_paiement)
+                date_paie = next_payday_after(date_fin, payday_weekday)
                 periods.append((date_debut, date_fin, date_paie))
             return periods
 
@@ -281,7 +262,7 @@ class PaieForm(forms.ModelForm):
             for _ in range(count):
                 next_start = cls._add_months(current_start, 1)
                 date_fin = next_start - timedelta(days=1)
-                date_paie = cls._to_business_day(date_fin + delai_paiement)
+                date_paie = next_payday_after(date_fin, payday_weekday)
                 periods.append((current_start, date_fin, date_paie))
                 current_start = next_start
             return periods
@@ -294,7 +275,7 @@ class PaieForm(forms.ModelForm):
                 else:
                     last_day = monthrange(current_start.year, current_start.month)[1]
                     date_fin = current_start.replace(day=last_day)
-                date_paie = cls._to_business_day(date_fin + delai_paiement)
+                date_paie = next_payday_after(date_fin, payday_weekday)
                 periods.append((current_start, date_fin, date_paie))
                 current_start = date_fin + timedelta(days=1)
             return periods
@@ -373,6 +354,44 @@ class PaieForm(forms.ModelForm):
 
     @classmethod
     def _build_candidates_with_projection(cls, employe, frequence):
+        """
+        Retourne les périodes disponibles pour cet employé.
+
+        Stratégie DB-first : requête directe sur PeriodePaie pré-remplie.
+        Fallback vers projection si aucune période n'est trouvée en base
+        (nouveau tenant dont prefill_periodes_annee n'a pas encore été exécuté).
+        """
+        settings_instance = cls._paie_settings()
+        payday_weekday = payday_weekday_from_anchor(
+            settings_instance.date_premier_paiement_paie_annee if settings_instance else None
+        )
+        annee = date_type.today().year
+        db_candidates = list(
+            PeriodePaie.objects
+            .filter(frequence_paie=frequence, date_fin__year=annee, fermee=False)
+            .exclude(paies__employe=employe)
+            .order_by('date_fin', 'id')
+        )
+
+        if db_candidates:
+            return [
+                {
+                    'mode': 'existing',
+                    'periode': p,
+                    'date_debut': p.date_debut,
+                    'date_fin': p.date_fin,
+                    'date_paie': p.date_paie or next_payday_after(p.date_fin, payday_weekday),
+                    'frequence': frequence,
+                }
+                for p in db_candidates
+            ]
+
+        # Fallback : projection (table non encore pré-remplie)
+        return cls._build_candidates_projected(employe, frequence)
+
+    @classmethod
+    def _build_candidates_projected(cls, employe, frequence):
+        """Fallback : génère les candidats par projection (sans pré-remplissage en base)."""
         settings_instance = cls._paie_settings()
         date_debut_anchor = settings_instance.date_debut_periode_paie_annee if settings_instance else None
         date_paie_anchor = settings_instance.date_premier_paiement_paie_annee if settings_instance else None
@@ -387,9 +406,10 @@ class PaieForm(forms.ModelForm):
             if not derniere_periode or not derniere_periode.date_fin:
                 return []
             date_debut_anchor = derniere_periode.date_debut or (derniere_periode.date_fin + timedelta(days=1))
-            date_paie_anchor = derniere_periode.date_paie or derniere_periode.date_fin
+            date_paie_anchor = derniere_periode.date_paie
 
-        projected = cls._build_projected_periods(frequence, date_debut_anchor, date_paie_anchor)
+        payday_weekday = payday_weekday_from_anchor(date_paie_anchor)
+        projected = cls._build_projected_periods(frequence, date_debut_anchor, payday_weekday=payday_weekday)
         existing_map = {
             (p.date_debut, p.date_fin): p
             for p in PeriodePaie.objects.filter(frequence_paie=frequence)
@@ -409,7 +429,7 @@ class PaieForm(forms.ModelForm):
                     'periode': existing,
                     'date_debut': existing.date_debut,
                     'date_fin': existing.date_fin,
-                    'date_paie': existing.date_paie or existing.date_fin,
+                    'date_paie': existing.date_paie or next_payday_after(existing.date_fin, payday_weekday),
                     'frequence': frequence,
                 })
             else:
