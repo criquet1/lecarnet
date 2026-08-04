@@ -6,7 +6,8 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import AnonymousUser
+from django.contrib.auth.models import AnonymousUser, Group
+from django.core.exceptions import PermissionDenied
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.db import DatabaseError
 from django.http import HttpResponse
@@ -18,7 +19,7 @@ from django.utils import timezone
 from compte.models import Compte, SoldeAuxLivres, Total
 from facture.models import Compagnie, CompteReleve, Facture, RapportTaxes, Releve, SoldeFin, Source, TransactionListe, Tr_desc, Tr_detail
 from facture.templatetags.facture_extras import accounting_amount
-from facture.views import _company_invoices_queryset, dashboard, facture, grand_livre, journal_general, rapport_de_taxes, releve_bancaire, releve_ecriture_similaire, update_working_period
+from facture.views import _company_invoices_queryset, administration, dashboard, facture, grand_livre, journal_general, rapport_de_taxes, releve_bancaire, releve_ecriture_similaire, update_working_period
 from facture.working_period import set_working_period
 from compte.models import Setting
 from tenancy.models import ClientDatabase, UserClientAccess
@@ -44,7 +45,7 @@ class SidebarNavigationTests(SimpleTestCase):
 			'paie:paie_calendrier',
 			'paie:paie_remises_mensuelles',
 		):
-			self.assertIn(f'href="{reverse(url_name)}"', payroll_html)
+			self.assertIn(f'data-report-url="{reverse(url_name)}?embed=1"', payroll_html)
 
 		reports_html = render_to_string('rapports/index.html', context, request=request)
 		self.assertNotIn(reverse('paie:paie_remises_mensuelles'), reports_html)
@@ -98,6 +99,70 @@ class SidebarNavigationTests(SimpleTestCase):
 					html,
 					rf'href="{re.escape(active_href)}"\s+class="sidebar-link active"',
 				)
+
+	def test_administration_routes_activate_only_the_red_gear(self):
+		for current_path in (
+			'/administration/',
+			'/comptes/settings/',
+			'/paie/parametres-taux/',
+		):
+			with self.subTest(current_path=current_path):
+				request = RequestFactory().get(current_path)
+				request.resolver_match = resolve(current_path)
+				html = render_to_string(
+					'includes/navigation/app_sidebar.html',
+					{'can_switch_tenant': True},
+					request=request,
+				)
+
+				self.assertEqual(html.count('sidebar-link active'), 1)
+				self.assertIn('sidebar-link active sidebar-link-admin', html)
+				self.assertEqual(html.count('aria-current="page"'), 1)
+
+
+class AdministrationMenuTests(TestCase):
+	def setUp(self):
+		self.factory = RequestFactory()
+		self.user_model = get_user_model()
+
+	def _render_for(self, user):
+		request = self.factory.get('/administration/')
+		request.user = user
+		request.resolver_match = resolve('/administration/')
+		return administration(request)
+
+	def test_standard_user_cannot_open_administration(self):
+		user = self.user_model.objects.create_user('standard-admin-menu')
+
+		with self.assertRaises(PermissionDenied):
+			self._render_for(user)
+
+	def test_expert_sees_tenant_tools_but_not_superuser_tools(self):
+		user = self.user_model.objects.create_user('expert-admin-menu')
+		expert_group, _ = Group.objects.get_or_create(name='expert')
+		user.groups.add(expert_group)
+
+		response = self._render_for(user)
+		html = response.content.decode()
+
+		self.assertContains(response, reverse('settings'))
+		self.assertContains(response, reverse('manage_societe_users'))
+		self.assertContains(response, reverse('creer_tenant'))
+		self.assertNotIn(reverse('paie:paie_parametres_taux'), html)
+		self.assertNotIn(reverse('manage_societes'), html)
+
+	def test_superuser_sees_advanced_tools(self):
+		user = self.user_model.objects.create_superuser(
+			'superuser-admin-menu',
+			'admin-menu@example.com',
+			'password',
+		)
+
+		response = self._render_for(user)
+
+		self.assertContains(response, reverse('paie:paie_parametres_taux'))
+		self.assertContains(response, reverse('manage_societes'))
+		self.assertContains(response, reverse('admin:index'))
 
 
 class ReleveTemplateBehaviorTests(SimpleTestCase):
@@ -856,7 +921,7 @@ class AccountingSqlViewsTests(TestCase):
 			compte_comptable=target_account,
 		)
 		historical_entry = Tr_desc.objects.using(self.alias).create(
-			no_ej='EJ-TRANSFER-1',
+			no_ej='EJ-TR-1',
 			date=date(2026, 5, 18),
 			desc_ctb='Virement AccesD vers ET2',
 		)
@@ -926,7 +991,7 @@ class AccountingSqlViewsTests(TestCase):
 
 		payload = json.loads(response.content)
 		self.assertEqual(response.status_code, 200)
-		self.assertEqual(payload['resultats'][0]['no_ej'], 'EJ-TRANSFER-1')
+		self.assertEqual(payload['resultats'][0]['no_ej'], 'EJ-TR-1')
 		self.assertEqual(payload['resultats'][0]['details'][0]['compte_id'], target_account.pk)
 
 	def test_existing_negative_withdrawal_reduces_credit_card_running_balance(self):

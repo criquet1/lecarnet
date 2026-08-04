@@ -1,25 +1,33 @@
 {% load static %}
 
-<header style="background:#18204b;padding:20px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;max-width:1400px;margin:auto;">
+<header class="public-header">
 
-        <a href="{% url 'accueil_public' %}"
-           style="color:white;text-decoration:none;font-size:32px;font-weight:bold;">
+    <div class="container-xl public-header-inner">
 
-            📒 Mon carnet comptable
+        <!-- Logo -->
+
+        <a href="{% url 'accueil_public' %}" class="logo">
+
+            <div class="logo-icon">
+
+                <i class="bi bi-file-earmark-text"></i>
+
+            </div>
+
+            <span>Mon carnet comptable</span>
 
         </a>
 
-        <a href="{% url 'login' %}"
-           style="background:#ff4d9b;
-                  color:white;
-                  padding:12px 24px;
-                  border-radius:10px;
-                  text-decoration:none;">
+        <!-- Bouton connexion -->
+
+        <a href="{% url 'login' %}" class="login-btn">
+
+            <i class="bi bi-person"></i>
 
             Se connecter
 
         </a>
 
     </div>
+
 </header>

@@ -4,7 +4,8 @@
 {% block title %}Mon carnet comptable{% endblock %}
 
 {% block extrastyle %}
-<link rel="stylesheet" href="{% static 'css/accueil.css' %}">
+<link rel="stylesheet" href="{% static 'css/accueil.css' %}?v=20260803-1">
+<link rel="stylesheet" href="{% static 'css/pages/dashboard.css' %}?v=20260803-1">
 {% endblock %}
 
 {% block content %}
@@ -16,7 +17,7 @@
         <div class="hero-left">
             <h1 class="hero-title">
                 Bienvenue dans votre
-                <span>espace de gestion</span>
+                <span>espace comptable</span>
             </h1>
             <p class="hero-text">
                 Gérez vos factures, relevés, paie et rapports

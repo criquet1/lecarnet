@@ -11,16 +11,17 @@
 Gestion des factures des fournisseurs.
 {% endblock %}
 
+{% block page_actions %}
+<button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#exampleModal">
+        Créer une compagnie
+</button>
+{% endblock %}
+
 {% block content %}
 
 
 
 <input type="hidden" id="filter-period" value="{{ working_period.value }}">
-
-<!-- Bouton pour déclencher la modale -->
-<button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#exampleModal">
-  Créer une compagnie
-</button>
 
 <!-- Fenêtre Modale -->
 <div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
@@ -47,8 +48,6 @@ Gestion des factures des fournisseurs.
     </div>
   </div>
 </div>
-
-<h1 class="mt-4"> {{ title }} </h1>
 
 <div class="mb-4">
     <h3>Compagnies enregistrées</h3>

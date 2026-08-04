@@ -1,0 +1,75 @@
+{% extends "layouts/app_base.html" %}
+
+{% block body %}
+
+<div class="admin-shell">
+
+    <div class="admin-header">
+
+        <div>
+
+            <h1>
+                <i class="bi bi-gear-fill text-danger"></i>
+                Administration
+            </h1>
+
+            <p>
+                Outils réservés aux administrateurs et aux experts.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <nav class="admin-tabs">
+
+        <a href="{% url 'administration' %}"
+           class="admin-tab {% if admin_section == 'configuration' %}active{% endif %}">
+
+            <i class="bi bi-sliders"></i>
+            Configuration
+
+        </a>
+
+        <a href="{% url 'manage_societe_users' %}"
+           class="admin-tab {% if admin_section == 'users' %}active{% endif %}">
+
+            <i class="bi bi-people"></i>
+            Utilisateurs
+
+        </a>
+
+        <a href="{% url 'manage_societes' %}"
+           class="admin-tab {% if admin_section == 'advanced' %}active{% endif %}">
+
+            <i class="bi bi-shield-lock"></i>
+            Administration avancée
+
+        </a>
+
+    </nav>
+
+
+    <div class="admin-layout">
+
+        <aside class="admin-menu">
+
+            {% block admin_menu %}
+            {% endblock %}
+
+        </aside>
+
+
+        <section class="admin-content">
+
+            {% block admin_content %}
+            {% endblock %}
+
+        </section>
+
+    </div>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,20 @@
+{% if tabs %}
+
+<div class="section-tabs" role="tablist">
+
+    {% for tab in tabs %}
+
+        <a href="{{ tab.url }}"
+           class="section-tab{% if tab.slug == active_tab %} active{% endif %}"
+           role="tab"
+           {% if tab.slug == active_tab %}aria-selected="true"{% else %}aria-selected="false"{% endif %}>
+
+            {{ tab.label }}
+
+        </a>
+
+    {% endfor %}
+
+</div>
+
+{% endif %}

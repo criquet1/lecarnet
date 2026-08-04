@@ -93,6 +93,16 @@
     color: #8791a2;
 }
 
+.administration-directory .report-group-icon {
+    color: #b42318;
+    background: #feeceb;
+}
+
+.administration-directory .report-item:hover,
+.administration-directory .report-item:focus-visible {
+    color: #b42318;
+}
+
 @media (max-width: 768px) {
     .reports-directory {
         gap: 30px;
@@ -106,4 +116,39 @@
     .report-item {
         padding-inline: 8px;
     }
+}
+
+.reports-tabs-page {
+    width: 100%;
+    min-width: 0;
+}
+
+.reports-tabs {
+    margin-bottom: 20px;
+}
+
+.report-tab-panel {
+    width: 100%;
+    min-height: 680px;
+}
+
+.report-frame {
+    display: block;
+    width: 100%;
+    min-height: 680px;
+    height: calc(100vh - 235px);
+    border: 0;
+    background: #fff;
+}
+
+@media (max-width: 768px) {
+    .report-tab-panel,
+    .report-frame {
+        min-height: 620px;
+    }
+
+    .report-frame {
+        height: calc(100vh - 210px);
+    }
+
 }

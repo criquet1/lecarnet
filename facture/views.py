@@ -7,6 +7,7 @@ from django.db.models import Prefetch, Q, Subquery, Sum, Value, DecimalField, F
 from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from calendar import monthrange
@@ -533,7 +534,15 @@ def rapports(request):
     })
 
 
+@expert_required
+def administration(request):
+    return render(request, "administration/index.html", {
+        "title": "Administration",
+    })
 
+
+
+@xframe_options_sameorigin
 def journal_general(request):
     entries_by_no_ej = {}
     total_debit = Decimal('0')
@@ -581,6 +590,7 @@ def journal_general(request):
     })
 
 
+@xframe_options_sameorigin
 def grand_livre(request):
     settings_instance = get_setting()
     solde_depart_par_compte = _solde_depart_par_compte()
@@ -1156,6 +1166,7 @@ def facture(request):
     })
 
 
+@xframe_options_sameorigin
 def balance_de_verification(request):
     settings_instance = get_setting()
     report_date = Tr_desc.objects.order_by('-date').values_list('date', flat=True).first()
@@ -1296,6 +1307,7 @@ def _build_compte_mode_context(mode, settings_instance):
     }
 
 
+@xframe_options_sameorigin
 def compte_a_payer(request):
     settings_instance = get_setting()
     context = _build_compte_mode_context(Compagnie.MODE_CAP, settings_instance)
@@ -1303,6 +1315,7 @@ def compte_a_payer(request):
     return render(request, "rapports/compte_mode.html", context)
 
 
+@xframe_options_sameorigin
 def compte_a_recevoir(request):
     settings_instance = get_setting()
     context = _build_compte_mode_context(Compagnie.MODE_CAR, settings_instance)
@@ -1310,6 +1323,7 @@ def compte_a_recevoir(request):
     return render(request, "rapports/compte_mode.html", context)
 
 
+@xframe_options_sameorigin
 def rapport_de_taxes(request):
     settings_instance = get_setting()
     tps_percue_id = None

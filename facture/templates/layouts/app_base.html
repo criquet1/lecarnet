@@ -3,9 +3,11 @@
 
 {% block extrastyle %}
 
-<link rel="stylesheet" href="{% static 'css/layout.css' %}?v=20260802-2">
-<link rel="stylesheet" href="{% static 'css/sidebar.css' %}?v=20260802-2">
+<link rel="stylesheet" href="{% static 'css/layout.css' %}?v=20260803-1">
+<link rel="stylesheet" href="{% static 'css/sidebar.css' %}?v=20260802-3">
 <link rel="stylesheet" href="{% static 'css/header.css' %}?v=20260802-4">
+<link rel="stylesheet" href="{% static 'css/breadcrumb.css' %}?v=20260803-1">
+<link rel="stylesheet" href="{% static 'css/section_tabs.css' %}?v=20260803-1">
 
 {% block page_css %}{% endblock %}
 
@@ -16,13 +18,22 @@
 
 <div class="app-layout">
 
+    {% if request.GET.embed != "1" %}
     {% include "includes/navigation/app_sidebar.html" %}
+    {% endif %}
 
     <main class="app-main">
 
+        {% if request.GET.embed != "1" %}
         {% include "includes/navigation/app_topbar.html" %}
+        {% endif %}
 
         <div class="app-content">
+
+            {% if request.GET.embed != "1" %}
+            {% block page_breadcrumb %}
+                {% include "includes/navigation/breadcrumb.html" %}
+            {% endblock %}
 
             <header class="page-header">
 
@@ -49,13 +60,16 @@
                 </div>
 
             </header>
+            {% endif %}
 
             {% block content %}
             {% endblock %}
 
         </div>
 
-        {% include "includes/sections/footer.html" %}
+        {% if request.GET.embed != "1" %}
+            {% include "includes/sections/footer.html" %}
+        {% endif %}
 
     </main>
 

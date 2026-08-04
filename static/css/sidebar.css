@@ -94,6 +94,16 @@
     background:#6570ee;
 }
 
+.sidebar-link-admin{
+    color:#f87171;
+}
+
+.sidebar-link-admin.active,
+.sidebar-link-admin.active:hover{
+    background:#dc3545;
+    color:#ffffff;
+}
+
 .sidebar-link:hover{
     color:#ffffff;
     background:rgba(255,255,255,.06);

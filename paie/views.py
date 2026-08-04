@@ -11,6 +11,7 @@ from django.http import JsonResponse
 from django.db.models.functions import Coalesce
 from django.db.models import Count, Sum
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from holidays import country_holidays
 
 from facture.models import Source, Tr_desc, Tr_detail
@@ -51,6 +52,7 @@ def paie_dashboard(request):
 
 
 @login_required
+@xframe_options_sameorigin
 def employes_page(request):
 	_ensure_default_frequences_paie()
 	if request.method == 'POST':
@@ -71,6 +73,7 @@ def employes_page(request):
 
 
 @login_required
+@xframe_options_sameorigin
 def employe_edit_page(request, employe_id):
 	_ensure_default_frequences_paie()
 	employe = get_object_or_404(Employe.objects.select_related('frequence_paie'), pk=employe_id)
@@ -92,6 +95,7 @@ def employe_edit_page(request, employe_id):
 
 
 @login_required
+@xframe_options_sameorigin
 def employe_desactiver_page(request, employe_id):
 	if request.method != 'POST':
 		return redirect('paie:paie_employes')
@@ -108,6 +112,7 @@ def employe_desactiver_page(request, employe_id):
 
 
 @login_required
+@xframe_options_sameorigin
 def saisir_paie_page(request):
 	_ensure_default_frequences_paie()
 	if request.method == 'POST':
@@ -452,6 +457,7 @@ def creer_ecriture_salaire(request, periode_id):
 
 
 @login_required
+@xframe_options_sameorigin
 def journal_paies_page(request):
 	paies = list(
 		Paie.objects
@@ -980,6 +986,7 @@ def journal_paies_page(request):
 
 
 @login_required
+@xframe_options_sameorigin
 def remises_mensuelles_page(request):
 	_ensure_default_frequences_paie()
 	working_period = get_working_period(request)
@@ -1138,6 +1145,7 @@ def remises_mensuelles_page(request):
 
 
 @login_required
+@xframe_options_sameorigin
 def calendrier_paie_page(request):
 	_ensure_default_frequences_paie()
 	settings_instance = get_setting(

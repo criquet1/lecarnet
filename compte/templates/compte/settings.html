@@ -1,23 +1,13 @@
 {% extends "layouts/app_base.html" %}
+{% load static %}
 
-{% block title %} {{ title }} {% endblock %}
+{% block page_title %}Paramètres de la compagnie{% endblock %}
+{% block page_subtitle %}Modifier les paramètres de la compagnie{% endblock %}
 
-{% block body %}
-<div class="alert alert-info mb-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <div>
-            <span class="fw-semibold">Client actif:</span>
-            {% if active_client %}
-                <span class="fs-5 text-dark">{{ active_client.name }}</span>
-            {% else %}
-                <span class="text-muted">Non défini</span>
-            {% endif %}
-        </div>
-        <a href="{% url 'select_client' %}" class="btn btn-sm btn-outline-info">Changer de client</a>
-    </div>
-</div>
 
-<h2 class="fw-bold text-center mb-4">{{ title }}</h2>
+{% block content %}
+
+
 
 {% if messages %}
     {% for message in messages %}
@@ -25,253 +15,251 @@
     {% endfor %}
 {% endif %}
 
-<div class="d-flex justify-content-end mb-3">
-    <a href="{% url 'creer_tenant' %}" class="btn btn-outline-primary">Creer un tenant</a>
-</div>
 
 <form method="post" class="row g-4">
     {% csrf_token %}
     {{ form.non_field_errors }}
 
+    <!-- Groupe: Identité du site -->
     <div class="col-12 col-xl-6">
         <div class="border rounded p-3 h-100">
             <h5 class="mb-3">Identité du site</h5>
-            <div class="mb-3">
-                <label class="form-label" for="{{ form.nom.id_for_label }}">Nom</label>
-                {{ form.nom }}
-                {{ form.nom.errors }}
-            </div>
-            <div class="mb-3">
-                <label class="form-label" for="{{ form.logo.id_for_label }}">Logo</label>
-                <div class="row g-3">
-                    <div class="col-md-8">
-                        <select class="form-select" id="{{ form.logo.id_for_label }}" name="logo" onchange="updateLogoPreview()">
-                            <option value="">-- Choisir un logo --</option>
-                            {% for value, label in form.logo.field.choices %}
-                                {% if value %}
-                                    <option value="{{ value }}" {% if form.logo.value == value %}selected{% endif %}>{{ label }}</option>
-                                {% endif %}
-                            {% endfor %}
-                        </select>
-                        {% if form.logo.help_text %}<div class="form-text">{{ form.logo.help_text }}</div>{% endif %}
-                        {{ form.logo.errors }}
-                    </div>
-                    <div class="col-md-4">
-                        <div id="logo_preview">
-                            {% if form.logo.value %}
-                                <img src="/static/images/logos/{{ form.logo.value }}" alt="Logo" class="img-thumbnail" style="max-width: 150px; max-height: 150px;">
-                            {% else %}
-                                <div class="text-muted">Aucun logo sélectionné</div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label" for="{{ form.email.id_for_label }}">Courriel</label>
-                {{ form.email }}
-                {{ form.email.errors }}
-            </div>
-            <div class="mb-3">
-                <label class="form-label" for="{{ form.phone.id_for_label }}">Téléphone</label>
-                {{ form.phone }}
-                {{ form.phone.errors }}
-            </div>
+            <table class="table align-middle mb-0">
+                <tbody>
+                    <tr>
+                        <th style="width: 160px;"><label for="{{ form.nom.id_for_label }}">Nom</label></th>
+                        <td>{{ form.nom }}{{ form.nom.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.logo.id_for_label }}">Logo</label></th>
+                        <td>
+                            <div class="row g-3">
+                                <div class="col-md-8">
+                                    <select class="form-select" id="{{ form.logo.id_for_label }}" name="logo" onchange="updateLogoPreview()">
+                                        <option value="">-- Choisir un logo --</option>
+                                        {% for value, label in form.logo.field.choices %}
+                                            {% if value %}
+                                                <option value="{{ value }}" {% if form.logo.value == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </select>
+                                    {% if form.logo.help_text %}<div class="form-text">{{ form.logo.help_text }}</div>{% endif %}
+                                    {{ form.logo.errors }}
+                                </div>
+                                <div class="col-md-4">
+                                    <div id="logo_preview">
+                                        {% if form.logo.value %}
+                                            <img src="/static/images/logos/{{ form.logo.value }}" alt="Logo" class="img-thumbnail" style="max-width: 150px; max-height: 150px;">
+                                        {% else %}
+                                            <div class="text-muted">Aucun logo sélectionné</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.email.id_for_label }}">Courriel</label></th>
+                        <td>{{ form.email }}{{ form.email.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.phone.id_for_label }}">Téléphone</label></th>
+                        <td>{{ form.phone }}{{ form.phone.errors }}</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
+    <!-- Groupe: Adresse -->
     <div class="col-12 col-xl-6">
         <div class="border rounded p-3 h-100">
             <h5 class="mb-3">Adresse</h5>
-            <div class="mb-3">
-                <label class="form-label" for="{{ form.adresse.id_for_label }}">Adresse</label>
-                {{ form.adresse }}
-                {{ form.adresse.errors }}
-            </div>
-            <div class="mb-3">
-                <label class="form-label" for="{{ form.ville.id_for_label }}">Ville</label>
-                {{ form.ville }}
-                {{ form.ville.errors }}
-            </div>
-            <div class="row g-3">
-                <div class="col-md-6 mb-3">
-                    <label class="form-label" for="{{ form.code_postal.id_for_label }}">Code postal</label>
-                    {{ form.code_postal }}
-                    {{ form.code_postal.errors }}
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label" for="{{ form.pays.id_for_label }}">Pays</label>
-                    {{ form.pays }}
-                    {{ form.pays.errors }}
-                </div>
-            </div>
-            <div class="row g-3">
-                <div class="col-md-6 mb-3">
-                    <label class="form-label" for="{{ form.fin_annee_jour.id_for_label }}">Jour de fin d'exercice</label>
-                    {{ form.fin_annee_jour }}
-                    {{ form.fin_annee_jour.errors }}
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label" for="{{ form.fin_annee_mois.id_for_label }}">Mois de fin d'exercice</label>
-                    {{ form.fin_annee_mois }}
-                    {{ form.fin_annee_mois.errors }}
-                </div>
-            </div>
-            <div class="form-text">La date complète est récurrente: seul le jour et le mois sont saisis.</div>
+            <table class="table align-middle mb-0">
+                <tbody>
+                    <tr>
+                        <th style="width: 160px;"><label for="{{ form.adresse.id_for_label }}">Adresse</label></th>
+                        <td>{{ form.adresse }}{{ form.adresse.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.ville.id_for_label }}">Ville</label></th>
+                        <td>{{ form.ville }}{{ form.ville.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.code_postal.id_for_label }}">Code postal</label></th>
+                        <td>{{ form.code_postal }}{{ form.code_postal.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.pays.id_for_label }}">Pays</label></th>
+                        <td>{{ form.pays }}{{ form.pays.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.fin_annee_jour.id_for_label }}">Jour de fin d'exercice</label></th>
+                        <td>{{ form.fin_annee_jour }}{{ form.fin_annee_jour.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.fin_annee_mois.id_for_label }}">Mois de fin d'exercice</label></th>
+                        <td>
+                            {{ form.fin_annee_mois }}{{ form.fin_annee_mois.errors }}
+                            <div class="form-text">La date complète est récurrente: seul le jour et le mois sont saisis.</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
+    <!-- Groupe: Comptes de référence -->
     <div class="col-12">
         <div class="border rounded p-3">
             <h5 class="mb-3">Comptes de référence</h5>
-            <div class="row g-3">
-                <div class="col-md-6 col-xl-4">
-                    <label class="form-label" for="{{ form.cap.id_for_label }}">CAP</label>
-                    {{ form.cap }}
-                    {{ form.cap.errors }}
-                </div>
-                <div class="col-md-6 col-xl-4">
-                    <label class="form-label" for="{{ form.car.id_for_label }}">CAR</label>
-                    {{ form.car }}
-                    {{ form.car.errors }}
-                </div>
-                <div class="col-md-6 col-xl-4">
-                    <label class="form-label" for="{{ form.compte_fr_retard.id_for_label }}">Frais de retard</label>
-                    {{ form.compte_fr_retard }}
-                    {{ form.compte_fr_retard.errors }}
-                </div>
-            </div>
+            <table class="table align-middle mb-0">
+                <tbody>
+                    <tr>
+                        <th style="width: 220px;"><label for="{{ form.cap.id_for_label }}">CAP</label></th>
+                        <td>{{ form.cap }}{{ form.cap.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.car.id_for_label }}">CAR</label></th>
+                        <td>{{ form.car }}{{ form.car.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.compte_fr_retard.id_for_label }}">Frais de retard</label></th>
+                        <td>{{ form.compte_fr_retard }}{{ form.compte_fr_retard.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.taxes_mode.id_for_label }}">Traitement général des taxes</label></th>
+                        <td>
+                            {{ form.taxes_mode }}{{ form.taxes_mode.errors }}
+                            <div class="form-text">À réclamer =&gt; CAR. À payer =&gt; CAP.</div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.compte_tps_percue.id_for_label }}">TPS perçue</label></th>
+                        <td>{{ form.compte_tps_percue }}{{ form.compte_tps_percue.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.compte_tps_payee.id_for_label }}">TPS payée</label></th>
+                        <td>{{ form.compte_tps_payee }}{{ form.compte_tps_payee.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.compte_tvq_percue.id_for_label }}">TVQ perçue</label></th>
+                        <td>{{ form.compte_tvq_percue }}{{ form.compte_tvq_percue.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.compte_tvq_payee.id_for_label }}">TVQ payée</label></th>
+                        <td>{{ form.compte_tvq_payee }}{{ form.compte_tvq_payee.errors }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
-            <div class="row g-3 mt-1">
-                <div class="col-12">
-                    <label class="form-label" for="{{ form.taxes_mode.id_for_label }}">Traitement général des taxes</label>
-                    {{ form.taxes_mode }}
-                    {{ form.taxes_mode.errors }}
-                    <div class="form-text">À réclamer => CAR. À payer => CAP.</div>
-                </div>
-                <div class="col-md-6 col-xl-3">
-                    <label class="form-label" for="{{ form.compte_tps_percue.id_for_label }}">TPS perçue</label>
-                    {{ form.compte_tps_percue }}
-                    {{ form.compte_tps_percue.errors }}
-                </div>
-                <div class="col-md-6 col-xl-3">
-                    <label class="form-label" for="{{ form.compte_tps_payee.id_for_label }}">TPS payée</label>
-                    {{ form.compte_tps_payee }}
-                    {{ form.compte_tps_payee.errors }}
-                </div>
-                <div class="col-md-6 col-xl-3">
-                    <label class="form-label" for="{{ form.compte_tvq_percue.id_for_label }}">TVQ perçue</label>
-                    {{ form.compte_tvq_percue }}
-                    {{ form.compte_tvq_percue.errors }}
-                </div>
-                <div class="col-md-6 col-xl-3">
-                    <label class="form-label" for="{{ form.compte_tvq_payee.id_for_label }}">TVQ payée</label>
-                    {{ form.compte_tvq_payee }}
-                    {{ form.compte_tvq_payee.errors }}
-                </div>
-            </div>
+    <!-- Groupe: Paramètres de paie -->
+    <div class="col-12">
+        <div class="border rounded p-3">
+            <h5 class="mb-3">Paramètres de paie</h5>
+            <table class="table align-middle mb-0">
+                <tbody>
+                    <tr>
+                        <th style="width: 320px;"><label for="{{ form.frequence_paie.id_for_label }}">Fréquence de paie</label></th>
+                        <td>
+                            {{ form.frequence_paie }}{{ form.frequence_paie.errors }}
+                            {% if not form.frequence_paie.field.queryset.exists %}
+                                <div class="form-text text-warning">Aucune fréquence disponible. Elles seront recréées automatiquement à l'ouverture de cette page.</div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.date_debut_periode_paie_annee.id_for_label }}">Début de la 1re période de l'année</label></th>
+                        <td>{{ form.date_debut_periode_paie_annee }}{{ form.date_debut_periode_paie_annee.errors }}</td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.date_premier_paiement_paie_annee.id_for_label }}">Date du 1er paiement de l'année</label></th>
+                        <td>
+                            {{ form.date_premier_paiement_paie_annee }}{{ form.date_premier_paiement_paie_annee.errors }}
+                            <div class="form-text">Ces deux dates servent à générer automatiquement les périodes de paie. Le jour de semaine de cette date (ex.: mercredi/jeudi) devient le jour de paie utilisé.</div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.taux_cnesst_employeur.id_for_label }}">Taux CNESST employeur</label></th>
+                        <td>
+                            {{ form.taux_cnesst_employeur }}{{ form.taux_cnesst_employeur.errors }}
+                            <div class="form-text">Saisir le taux en dollars par 100 $ de masse salariale (ex.: 1,54).</div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.taux_fss_employeur.id_for_label }}">Taux FSS employeur</label></th>
+                        <td>
+                            {{ form.taux_fss_employeur }}{{ form.taux_fss_employeur.errors }}
+                            <div class="form-text">Saisir le taux FSS en ratio (ex.: 0.01250 pour 1,25 %).</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
-            <div class="row g-3 mt-3">
-                <div class="col-md-6">
-                    <label class="form-label" for="{{ form.frequence_paie.id_for_label }}">Fréquence de paie</label>
-                    {{ form.frequence_paie }}
-                    {{ form.frequence_paie.errors }}
-                    {% if not form.frequence_paie.field.queryset.exists %}
-                        <div class="form-text text-warning">Aucune fréquence disponible. Elles seront recréées automatiquement à l'ouverture de cette page.</div>
-                    {% endif %}
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="{{ form.date_debut_periode_paie_annee.id_for_label }}">Début de la 1re période de l'année</label>
-                    {{ form.date_debut_periode_paie_annee }}
-                    {{ form.date_debut_periode_paie_annee.errors }}
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="{{ form.date_premier_paiement_paie_annee.id_for_label }}">Date du 1er paiement de l'année</label>
-                    {{ form.date_premier_paiement_paie_annee }}
-                    {{ form.date_premier_paiement_paie_annee.errors }}
-                    <div class="form-text">Ces deux dates servent à générer automatiquement les périodes de paie.</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="{{ form.taux_cnesst_employeur.id_for_label }}">Taux CNESST employeur</label>
-                    {{ form.taux_cnesst_employeur }}
-                    {{ form.taux_cnesst_employeur.errors }}
-                    <div class="form-text">Saisir le taux en dollars par 100 $ de masse salariale (ex.: 1,54).</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label" for="{{ form.taux_fss_employeur.id_for_label }}">Taux FSS employeur</label>
-                    {{ form.taux_fss_employeur }}
-                    {{ form.taux_fss_employeur.errors }}
-                    <div class="form-text">Saisir le taux FSS en ratio (ex.: 0.01250 pour 1,25 %).</div>
-                </div>
-            </div>
+    <!-- Groupe: Comptes de paie -->
+    <div class="col-12">
+        <div class="border rounded p-3">
+            <h5 class="mb-3">Comptes de paie</h5>
+            <div class="small text-muted fw-semibold mb-2">Une ligne par compte, comme une écriture de journal général.</div>
 
-            <div class="row g-3 mt-3">
-                <div class="col-12">
-                    <h6 class="mb-2">Comptes de paie</h6>
-                </div>
-                <div class="col-12">
-                    <div class="small text-muted fw-semibold">Une ligne par compte, comme une écriture de journal général.</div>
-                </div>
+            <table class="table align-middle" id="table-comptes-paie">
+                <thead>
+                    <tr>
+                        <th style="width: 100px;">Type</th>
+                        <th style="width: 220px;">Compte</th>
+                        <th>Sélection</th>
+                    </tr>
+                </thead>
+                <tbody id="paie-tbody">
+                    <tr>
+                        <td><span class="badge text-bg-light border">Débit</span></td>
+                        <td class="fw-semibold">Salaires</td>
+                        <td>{{ form.compte_salaire }}{{ form.compte_salaire.errors }}</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge text-bg-light border">Débit</span></td>
+                        <td class="fw-semibold">Vacances</td>
+                        <td>{{ form.compte_vacances }}{{ form.compte_vacances.errors }}</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge text-bg-light border">Débit</span></td>
+                        <td class="fw-semibold">Bénéfices marginaux</td>
+                        <td>{{ form.compte_benefices_marginaux }}{{ form.compte_benefices_marginaux.errors }}</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge text-bg-secondary">Crédit</span></td>
+                        <td class="fw-semibold">Salaires à payer</td>
+                        <td>{{ form.compte_salaires_a_payer }}{{ form.compte_salaires_a_payer.errors }}</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge text-bg-secondary">Crédit</span></td>
+                        <td class="fw-semibold">Vacances à payer</td>
+                        <td>{{ form.compte_vacances_a_payer }}{{ form.compte_vacances_a_payer.errors }}</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge text-bg-secondary">Crédit</span></td>
+                        <td class="fw-semibold">DAS féd à payer</td>
+                        <td>{{ form.compte_das_federales }}{{ form.compte_das_federales.errors }}</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge text-bg-secondary">Crédit</span></td>
+                        <td class="fw-semibold">DAS prov à payer</td>
+                        <td>{{ form.compte_das_provinciales }}{{ form.compte_das_provinciales.errors }}</td>
+                    </tr>
+                </tbody>
+            </table>
 
-                <div class="col-12">
-                    <div class="row g-2 align-items-center">
-                        <div class="col-md-2"><span class="badge text-bg-light border">Débit</span></div>
-                        <div class="col-md-3 fw-semibold">Salaires</div>
-                        <div class="col-md-7">{{ form.compte_salaire }}{{ form.compte_salaire.errors }}</div>
-                    </div>
-                </div>
-                <div class="col-12">
-                    <div class="row g-2 align-items-center">
-                        <div class="col-md-2"><span class="badge text-bg-light border">Débit</span></div>
-                        <div class="col-md-3 fw-semibold">Vacances</div>
-                        <div class="col-md-7">{{ form.compte_vacances }}{{ form.compte_vacances.errors }}</div>
-                    </div>
-                </div>
-                <div class="col-12">
-                    <div class="row g-2 align-items-center">
-                        <div class="col-md-2"><span class="badge text-bg-light border">Débit</span></div>
-                        <div class="col-md-3 fw-semibold">Bénéfices marginaux</div>
-                        <div class="col-md-7">{{ form.compte_benefices_marginaux }}{{ form.compte_benefices_marginaux.errors }}</div>
-                    </div>
-                </div>
-                <div class="col-12">
-                    <div class="row g-2 align-items-center">
-                        <div class="col-md-2"><span class="badge text-bg-secondary">Crédit</span></div>
-                        <div class="col-md-3 fw-semibold">Salaires à payer</div>
-                        <div class="col-md-7">{{ form.compte_salaires_a_payer }}{{ form.compte_salaires_a_payer.errors }}</div>
-                    </div>
-                </div>
-                <div class="col-12">
-                    <div class="row g-2 align-items-center">
-                        <div class="col-md-2"><span class="badge text-bg-secondary">Crédit</span></div>
-                        <div class="col-md-3 fw-semibold">Vacances à payer</div>
-                        <div class="col-md-7">{{ form.compte_vacances_a_payer }}{{ form.compte_vacances_a_payer.errors }}</div>
-                    </div>
-                </div>
-                <div class="col-12">
-                    <div class="row g-2 align-items-center">
-                        <div class="col-md-2"><span class="badge text-bg-secondary">Crédit</span></div>
-                        <div class="col-md-3 fw-semibold">DAS féd à payer</div>
-                        <div class="col-md-7">{{ form.compte_das_federales }}{{ form.compte_das_federales.errors }}</div>
-                    </div>
-                </div>
-                <div class="col-12">
-                    <div class="row g-2 align-items-center">
-                        <div class="col-md-2"><span class="badge text-bg-secondary">Crédit</span></div>
-                        <div class="col-md-3 fw-semibold">DAS prov à payer</div>
-                        <div class="col-md-7">{{ form.compte_das_provinciales }}{{ form.compte_das_provinciales.errors }}</div>
-                    </div>
-                </div>
-
-                <div class="col-12">
-                    <label class="form-label">Autres comptes de paie</label>
-                    {{ form.comptes_paie_autres }}
-                    {{ form.comptes_paie_autres.errors }}
-                    <div id="paie-autres-container" class="d-flex flex-column gap-2"></div>
-                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="btn-ajouter-compte-paie">
-                        Ajouter une ligne
-                    </button>
-                </div>
+            <label class="form-label">Autres comptes de paie</label>
+            {{ form.comptes_paie_autres }}
+            {{ form.comptes_paie_autres.errors }}
+            <div>
+                <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="btn-ajouter-compte-paie">
+                    Ajouter une ligne
+                </button>
             </div>
         </div>
     </div>
@@ -286,7 +274,7 @@ function updateLogoPreview() {
     const selectElement = document.getElementById('id_logo');
     const previewDiv = document.getElementById('logo_preview');
     const selectedValue = selectElement.value;
-    
+
     if (selectedValue) {
         previewDiv.innerHTML = `<img src="/static/images/logos/${selectedValue}" alt="Logo" class="img-thumbnail" style="max-width: 150px; max-height: 150px;">`;
     } else {
@@ -295,7 +283,7 @@ function updateLogoPreview() {
 }
 
 function addPaieAutreRow(selectedValue = '') {
-    const container = document.getElementById('paie-autres-container');
+    const tbody = document.getElementById('paie-tbody');
     const template = document.getElementById('paie-autre-row-template');
     const clone = template.content.firstElementChild.cloneNode(true);
     const select = clone.querySelector('.paie-autre-select');
@@ -311,7 +299,7 @@ function addPaieAutreRow(selectedValue = '') {
         syncPaieAutresField();
     });
 
-    container.appendChild(clone);
+    tbody.appendChild(clone);
     syncPaieAutresField();
 }
 
@@ -353,14 +341,19 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 
 <template id="paie-autre-row-template">
-    <div class="input-group">
-        <select class="form-select paie-autre-select">
-            <option value="">-- Choisir un compte --</option>
-            {% for compte in form.compte_salaire.field.queryset %}
-                <option value="{{ compte.pk }}">{{ compte }}</option>
-            {% endfor %}
-        </select>
-        <button type="button" class="btn btn-outline-danger btn-remove-paie-autre">Retirer</button>
-    </div>
+    <tr>
+        <td><span class="badge text-bg-light border">Autre</span></td>
+        <td colspan="2">
+            <div class="input-group">
+                <select class="form-select paie-autre-select">
+                    <option value="">-- Choisir un compte --</option>
+                    {% for compte in form.compte_salaire.field.queryset %}
+                        <option value="{{ compte.pk }}">{{ compte }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="btn btn-outline-danger btn-remove-paie-autre">Retirer</button>
+            </div>
+        </td>
+    </tr>
 </template>
 {% endblock %}

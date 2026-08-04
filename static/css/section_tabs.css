@@ -1,0 +1,66 @@
+/*=====================================================
+    ONGLETS DE SECTION
+=====================================================*/
+
+.section-tabs{
+
+    display:flex;
+
+    gap:4px;
+
+    border-bottom:1px solid var(--mcc-border);
+
+    margin-bottom:28px;
+
+    overflow-x:auto;
+}
+
+.section-tab{
+
+    padding:10px 16px;
+
+    font-size:.9rem;
+    font-weight:500;
+
+    color:var(--mcc-muted);
+
+    border-bottom:2px solid transparent;
+
+    text-decoration:none;
+
+    white-space:nowrap;
+
+    transition:.2s;
+}
+
+.section-tab:hover{
+
+    color:var(--mcc-text);
+}
+
+.section-tab.active{
+
+    color:var(--mcc-primary);
+
+    border-bottom-color:var(--mcc-primary);
+}
+
+/*=====================================================
+    RESPONSIVE
+=====================================================*/
+
+@media (max-width:768px){
+
+    .section-tabs{
+
+        margin-bottom:20px;
+    }
+
+    .section-tab{
+
+        padding:8px 12px;
+
+        font-size:.85rem;
+    }
+
+}

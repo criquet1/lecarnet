@@ -8,8 +8,31 @@ body{
 }
 
 .app-layout{
-    display:flex;
-    min-height:100vh;
+  display:flex;
+  min-height:100vh;
+}
+
+body.embedded-report .app-sidebar,
+body.embedded-report .app-topbar,
+body.embedded-report .breadcrumb-nav,
+body.embedded-report .breadcrumb,
+body.embedded-report .page-header,
+body.embedded-report .app-main > footer {
+  display: none !important;
+}
+
+body.embedded-report .app-layout,
+body.embedded-report .app-main {
+  display: block;
+  min-height: 0;
+}
+
+body.embedded-report .app-main {
+  margin-left: 0;
+}
+
+body.embedded-report .app-content {
+  padding: 0;
 }
 
 /*=====================================================

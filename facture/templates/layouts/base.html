@@ -47,11 +47,16 @@
 
 </head>
 
-<body>
+<body{% if request.GET.embed == "1" %} class="embedded-report"{% endif %}>
+
+      <script>
+            if (window.self !== window.top)
+                  document.body.classList.add('embedded-report');
+      </script>
 
     {% block body %}
 
-        {% include "includes/navigation/public_header.html" %}
+      {% include "includes/navigation/public_header.html" %}
 
         <main>
 

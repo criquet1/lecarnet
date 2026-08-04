@@ -9,22 +9,20 @@ Tableau de bord
 <link rel="stylesheet" href="{% static 'css/pages/dashboard.css' %}">
 {% endblock %}
 
+{% block page_title %}Tableau de bord{% endblock %}
+
+{% block page_subtitle %}
+    Consultez rapidement l'état de vos opérations.
+{% endblock %}
+
 {% block content %}
 
 <div class="dashboard-container">
-
-    <h1 class="page-title">
-        Tableau de bord
-    </h1>
 
     <div class="dashboard-period">
         <i class="bi bi-calendar3"></i>
         {{ nom_mois }} {{ annee }}
     </div>
-
-    <p class="page-subtitle">
-        Consultez rapidement l'état de vos opérations.
-    </p>
 
     <div class="dashboard-grid">
 

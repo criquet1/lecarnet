@@ -1,0 +1,63 @@
+/*=====================================================
+    FIL D'ARIANE
+=====================================================*/
+
+.breadcrumb-nav{
+
+    margin-bottom:10px;
+}
+
+.breadcrumb-list{
+
+    display:flex;
+    align-items:center;
+
+    flex-wrap:wrap;
+
+    gap:6px;
+
+    margin:0;
+    padding:0;
+
+    list-style:none;
+
+    font-size:.85rem;
+}
+
+.breadcrumb-item{
+
+    display:flex;
+    align-items:center;
+
+    gap:6px;
+
+    color:var(--mcc-muted);
+}
+
+.breadcrumb-item a{
+
+    color:var(--mcc-muted);
+
+    text-decoration:none;
+
+    transition:.2s;
+}
+
+.breadcrumb-item a:hover{
+
+    color:var(--mcc-primary);
+}
+
+.breadcrumb-item span{
+
+    color:var(--mcc-text);
+
+    font-weight:500;
+}
+
+.breadcrumb-sep{
+
+    font-size:.7rem;
+
+    color:var(--mcc-border);
+}

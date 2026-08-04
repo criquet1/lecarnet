@@ -1,0 +1,167 @@
+{% extends "layouts/app_base.html" %}
+{% load static %}
+
+{% block title %}Administration{% endblock %}
+
+{% block page_css %}
+<link rel="stylesheet" href="{% static 'css/pages/reports.css' %}">
+<link rel="stylesheet" href="{% static 'css/pages/administration.css' %}?v=20260803-2">
+{% endblock %}
+
+{% block page_title %}Administration{% endblock %}
+
+{% block page_subtitle %}
+    Configurez l'entreprise, la comptabilité et les accès.
+{% endblock %}
+
+{% block content %}
+<div class="reports-directory administration-directory">
+
+    <div class="section-tabs" role="tablist">
+        <a href="?tab=configuration" class="section-tab" data-tab-btn="configuration" role="tab">Configuration</a>
+        <a href="?tab=acces" class="section-tab" data-tab-btn="acces" role="tab">Utilisateurs et accès</a>
+        {% if request.user.is_superuser %}
+        <a href="?tab=avancee" class="section-tab" data-tab-btn="avancee" role="tab">Administration avancée</a>
+        {% endif %}
+    </div>
+
+    <section class="report-group" aria-label="Configuration" data-tab-panel="configuration">
+        <div class="report-list">
+            <a class="report-item" href="{% url 'settings' %}">
+                <span class="report-item-icon"><i class="bi bi-building-gear"></i></span>
+                <span class="report-item-copy">
+                    <strong>Paramètres de l'entreprise</strong>
+                    <small>Configurer l'identité, les taxes et les comptes par défaut.</small>
+                </span>
+                <i class="bi bi-chevron-right report-item-arrow"></i>
+            </a>
+
+            <a class="report-item" href="{% url 'compte' %}">
+                <span class="report-item-icon"><i class="bi bi-list-ol"></i></span>
+                <span class="report-item-copy">
+                    <strong>Plan comptable</strong>
+                    <small>Créer et organiser les comptes de l'entreprise.</small>
+                </span>
+                <i class="bi bi-chevron-right report-item-arrow"></i>
+            </a>
+
+            <a class="report-item" href="{% url 'totaux' %}">
+                <span class="report-item-icon"><i class="bi bi-diagram-3"></i></span>
+                <span class="report-item-copy">
+                    <strong>Groupes de comptes</strong>
+                    <small>Définir les regroupements utilisés dans les états financiers.</small>
+                </span>
+                <i class="bi bi-chevron-right report-item-arrow"></i>
+            </a>
+        </div>
+    </section>
+
+    <section class="report-group" aria-label="Utilisateurs et accès" data-tab-panel="acces">
+        <div class="report-list">
+            <a class="report-item" href="{% url 'manage_societe_users' %}">
+                <span class="report-item-icon"><i class="bi bi-person-gear"></i></span>
+                <span class="report-item-copy">
+                    <strong>Utilisateurs</strong>
+                    <small>Créer des utilisateurs et attribuer leurs accès tenants.</small>
+                </span>
+                <i class="bi bi-chevron-right report-item-arrow"></i>
+            </a>
+
+            <a class="report-item" href="{% url 'creer_tenant' %}">
+                <span class="report-item-icon"><i class="bi bi-database-add"></i></span>
+                <span class="report-item-copy">
+                    <strong>Créer un tenant</strong>
+                    <small>Ajouter une nouvelle entreprise et sa base de données.</small>
+                </span>
+                <i class="bi bi-chevron-right report-item-arrow"></i>
+            </a>
+        </div>
+    </section>
+
+    {% if request.user.is_superuser %}
+    <section class="report-group" aria-label="Administration avancée" data-tab-panel="avancee">
+        <div class="report-list">
+            <a class="report-item" href="{% url 'paie:paie_parametres_taux' %}">
+                <span class="report-item-icon"><i class="bi bi-percent"></i></span>
+                <span class="report-item-copy">
+                    <strong>Taux de paie</strong>
+                    <small>Maintenir les taux RRQ, RQAP, AE et fiscaux.</small>
+                </span>
+                <i class="bi bi-chevron-right report-item-arrow"></i>
+            </a>
+
+            <a class="report-item" href="{% url 'manage_societes' %}">
+                <span class="report-item-icon"><i class="bi bi-buildings"></i></span>
+                <span class="report-item-copy">
+                    <strong>Sociétés</strong>
+                    <small>Gérer les sociétés et leurs utilisateurs experts.</small>
+                </span>
+                <i class="bi bi-chevron-right report-item-arrow"></i>
+            </a>
+
+            <a class="report-item" href="{% url 'admin:index' %}">
+                <span class="report-item-icon"><i class="bi bi-tools"></i></span>
+                <span class="report-item-copy">
+                    <strong>Administration Django</strong>
+                    <small>Accéder aux données techniques de l'application.</small>
+                </span>
+                <i class="bi bi-chevron-right report-item-arrow"></i>
+            </a>
+        </div>
+    </section>
+    {% endif %}
+</div>
+
+<script>
+(function () {
+
+    const tabButtons = document.querySelectorAll('[data-tab-btn]');
+    const panels = document.querySelectorAll('[data-tab-panel]');
+
+    if (!tabButtons.length || !panels.length)
+        return;
+
+    function activate(slug, updateUrl) {
+
+        const validSlugs = Array.from(panels).map(p => p.dataset.tabPanel);
+
+        if (!validSlugs.includes(slug))
+            slug = validSlugs[0];
+
+        panels.forEach(panel => {
+            panel.style.display = (panel.dataset.tabPanel === slug) ? '' : 'none';
+        });
+
+        tabButtons.forEach(btn => {
+            const isActive = btn.dataset.tabBtn === slug;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+
+        if (updateUrl) {
+
+            const url = new URL(window.location);
+            url.searchParams.set('tab', slug);
+            window.history.pushState({}, '', url);
+
+        }
+
+    }
+
+    tabButtons.forEach(btn => {
+
+        btn.addEventListener('click', function (event) {
+
+            event.preventDefault();
+            activate(btn.dataset.tabBtn, true);
+
+        });
+
+    });
+
+    const initialSlug = new URLSearchParams(window.location.search).get('tab');
+    activate(initialSlug, false);
+
+})();
+</script>
+{% endblock %}

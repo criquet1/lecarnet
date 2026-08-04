@@ -1,0 +1,207 @@
+/* ==========================================================
+   ADMINISTRATION
+   ========================================================== */
+
+.administration-directory{
+
+    display:flex;
+    flex-direction:column;
+    gap:42px;
+
+    max-width:1400px;
+    margin:auto;
+
+}
+
+/* ==========================================================
+   GROUPES
+   ========================================================== */
+
+.administration-directory .report-group{
+
+    background:transparent;
+    border:none;
+    box-shadow:none;
+    padding:0;
+    grid-template-columns:1fr;
+
+}
+
+.report-group-heading{
+
+    display:flex;
+    align-items:center;
+    gap:18px;
+
+    margin-bottom:24px;
+
+}
+
+.report-group-icon{
+
+    width:54px;
+    height:54px;
+
+    border-radius:16px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    background:#ffe9ea;
+    color:#dc3545;
+
+    font-size:1.3rem;
+
+    flex-shrink:0;
+
+}
+
+.report-group-heading h2{
+
+    margin:0;
+
+    font-size:1.6rem;
+
+    font-weight:700;
+
+}
+
+.report-group-heading p{
+
+    margin-top:4px;
+
+    color:#7d8794;
+
+}
+
+/* ==========================================================
+   CARTES
+   ========================================================== */
+
+.administration-directory .report-list{
+
+    display:grid;
+
+    grid-template-columns:repeat(3,minmax(0,1fr));
+
+    gap:22px;
+
+}
+
+.report-item{
+
+    background:white;
+
+    border-radius:18px;
+
+    padding:24px;
+
+    text-decoration:none;
+
+    color:#222;
+
+    border:1px solid #eceff3;
+
+    transition:.25s;
+
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+
+    min-height:190px;
+
+}
+
+.report-item:hover{
+
+    transform:translateY(-8px);
+
+    box-shadow:0 18px 40px rgba(0,0,0,.12);
+
+    color:#222;
+
+}
+
+.report-item-icon{
+
+    width:58px;
+    height:58px;
+
+    border-radius:16px;
+
+    display:flex;
+    justify-content:center;
+    align-items:center;
+
+    background:#fff3f4;
+
+    color:#dc3545;
+
+    font-size:1.5rem;
+
+    margin-bottom:20px;
+
+}
+
+.report-item-copy{
+
+    flex:1;
+
+}
+
+.report-item-copy strong{
+
+    display:block;
+
+    font-size:1.2rem;
+
+    margin-bottom:10px;
+
+    line-height:1.3;
+
+}
+
+.report-item-copy small{
+
+    color:#6b7280;
+
+    font-size:.95rem;
+
+    line-height:1.55;
+
+}
+
+.report-item-arrow{
+
+    align-self:flex-end;
+
+    font-size:1.25rem;
+
+    color:#b7bec9;
+
+    transition:.25s;
+
+}
+
+.report-item:hover .report-item-arrow{
+
+    color:#dc3545;
+
+    transform:translateX(6px);
+
+}
+
+/* ==========================================================
+   MOBILE
+   ========================================================== */
+
+@media (max-width:900px){
+
+    .administration-directory .report-list{
+
+        grid-template-columns:1fr;
+
+    }
+
+}
