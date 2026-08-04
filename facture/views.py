@@ -859,7 +859,7 @@ def facture(request):
             'tr_desc',
             queryset=_company_invoices_queryset()
         )
-    ).exclude(nom__in=TAX_AUTHORITY_COMPANY_NAMES).all()
+    ).exclude(nom__in=TAX_AUTHORITY_COMPANY_NAMES).order_by('nom', 'id')
     comptes_queryset = Compte.objects.all()
 
     all_comptes = [
@@ -941,6 +941,9 @@ def facture(request):
         prefix='detail',
         form_kwargs={'comptes_queryset': comptes_queryset}
     )
+    open_company_modal = False
+    company_modal_action = 'add_company'
+    editing_company_id = ''
     open_tr_modal = False
     selected_company_id = ''
     selected_company_name = ''
@@ -957,6 +960,24 @@ def facture(request):
                 company.save()
                 company_form.save_m2m()
                 return redirect('facture')
+            open_company_modal = True
+
+        elif action == 'edit_company':
+            company_id = (request.POST.get('company_id') or '').strip()
+            company = Compagnie.objects.filter(pk=company_id).first()
+            company_form = CompagnieForm(request.POST, prefix='company', instance=company)
+            company_modal_action = 'edit_company'
+            editing_company_id = company_id
+
+            if not company:
+                company_form.add_error(None, "Compagnie introuvable.")
+            elif company_form.is_valid():
+                company = company_form.save(commit=False)
+                company.save()
+                company_form.save_m2m()
+                return redirect('facture')
+
+            open_company_modal = True
 
         elif action == 'delete_tr_desc':
             selected_company_id = request.POST.get('selected_company_id', '')
@@ -1142,6 +1163,9 @@ def facture(request):
     return render(request, "factures/index.html", {
         'title': title,
         'company_form': company_form,
+        'open_company_modal': open_company_modal,
+        'company_modal_action': company_modal_action,
+        'editing_company_id': editing_company_id,
         'comptes_count': comptes_count,
         'compagnies': compagnies,
         'companies': compagnies,
@@ -2095,7 +2119,9 @@ def _import_releve_csv(csv_file):
             errors.append(f"Ligne {row_num}: Erreur lors du parsing ({str(exc)})")
             continue
 
-    if releves:
+    if errors:
+        errors.insert(0, "Le fichier est invalide. Aucune ligne n'a été ajoutée.")
+    elif releves:
         try:
             with transaction.atomic():
                 for data in releves:
@@ -2103,6 +2129,8 @@ def _import_releve_csv(csv_file):
             errors.insert(0, f"✓ {len(releves)} ligne(s) ajoutée(s) à la base de données avec succès!")
         except Exception as exc:
             errors.append(f"Erreur lors de l'insertion: {str(exc)}")
+    else:
+        errors.append("Le fichier ne contient aucune ligne de relevé valide.")
 
     return errors
 
@@ -2307,7 +2335,11 @@ def releve_bancaire(request):
             csv_file = request.FILES['csv_file']
 
             try:
-                errors.extend(_import_releve_csv(csv_file))
+                with transaction.atomic():
+                    import_messages = _import_releve_csv(csv_file)
+                    if any(not message.startswith("✓") for message in import_messages):
+                        transaction.set_rollback(True)
+                    errors.extend(import_messages)
             except Exception as e:
                 errors.append(f"Erreur lors de la lecture du fichier: {str(e)}")
 

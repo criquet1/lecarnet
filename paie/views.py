@@ -2,6 +2,7 @@ import calendar as py_calendar
 import re
 from datetime import date as date_type
 from decimal import Decimal
+from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -11,6 +12,7 @@ from django.http import JsonResponse
 from django.db.models.functions import Coalesce
 from django.db.models import Count, Sum
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from holidays import country_holidays
 
@@ -120,7 +122,11 @@ def saisir_paie_page(request):
 		if form.is_valid():
 			paie = form.save()
 			messages.success(request, f'Paie enregistree pour {paie.employe}.')
-			return redirect('paie:paie_journal')
+			journal_params = {'employe': paie.employe_id}
+			if request.GET.get('embed') == '1':
+				journal_params['embed'] = '1'
+			journal_url = f"{reverse('paie:paie_journal')}?{urlencode(journal_params)}"
+			return redirect(journal_url)
 	else:
 		form = PaieForm()
 
@@ -307,12 +313,45 @@ def _compute_employer_totals_for_period(paies, settings_instance):
 	return totals
 
 
-@expert_required
-def creer_ecriture_salaire(request, periode_id):
-	if request.method != 'POST':
-		return redirect('paie:paie_journal')
+def _serialize_ecriture_salaire(tr_desc, already_existed, matches=True, updated=False, update_url=None):
+	details = (
+		Tr_detail.objects
+		.filter(tr_desc=tr_desc)
+		.select_related('compte')
+		.order_by('id')
+	)
+	# Meme ordre que le journal general: debits par compte croissant, puis credits par compte croissant.
+	sorted_details = sorted(
+		details,
+		key=lambda detail: ((detail.montant or Decimal('0.00')) < 0, detail.compte.numero),
+	)
+	lines = []
+	for detail in sorted_details:
+		montant = detail.montant or Decimal('0.00')
+		lines.append({
+			'compte_numero': detail.compte.numero,
+			'compte_libelle': detail.compte.libelle,
+			'debit': f"{montant:.2f}" if montant > 0 else '',
+			'credit': f"{-montant:.2f}" if montant < 0 else '',
+		})
+	return {
+		'ok': True,
+		'already_existed': already_existed,
+		'matches': matches,
+		'updated': updated,
+		'update_url': update_url,
+		'no_ej': tr_desc.no_ej,
+		'date': tr_desc.date.strftime('%Y-%m-%d'),
+		'desc_ctb': tr_desc.desc_ctb,
+		'lines': lines,
+	}
 
-	periode = get_object_or_404(PeriodePaie, pk=periode_id)
+
+def _calculer_lignes_ecriture_salaire(periode):
+	"""Calcule (source, date, desc_ctb, lignes) pour l'ecriture de salaire d'une periode.
+
+	Leve ValueError avec un message utilisateur si le calcul est impossible.
+	"""
 	paies = list(
 		Paie.objects
 		.filter(periode=periode)
@@ -335,8 +374,7 @@ def creer_ecriture_salaire(request, periode_id):
 	)
 
 	if not paies:
-		messages.error(request, 'Aucune paie trouvee pour cette periode.')
-		return redirect('paie:paie_journal')
+		raise ValueError('Aucune paie trouvee pour cette periode.')
 
 	settings_instance = get_setting(
 		'compte_salaire',
@@ -362,21 +400,11 @@ def creer_ecriture_salaire(request, periode_id):
 
 	missing_labels = [label for label, account in required_accounts if account is None]
 	if missing_labels:
-		messages.error(request, 'Comptes de paie manquants dans les paramètres: ' + ', '.join(missing_labels))
-		return redirect('paie:paie_journal')
+		raise ValueError('Comptes de paie manquants dans les paramètres: ' + ', '.join(missing_labels))
 
 	source_salaire, _ = Source.objects.get_or_create(nom='Salaire')
 	entry_date = periode.date_paie or periode.date_fin
 	desc_ctb = f"Paie P{periode.id} {periode.date_fin:%Y-%m-%d}"[:40]
-
-	existing = Tr_desc.objects.filter(
-		source=source_salaire,
-		desc_ctb=desc_ctb,
-		date=entry_date,
-	).first()
-	if existing:
-		messages.info(request, f"L'écriture salaire existe deja ({existing.no_ej}).")
-		return redirect('journal_general')
 
 	total_brut = _money(sum((p.salaire_brut_periode or Decimal('0.00') for p in paies), Decimal('0.00')))
 	total_vacances_payees = _money(sum((p.vacances_payees or Decimal('0.00') for p in paies), Decimal('0.00')))
@@ -422,9 +450,6 @@ def creer_ecriture_salaire(request, periode_id):
 	credit_das_prov = total_qc
 	credit_das_fed = total_ca
 
-	debit_total = _money(debit_salaire + debit_vacances + max(montant_vacances_a_payer, Decimal('0.00')) + debit_benefices)
-	credit_total = _money(credit_salaires_a_payer + max(-montant_vacances_a_payer, Decimal('0.00')) + credit_das_fed + credit_das_prov)
-
 	detail_rows = [
 		(getattr(settings_instance, 'compte_salaire'), debit_salaire),
 		(getattr(settings_instance, 'compte_vacances'), debit_vacances),
@@ -434,6 +459,66 @@ def creer_ecriture_salaire(request, periode_id):
 		(getattr(settings_instance, 'compte_das_federales'), -credit_das_fed),
 		(getattr(settings_instance, 'compte_das_provinciales'), -credit_das_prov),
 	]
+
+	return source_salaire, entry_date, desc_ctb, detail_rows
+
+
+def _ecriture_salaire_correspond(tr_desc, detail_rows):
+	"""Compare les montants deja enregistres avec ceux recalcules pour la periode."""
+	attendu = {}
+	for compte, montant in detail_rows:
+		montant = _money(montant)
+		if montant == Decimal('0.00'):
+			continue
+		attendu[compte.pk] = attendu.get(compte.pk, Decimal('0.00')) + montant
+
+	actuel = {}
+	for detail in tr_desc.details.all():
+		montant = detail.montant or Decimal('0.00')
+		actuel[detail.compte_id] = actuel.get(detail.compte_id, Decimal('0.00')) + montant
+
+	return attendu == actuel
+
+
+def _statut_transmission_ecriture_salaire(periode):
+	"""Retourne 'vert' (transmise et à jour), 'jaune' (transmise mais montants différents) ou 'blanc' (non transmise)."""
+	try:
+		source_salaire, entry_date, desc_ctb, detail_rows = _calculer_lignes_ecriture_salaire(periode)
+	except ValueError:
+		return 'blanc'
+
+	existing = Tr_desc.objects.filter(
+		source=source_salaire,
+		desc_ctb=desc_ctb,
+		date=entry_date,
+	).first()
+	if not existing:
+		return 'blanc'
+
+	return 'vert' if _ecriture_salaire_correspond(existing, detail_rows) else 'jaune'
+
+
+@expert_required
+def creer_ecriture_salaire(request, periode_id):
+	if request.method != 'POST':
+		return redirect('paie:paie_journal')
+
+	periode = get_object_or_404(PeriodePaie, pk=periode_id)
+
+	try:
+		source_salaire, entry_date, desc_ctb, detail_rows = _calculer_lignes_ecriture_salaire(periode)
+	except ValueError as exc:
+		return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+	existing = Tr_desc.objects.filter(
+		source=source_salaire,
+		desc_ctb=desc_ctb,
+		date=entry_date,
+	).first()
+	if existing:
+		matches = _ecriture_salaire_correspond(existing, detail_rows)
+		update_url = None if matches else reverse('paie:paie_mettre_a_jour_ecriture_salaire', args=[periode.id])
+		return JsonResponse(_serialize_ecriture_salaire(existing, already_existed=True, matches=matches, update_url=update_url))
 
 	with transaction.atomic():
 		tr_desc = Tr_desc.objects.create(
@@ -452,13 +537,51 @@ def creer_ecriture_salaire(request, periode_id):
 				montant=_money(montant),
 			)
 
-	messages.success(request, f"Ecriture salaire creee ({tr_desc.no_ej}).")
-	return redirect('journal_general')
+	return JsonResponse(_serialize_ecriture_salaire(tr_desc, already_existed=False))
+
+
+@expert_required
+def mettre_a_jour_ecriture_salaire(request, periode_id):
+	if request.method != 'POST':
+		return redirect('paie:paie_journal')
+
+	periode = get_object_or_404(PeriodePaie, pk=periode_id)
+
+	try:
+		source_salaire, entry_date, desc_ctb, detail_rows = _calculer_lignes_ecriture_salaire(periode)
+	except ValueError as exc:
+		return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
+
+	existing = Tr_desc.objects.filter(
+		source=source_salaire,
+		desc_ctb=desc_ctb,
+		date=entry_date,
+	).first()
+	if not existing:
+		return JsonResponse({'ok': False, 'error': "Aucune écriture existante à mettre à jour pour cette période."}, status=400)
+
+	with transaction.atomic():
+		existing.details.all().delete()
+		for compte, montant in detail_rows:
+			if _money(montant) == Decimal('0.00'):
+				continue
+			Tr_detail.objects.create(
+				tr_desc=existing,
+				compte=compte,
+				montant=_money(montant),
+			)
+
+	return JsonResponse(_serialize_ecriture_salaire(existing, already_existed=True, matches=True, updated=True))
 
 
 @login_required
 @xframe_options_sameorigin
 def journal_paies_page(request):
+	try:
+		active_employe_id = int(request.GET.get('employe', ''))
+	except (TypeError, ValueError):
+		active_employe_id = None
+
 	paies = list(
 		Paie.objects
 		.select_related('employe', 'periode', 'periode__frequence_paie')
@@ -473,6 +596,7 @@ def journal_paies_page(request):
 			'periode__date_paie',
 			'periode__frequence_paie__code',
 			'heures_travaillees',
+			'heures_supp',
 			'vacances_payees',
 			'salaire_brut_periode',
 			'salaire_net',
@@ -704,7 +828,7 @@ def journal_paies_page(request):
 				'employer': employer,
 			})
 
-			month_totals['heures'] += _d(paie.heures_travaillees)
+			month_totals['heures'] += _d(paie.heures_travaillees) + _d(paie.heures_supp)
 			month_totals['vacances_payees'] += _d(paie.vacances_payees)
 			month_totals['brut'] += _d(paie.salaire_brut_periode)
 			month_totals['vacances'] += _d(paie.vacances)
@@ -735,7 +859,7 @@ def journal_paies_page(request):
 
 		return journal_rows, total_brut_local, total_net_local, total_charge_employeur_local
 
-	def _build_total_period_rows(paie_entries_list):
+	def _build_total_period_rows(paie_entries_list, compute_statut=False):
 		period_groups = {}
 		for entry in paie_entries_list:
 			paie = entry['paie']
@@ -768,7 +892,7 @@ def journal_paies_page(request):
 					'total_ca': Decimal('0.00'),
 				}
 			bucket = period_groups[key]
-			bucket['heures'] += _d(paie.heures_travaillees)
+			bucket['heures'] += _d(paie.heures_travaillees) + _d(paie.heures_supp)
 			bucket['vacances_payees'] += _d(paie.vacances_payees)
 			bucket['brut'] += _d(paie.salaire_brut_periode)
 			bucket['vacances'] += _d(paie.vacances)
@@ -898,6 +1022,7 @@ def journal_paies_page(request):
 				'date_paie': group['date_paie'],
 				'date_fin': group['date_fin'],
 				'totals': group,
+				'statut_transmission': _statut_transmission_ecriture_salaire(periode) if compute_statut else None,
 			})
 
 			month_totals['heures'] += group['heures']
@@ -949,7 +1074,8 @@ def journal_paies_page(request):
 		return total_rows, grand_totals
 
 	journal_rows, total_brut, total_net, total_charge_employeur = _build_journal_rows(paie_entries)
-	total_rows, total_rows_grand_totals = _build_total_period_rows(paie_entries)
+	can_create_salary_entry = is_expert(request.user)
+	total_rows, total_rows_grand_totals = _build_total_period_rows(paie_entries, compute_statut=can_create_salary_entry)
 
 	by_employe = {}
 	for entry in paie_entries:
@@ -972,6 +1098,10 @@ def journal_paies_page(request):
 			'total_charge_employeur': charge_employeur,
 		})
 
+	active_employe_tab_id = None
+	if active_employe_id is not None and any(tab['employe'].id == active_employe_id for tab in employe_tabs):
+		active_employe_tab_id = f'emp-{active_employe_id}'
+
 	return render(request, 'paie/journal_paies.html', {
 		'title': 'Journal des paies',
 		'journal_rows': journal_rows,
@@ -981,7 +1111,8 @@ def journal_paies_page(request):
 		'total_net': total_net,
 		'total_charge_employeur': total_charge_employeur,
 		'employe_tabs': employe_tabs,
-		'can_create_salary_entry': is_expert(request.user),
+		'active_employe_tab_id': active_employe_tab_id,
+		'can_create_salary_entry': can_create_salary_entry,
 	})
 
 

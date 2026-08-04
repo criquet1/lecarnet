@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+import json
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, TestCase
@@ -9,6 +10,7 @@ from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
 from django.http import Http404
 from django.test import RequestFactory
+from django.template.loader import render_to_string
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 
@@ -16,7 +18,7 @@ from compte.models import Compte, Setting, Total
 from facture.models import Tr_desc, Tr_detail
 from paie.forms import EmployeForm, PaieForm
 from paie.models import Employe, FrequencePaie, Paie, PeriodePaie, ParametresTauxPaie
-from paie.views import creer_ecriture_salaire, journal_paies_page, _compute_employer_totals_for_period
+from paie.views import creer_ecriture_salaire, mettre_a_jour_ecriture_salaire, journal_paies_page, saisir_paie_page, _compute_employer_totals_for_period
 from paie.services.das import DASInputs, calculer_das, calculer_rrq
 
 
@@ -142,6 +144,83 @@ class DASTestCase(SimpleTestCase):
 
 
 class PaieModelTestCase(TestCase):
+	def test_saisie_paie_redirige_vers_onglet_journal(self):
+		frequence = FrequencePaie.objects.create(
+			code=FrequencePaie.HEBDOMADAIRE,
+			nom='Hebdomadaire',
+			nombre_periodes_par_annee=52,
+		)
+		employe = Employe.objects.create(
+			nom='Redirection',
+			prenom='Journal',
+			date_embauche='2026-01-01',
+			salH='20.00',
+			frequence_paie=frequence,
+		)
+		PeriodePaie.objects.create(
+			frequence_paie=frequence,
+			date_debut='2026-01-01',
+			date_fin='2026-01-07',
+			date_paie='2026-01-09',
+		)
+		request = RequestFactory().post(reverse('paie:paie_saisir'), {
+			'employe': employe.pk,
+			'heures_travaillees': '40.00',
+		})
+		request.user = get_user_model().objects.create_user(username='paie-redirection')
+		SessionMiddleware(lambda req: None).process_request(request)
+		setattr(request, '_messages', FallbackStorage(request))
+
+		response = saisir_paie_page(request)
+
+		self.assertEqual(response.status_code, 302)
+		self.assertEqual(response.url, f"{reverse('paie:paie_journal')}?employe={employe.pk}")
+
+	def test_saisie_paie_embarquee_redirige_vers_journal_embarque(self):
+		frequence = FrequencePaie.objects.create(
+			code=FrequencePaie.HEBDOMADAIRE,
+			nom='Hebdomadaire',
+			nombre_periodes_par_annee=52,
+		)
+		employe = Employe.objects.create(
+			nom='RedirectionEmbarquee',
+			prenom='Journal',
+			date_embauche='2026-01-01',
+			salH='20.00',
+			frequence_paie=frequence,
+		)
+		PeriodePaie.objects.create(
+			frequence_paie=frequence,
+			date_debut='2026-01-01',
+			date_fin='2026-01-07',
+			date_paie='2026-01-09',
+		)
+		request = RequestFactory().post(f"{reverse('paie:paie_saisir')}?embed=1", {
+			'employe': employe.pk,
+			'heures_travaillees': '40.00',
+		})
+		request.user = get_user_model().objects.create_user(username='paie-redirection-embarquee')
+		SessionMiddleware(lambda req: None).process_request(request)
+		setattr(request, '_messages', FallbackStorage(request))
+
+		response = saisir_paie_page(request)
+
+		self.assertEqual(response.status_code, 302)
+		self.assertEqual(response.url, f"{reverse('paie:paie_journal')}?employe={employe.pk}&embed=1")
+
+	def test_saisie_paie_affiche_periode_et_taux_horaire(self):
+		request = RequestFactory().get('/paie/saisir/')
+		request.user = get_user_model().objects.create_user(username='saisie-paie-template')
+		html = render_to_string(
+			'paie/saisir_paie.html',
+			{'title': 'Saisir une paie', 'form': PaieForm()},
+			request=request,
+		)
+
+		self.assertIn('id_periode_date_fin', html)
+		self.assertIn('id_periode_date_paie', html)
+		self.assertIn('id="taux-horaire-display"', html)
+
 	def test_periode_sans_date_paie_accepte_des_dates_iso(self):
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.AUX_2_SEMAINES,
@@ -495,6 +574,67 @@ class PaieModelTestCase(TestCase):
 		self.assertEqual(paie.salaire_brut_periode, Decimal('1000.00'))
 		self.assertEqual(paie.total_retenues, Decimal('129.75'))
 		self.assertEqual(paie.salaire_net, Decimal('870.25'))
+
+	def test_paie_inclut_les_heures_supplementaires_a_temps_et_demi(self):
+		frequence = FrequencePaie.objects.create(
+			code=FrequencePaie.AUX_2_SEMAINES,
+			nom='Aux 2 semaines',
+			nombre_periodes_par_annee=26,
+		)
+		employe = Employe.objects.create(
+			nom='Temps',
+			prenom='Supplementaire',
+			date_embauche='2026-01-01',
+			salH='20.00',
+			frequence_paie=frequence,
+		)
+		periode = PeriodePaie.objects.create(
+			frequence_paie=frequence,
+			date_debut='2026-01-01',
+			date_fin='2026-01-14',
+		)
+
+		paie = Paie.objects.create(
+			employe=employe,
+			periode=periode,
+			heures_travaillees=Decimal('40.00'),
+			heures_supp=Decimal('2.00'),
+		)
+
+		self.assertEqual(paie.salaire_brut_periode, Decimal('860.00'))
+
+	def test_formulaire_paie_enregistre_heures_supp_et_vacances(self):
+		frequence = FrequencePaie.objects.create(
+			code=FrequencePaie.HEBDOMADAIRE,
+			nom='Hebdomadaire',
+			nombre_periodes_par_annee=52,
+		)
+		employe = Employe.objects.create(
+			nom='Formulaire',
+			prenom='Supplementaire',
+			date_embauche='2026-01-01',
+			salH='20.00',
+			taux_vacances=Decimal('0.04000'),
+			frequence_paie=frequence,
+		)
+		PeriodePaie.objects.create(
+			frequence_paie=frequence,
+			date_debut='2026-01-01',
+			date_fin='2026-01-07',
+			date_paie='2026-01-09',
+		)
+		form = PaieForm(data={
+			'employe': employe.pk,
+			'heures_travaillees': '40.00',
+			'heures_supp': '2.00',
+		})
+
+		self.assertTrue(form.is_valid(), form.errors)
+		paie = form.save()
+
+		self.assertEqual(paie.heures_supp, Decimal('2.00'))
+		self.assertEqual(paie.salaire_brut_periode, Decimal('860.00'))
+		self.assertEqual(paie.vacances, Decimal('34.40'))
 
 	def test_paie_cumule_les_retenues_des_paies_precedentes(self):
 		frequence = FrequencePaie.objects.create(
@@ -947,6 +1087,111 @@ class PaieEcritureSalairePermissionTestCase(TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertContains(response, 'form-creer-ecriture-salaire')
 
+	def test_journal_affiche_un_onglet_par_employe(self):
+		frequence = FrequencePaie.objects.create(
+			code=FrequencePaie.HEBDOMADAIRE,
+			nom='Hebdomadaire',
+			nombre_periodes_par_annee=52,
+		)
+		for index, (nom, prenom) in enumerate((('Alpha', 'Anne'), ('Bravo', 'Bob')), start=1):
+			employe = Employe.objects.create(
+				nom=nom,
+				prenom=prenom,
+				date_embauche='2026-01-01',
+				salH='20.00',
+				frequence_paie=frequence,
+			)
+			periode = PeriodePaie.objects.create(
+				frequence_paie=frequence,
+				date_debut=f'2026-01-{index:02d}',
+				date_fin=f'2026-01-{index + 6:02d}',
+				date_paie=f'2026-01-{index + 8:02d}',
+			)
+			Paie.objects.create(employe=employe, periode=periode, heures_travaillees=Decimal('1.00'))
+
+		user = self.user_model.objects.create_user(username='journal-onglets')
+		request = self.factory.get(reverse('paie:paie_journal'))
+		request.user = user
+		SessionMiddleware(lambda req: None).process_request(request)
+
+		response = journal_paies_page(request)
+
+		self.assertContains(response, 'Alpha Anne')
+		self.assertContains(response, 'Bravo Bob')
+		self.assertContains(response, 'id="journal-emp-', count=4)
+
+	def test_journal_active_onglet_employe_cible_par_parametre(self):
+		frequence = FrequencePaie.objects.create(
+			code=FrequencePaie.HEBDOMADAIRE,
+			nom='Hebdomadaire',
+			nombre_periodes_par_annee=52,
+		)
+		employes = []
+		for index, (nom, prenom) in enumerate((('Alpha', 'Anne'), ('Bravo', 'Bob')), start=1):
+			employe = Employe.objects.create(
+				nom=nom,
+				prenom=prenom,
+				date_embauche='2026-01-01',
+				salH='20.00',
+				frequence_paie=frequence,
+			)
+			periode = PeriodePaie.objects.create(
+				frequence_paie=frequence,
+				date_debut=f'2026-01-{index:02d}',
+				date_fin=f'2026-01-{index + 6:02d}',
+				date_paie=f'2026-01-{index + 8:02d}',
+			)
+			Paie.objects.create(employe=employe, periode=periode, heures_travaillees=Decimal('1.00'))
+			employes.append(employe)
+
+		user = self.user_model.objects.create_user(username='journal-onglet-cible')
+		request = self.factory.get(reverse('paie:paie_journal'), {'employe': employes[1].pk})
+		request.user = user
+		SessionMiddleware(lambda req: None).process_request(request)
+
+		response = journal_paies_page(request)
+		content = response.content.decode()
+
+		self.assertIn(f'tab-pane fade show active" id="journal-emp-{employes[1].pk}"', content)
+		self.assertIn(f'nav-link active" id="journal-emp-{employes[1].pk}-tab"', content)
+		self.assertIn('tab-pane fade" id="journal-total"', content)
+		self.assertIn('nav-link" id="journal-total-tab"', content)
+
+	def test_journal_colonne_heures_additionne_regulieres_et_supplementaires(self):
+		frequence = FrequencePaie.objects.create(
+			code=FrequencePaie.HEBDOMADAIRE,
+			nom='Hebdomadaire',
+			nombre_periodes_par_annee=52,
+		)
+		employe = Employe.objects.create(
+			nom='HeuresTotal',
+			prenom='Test',
+			date_embauche='2026-01-01',
+			salH='20.00',
+			frequence_paie=frequence,
+		)
+		periode = PeriodePaie.objects.create(
+			frequence_paie=frequence,
+			date_debut='2026-01-01',
+			date_fin='2026-01-07',
+			date_paie='2026-01-09',
+		)
+		Paie.objects.create(
+			employe=employe,
+			periode=periode,
+			heures_travaillees=Decimal('40.00'),
+			heures_supp=Decimal('3.50'),
+		)
+
+		user = self.user_model.objects.create_user(username='journal-heures-total')
+		request = self.factory.get(reverse('paie:paie_journal'))
+		request.user = user
+		SessionMiddleware(lambda req: None).process_request(request)
+
+		response = journal_paies_page(request)
+
+		self.assertContains(response, '43,50')
+
 
 class PaieEcritureSalaireTestCase(TestCase):
 	def setUp(self):
@@ -1038,11 +1283,14 @@ class PaieEcritureSalaireTestCase(TestCase):
 		setattr(request, '_messages', FallbackStorage(request))
 
 		response = creer_ecriture_salaire(request, self.periode.id)
-		self.assertEqual(response.status_code, 302)
-		self.assertEqual(response.url, reverse('journal_general'))
+		self.assertEqual(response.status_code, 200)
+		payload = json.loads(response.content)
+		self.assertTrue(payload['ok'])
+		self.assertFalse(payload['already_existed'])
 
 		tr_desc = Tr_desc.objects.order_by('-id').first()
 		self.assertIsNotNone(tr_desc)
+		self.assertEqual(payload['no_ej'], tr_desc.no_ej)
 
 		details = list(Tr_detail.objects.filter(tr_desc=tr_desc).select_related('compte'))
 		by_compte = {detail.compte.numero: detail.montant for detail in details}
@@ -1075,3 +1323,86 @@ class PaieEcritureSalaireTestCase(TestCase):
 
 		total = sum((detail.montant for detail in details), Decimal('0.00'))
 		self.assertEqual(total, Decimal('0.00'))
+
+	def test_creer_ecriture_salaire_retourne_json_existant_si_deja_creee(self):
+		self._creer_ecriture_et_map_par_compte()
+		tr_desc = Tr_desc.objects.order_by('-id').first()
+
+		request = self.factory.post(reverse('paie:paie_creer_ecriture_salaire', args=[self.periode.id]))
+		request.user = self.user
+		session_middleware = SessionMiddleware(lambda req: None)
+		session_middleware.process_request(request)
+		request.session.save()
+		setattr(request, '_messages', FallbackStorage(request))
+
+		response = creer_ecriture_salaire(request, self.periode.id)
+
+		self.assertEqual(response.status_code, 200)
+		payload = json.loads(response.content)
+		self.assertTrue(payload['ok'])
+		self.assertTrue(payload['already_existed'])
+		self.assertEqual(payload['no_ej'], tr_desc.no_ej)
+		self.assertEqual(Tr_desc.objects.count(), 1)
+
+	def _poster_creer_ecriture(self):
+		request = self.factory.post(reverse('paie:paie_creer_ecriture_salaire', args=[self.periode.id]))
+		request.user = self.user
+		session_middleware = SessionMiddleware(lambda req: None)
+		session_middleware.process_request(request)
+		request.session.save()
+		setattr(request, '_messages', FallbackStorage(request))
+		response = creer_ecriture_salaire(request, self.periode.id)
+		return json.loads(response.content)
+
+	def _poster_mettre_a_jour_ecriture(self):
+		request = self.factory.post(reverse('paie:paie_mettre_a_jour_ecriture_salaire', args=[self.periode.id]))
+		request.user = self.user
+		session_middleware = SessionMiddleware(lambda req: None)
+		session_middleware.process_request(request)
+		request.session.save()
+		setattr(request, '_messages', FallbackStorage(request))
+		response = mettre_a_jour_ecriture_salaire(request, self.periode.id)
+		return json.loads(response.content)
+
+	def test_creer_ecriture_salaire_signale_une_correspondance_si_rien_n_a_change(self):
+		self._creer_ecriture_et_map_par_compte()
+
+		payload = self._poster_creer_ecriture()
+
+		self.assertTrue(payload['ok'])
+		self.assertTrue(payload['already_existed'])
+		self.assertTrue(payload['matches'])
+		self.assertIsNone(payload['update_url'])
+
+	def test_creer_ecriture_salaire_signale_un_ecart_si_la_paie_a_change(self):
+		self._creer_ecriture_et_map_par_compte()
+
+		Paie.objects.filter(pk=self.paie_id).update(salaire_brut_periode=Decimal('2500.00'))
+
+		payload = self._poster_creer_ecriture()
+
+		self.assertTrue(payload['ok'])
+		self.assertTrue(payload['already_existed'])
+		self.assertFalse(payload['matches'])
+		self.assertTrue(payload['update_url'])
+
+	def test_mettre_a_jour_ecriture_salaire_applique_les_nouveaux_montants(self):
+		self._creer_ecriture_et_map_par_compte()
+		tr_desc = Tr_desc.objects.order_by('-id').first()
+
+		Paie.objects.filter(pk=self.paie_id).update(salaire_brut_periode=Decimal('2500.00'))
+
+		payload = self._poster_mettre_a_jour_ecriture()
+
+		self.assertTrue(payload['ok'])
+		self.assertTrue(payload['updated'])
+		self.assertTrue(payload['matches'])
+		self.assertEqual(payload['no_ej'], tr_desc.no_ej)
+		self.assertEqual(Tr_desc.objects.count(), 1)
+
+		details = list(Tr_detail.objects.filter(tr_desc=tr_desc).select_related('compte'))
+		by_compte = {detail.compte.numero: detail.montant for detail in details}
+		self.assertEqual(by_compte[self.compte_salaire.numero], Decimal('2200.00'))
+
+		verification = self._poster_creer_ecriture()
+		self.assertTrue(verification['matches'])

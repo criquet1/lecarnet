@@ -1,90 +1,193 @@
-{% extends "layouts/base.html" %}
+{% extends "layouts/base_public.html" %}
 {% load static %}
 
 {% block title %}Mon carnet comptable{% endblock %}
 
-{% block extrastyle %}
-<link rel="stylesheet" href="{% static 'css/accueil.css' %}?v=20260803-1">
-<link rel="stylesheet" href="{% static 'css/pages/dashboard.css' %}?v=20260803-1">
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/accueil.css' %}">
+<link rel="stylesheet" href="{% static 'css/base_public.css' %}">
 {% endblock %}
 
 {% block content %}
 
-<section class="hero">
-    <div class="container-xl hero-grid">
+<!-- ========================================================= -->
+<!-- HERO -->
+<!-- ========================================================= -->
 
-        <!-- Colonne gauche -->
-        <div class="hero-left">
-            <h1 class="hero-title">
+<section class="hero">
+
+    <div class="container hero-grid">
+
+        <!-- Texte -->
+
+        <div class="hero-content">
+
+            <span class="hero-badge">
+                Logiciel de comptabilité québécois
+            </span>
+
+            <h1>
                 Bienvenue dans votre
                 <span>espace comptable</span>
             </h1>
-            <p class="hero-text">
+
+            <p>
                 Gérez vos factures, relevés, paie et rapports
-                en toute simplicité.
+                dans une seule application moderne,
+                rapide et sécurisée.
             </p>
-            <!-- Boutons et avantages -->
+
+            <a href="{% url 'login' %}" class="hero-btn">
+                <i class="bi bi-person"></i>
+                Se connecter
+            </a>
+
+            <div class="hero-features">
+
+                <div class="feature">
+
+                    <div class="feature-icon">
+                        <i class="bi bi-shield-check"></i>
+                    </div>
+
+                    <div>
+
+                        <strong>Sécurisé</strong>
+
+                        <p>
+                            Vos données sont protégées.
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="feature">
+
+                    <div class="feature-icon">
+                        <i class="bi bi-lightning-charge"></i>
+                    </div>
+
+                    <div>
+
+                        <strong>Rapide</strong>
+
+                        <p>
+                            Accédez à l'essentiel en quelques clics.
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <div class="feature">
+
+                    <div class="feature-icon">
+                        <i class="bi bi-patch-check"></i>
+                    </div>
+
+                    <div>
+
+                        <strong>Fiable</strong>
+
+                        <p>
+                            Des informations toujours à jour.
+                        </p>
+
+                    </div>
+
+                </div>
+
+            </div>
+
         </div>
 
-        <!-- Colonne droite -->
-        <div class="hero-right">
-            {% include "includes/components/dashboard_preview.html" %}
+        <!-- Image du dashboard -->
+
+        <div class="hero-image">
+
+            <div class="dashboard-glow"></div>
+
+            <img
+                src="{% static 'images/dashboard-preview.png' %}"
+                alt="Tableau de bord Mon carnet comptable">
+
         </div>
+
     </div>
+
 </section>
+
+<!-- ========================================================= -->
+<!-- MODULES -->
+<!-- ========================================================= -->
 
 <section class="modules">
 
-    <div class="container-xl">
-        <h2 class="section-title">
-            Tout pour gérer votre entreprise
-        </h2>
-        <div class="module-grid">
+    <div class="container">
+
+        <div class="modules-grid">
+
             <article class="module-card">
-                <div class="module-icon purple">
+
+                <div class="module-icon pink">
                     <i class="bi bi-receipt"></i>
                 </div>
-                <h4>Factures</h4>
+
+                <h3>Factures</h3>
+
                 <p>
-                    Créez, envoyez et assurez le suivi de vos factures
-                    en quelques clics.
+                    Créez, envoyez et assurez le suivi de vos factures.
                 </p>
+
             </article>
 
             <article class="module-card">
-                <div class="module-icon pink">
-                    <i class="bi bi-file-earmark-text"></i>
+
+                <div class="module-icon purple">
+                    <i class="bi bi-bank"></i>
                 </div>
-                <h4>Relevés</h4>
+
+                <h3>Relevés</h3>
+
                 <p>
-                    Consultez rapidement vos relevés et vos états
-                    de compte.
+                    Consultez vos relevés et vos historiques.
                 </p>
+
             </article>
 
             <article class="module-card">
+
                 <div class="module-icon blue">
-                    <i class="bi bi-people"></i>
+                    <i class="bi bi-cash-stack"></i>
                 </div>
-                <h4>Paie</h4>
+
+                <h3>Paie</h3>
+
                 <p>
-                    Gérez vos employés et préparez les périodes
-                    de paie.
+                    Gérez la paie de votre entreprise facilement.
                 </p>
+
             </article>
 
             <article class="module-card">
+
                 <div class="module-icon green">
                     <i class="bi bi-bar-chart"></i>
                 </div>
-                <h4>Rapports</h4>
+
+                <h3>Rapports</h3>
+
                 <p>
-                    Produisez vos rapports financiers
-                    instantanément.
+                    Prenez de meilleures décisions grâce à vos rapports.
                 </p>
+
             </article>
+
         </div>
+
     </div>
+
 </section>
 
 {% endblock %}

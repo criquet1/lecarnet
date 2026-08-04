@@ -16,4 +16,5 @@ urlpatterns = [
 	path('api/prochaine-periode/', views.prochaine_periode_employe_api, name='paie_api_prochaine_periode'),
 	path('journal/', views.journal_paies_page, name='paie_journal'),
 	path('journal/creer-ecriture/<int:periode_id>/', views.creer_ecriture_salaire, name='paie_creer_ecriture_salaire'),
+	path('journal/mettre-a-jour-ecriture/<int:periode_id>/', views.mettre_a_jour_ecriture_salaire, name='paie_mettre_a_jour_ecriture_salaire'),
 ]

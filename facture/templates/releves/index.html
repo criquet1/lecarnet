@@ -16,11 +16,6 @@ Téléchargement des relevés bancaires
 
 {% block content %}
 
-    <h1 class="mb-3">Relevés bancaires</h1>
-    {% if periode_label %}
-        <p class="text-muted mb-3">Période sélectionnée: {{ periode_label }}</p>
-    {% endif %}
-
     {% if errors %}
         <div class="alert alert-warning">
             {% for error in errors %}
@@ -48,11 +43,11 @@ Téléchargement des relevés bancaires
 
     <form method="post" enctype="multipart/form-data" id="csvForm" class="mb-4">
         {% csrf_token %}
-        <div class="form-group mb-3">
-            <label for="csvFile" class="form-label">Choisir un fichier CSV:</label>
-            <input type="file" name="csv_file" id="csvFile" accept=".csv" class="form-control">
+        <div class="d-flex align-items-center gap-3">
+            <label for="csvFile" class="btn btn-primary mb-0" id="csvFileButton">Ajouter un relevé</label>
+            <input type="file" name="csv_file" id="csvFile" accept=".csv,text/csv" class="visually-hidden">
+            <span id="csvFileStatus" class="text-muted small" aria-live="polite"></span>
         </div>
-        <button type="submit" class="btn btn-primary">Charger le fichier</button>
     </form>
 
     <ul class="nav nav-tabs mb-3" id="releveTabs" role="tablist">
@@ -297,6 +292,35 @@ Téléchargement des relevés bancaires
 {% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        var csvForm = document.getElementById('csvForm');
+        var csvFile = document.getElementById('csvFile');
+        var csvFileButton = document.getElementById('csvFileButton');
+        var csvFileStatus = document.getElementById('csvFileStatus');
+
+        if (csvForm && csvFile) {
+            csvFile.addEventListener('change', function () {
+                var file = csvFile.files && csvFile.files[0];
+                if (!file) {
+                    return;
+                }
+
+                if (!/\.csv$/i.test(file.name)) {
+                    csvFile.value = '';
+                    csvFileStatus.classList.remove('text-muted');
+                    csvFileStatus.classList.add('text-danger');
+                    csvFileStatus.textContent = 'Le fichier doit être au format CSV.';
+                    return;
+                }
+
+                csvFileStatus.classList.remove('text-danger');
+                csvFileStatus.classList.add('text-muted');
+                csvFileStatus.textContent = 'Vérification et ajout en cours...';
+                csvFileButton.classList.add('disabled');
+                csvFileButton.setAttribute('aria-disabled', 'true');
+                csvForm.submit();
+            });
+        }
+
         var modalElement = document.getElementById('releveDetailModal');
         if (!modalElement) {
             return;

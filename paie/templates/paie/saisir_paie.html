@@ -2,83 +2,213 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block page_title %}{{ title }}{% endblock %}
+{% block page_title %}
+<i class="bi bi-cash-stack me-2 text-success"></i>
+{{ title }}
+{% endblock %}
 
-{% block page_subtitle %}Calcul et enregistrement d'une paie pour un employé actif.{% endblock %}
+{% block page_subtitle %}
+Saisie des heures de travail d'un employé pour produire une paie.
+{% endblock %}
 
 {% block content %}
 
 {% if messages %}
     {% for message in messages %}
-        <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
+        <div class="alert alert-{{ message.tags|default:'info' }}">
+            {{ message }}
+        </div>
     {% endfor %}
 {% endif %}
 
-<div class="card shadow-sm">
-    <div class="card-body">
-        <form method="post" class="row g-3" data-prochaine-periode-url="{% url 'paie:paie_api_prochaine_periode' %}">
-            {% csrf_token %}
-            {{ form.non_field_errors }}
-            {{ form.montant_personnel_federal_td1 }}
-            {{ form.montant_personnel_quebec_tp1015 }}
-            {{ form.deduction_code_f }}
-            {{ form.deduction_tp1015_j }}
-            {{ form.deduction_tp1016_j1 }}
-            <div class="col-md-6">
-                <label class="form-label" for="{{ form.employe.id_for_label }}">Employé</label>
-                {{ form.employe }}{{ form.employe.errors }}
-                <div class="form-text">
-                    Taux horaire utilisé :
-                    <span id="taux-horaire-display">---</span> $/h
+<form method="post"
+      data-prochaine-periode-url="{% url 'paie:paie_api_prochaine_periode' %}">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {{ form.montant_personnel_federal_td1 }}
+    {{ form.montant_personnel_quebec_tp1015 }}
+    {{ form.deduction_code_f }}
+    {{ form.deduction_tp1015_j }}
+    {{ form.deduction_tp1016_j1 }}
+    <div class="row g-4">
+
+        <!-- ========================= -->
+        <!-- Employé                   -->
+        <!-- ========================= -->
+
+        <div class="col-lg-5">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-person-circle me-2"></i>
+                    Employé
+                </div>
+
+                <div class="card-body">
+                    <label class="form-label fw-semibold"
+                           for="{{ form.employe.id_for_label }}">
+                        Employé
+                    </label>
+                    {{ form.employe }}
+                    {{ form.employe.errors }}
+
+                    <div class="row g-3 mt-1">
+                        <div class="col-md-7">
+                            <label class="form-label fw-semibold" for="{{ form.periode_date_fin.id_for_label }}">
+                                Fin de période
+                            </label>
+                            {{ form.periode_date_fin }}
+                            {{ form.periode_date_fin.errors }}
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold" for="{{ form.periode_date_paie.id_for_label }}">
+                                Date de paiement
+                            </label>
+                            {{ form.periode_date_paie }}
+                            {{ form.periode_date_paie.errors }}
+                        </div>
+                    </div>
+
+                    <hr>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted">
+                            Taux horaire
+                        </span>
+
+                        <span class="badge bg-info text-dark fs-6">
+                            <span id="taux-horaire-display">
+                                0.00
+                            </span>
+                            $ / h
+                        </span>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-3">
+                        <span class="text-muted">
+                            Vacances disponibles
+                        </span>
+
+                        <span class="badge bg-info text-dark fs-6">
+                            <span id="vacances-solde-display">
+                                0.00
+                            </span>
+                            $
+                        </span>
+                    </div>
                 </div>
             </div>
-            <div class="col-md-6">
-                <label class="form-label" for="{{ form.periode_date_paie.id_for_label }}">Date de paiement</label>
-                {{ form.periode_date_paie }}{{ form.periode_date_paie.errors }}
+        </div>
+
+        <!-- ========================= -->
+        <!-- Heures                    -->
+        <!-- ========================= -->
+
+        <div class="col-lg-7">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white">
+                    <i class="bi bi-clock-history me-2"></i>
+                    Heures de travail
+                </div>
+
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">
+                                Heures régulières
+                            </label>
+                            {{ form.heures_travaillees }}
+                            {{ form.heures_travaillees.errors }}
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">
+                                Heures supplémentaires
+                            </label>
+                            {{ form.heures_supp }}
+                            {{ form.heures_supp.errors }}
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">
+                                Vacances payées
+                            </label>
+                            {{ form.vacances_payees }}
+                            {{ form.vacances_payees.errors }}
+                        </div>
+                    </div>
+                    <div class="text-end mt-3">
+                        <span class="text-muted">Brut estimé :</span>
+                        <strong><span id="salaire-brut-estime">0.00</span> $</strong>
+                    </div>
+                </div>
             </div>
-            <div class="col-md-6">
-                <label class="form-label" for="{{ form.periode_date_fin.id_for_label }}">Fin de période</label>
-                {{ form.periode_date_fin }}{{ form.periode_date_fin.errors }}
+
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-header bg-warning">
+                    <i class="bi bi-receipt me-2"></i>
+                    Déductions exceptionnelles
+                </div>
+
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">
+                                Retenue suppl. QC
+                            </label>
+                            {{ form.retenue_supplementaire_qc }}
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">
+                                CSA RRQ
+                            </label>
+                            {{ form.cotisation_supplementaire_rrq_csa }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">
+                                Code F
+                            </label>
+
+                            <div>
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-secondary w-100"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#codeFModal">
+                                    <i class="bi bi-calculator me-2"></i>
+                                    Modifier
+                                </button>
+                            </div>
+
+                            <div class="small text-center mt-2">
+                                Total :
+                                <strong>
+                                    <span id="code-f-total-display">
+                                        0.00
+                                    </span>
+                                    $
+                                </strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="col-md-6">
-                <label class="form-label" for="{{ form.heures_travaillees.id_for_label }}">Heures travaillées</label>
-                {{ form.heures_travaillees }}{{ form.heures_travaillees.errors }}
-            </div>
-            <div class="col-md-6">
-                <label class="form-label" for="{{ form.vacances_payees.id_for_label }}">Vacances</label>
-                {{ form.vacances_payees }}{{ form.vacances_payees.errors }}
-                <div class="form-text">Ce montant est ajoute au brut et affiche dans "Vacances payees" du journal.</div>
-                <div class="form-text">Vacances a payer: <span id="vacances-solde-display">0.00</span></div>
-            </div>
-            <div class="col-md-6">
-                <label class="form-label" for="{{ form.retenue_supplementaire_qc.id_for_label }}">Retenue suppl. QC</label>
-                {{ form.retenue_supplementaire_qc }}{{ form.retenue_supplementaire_qc.errors }}
-            </div>
-            <div class="col-md-8">
-                <button
-                    type="button"
-                    class="btn btn-link p-0 text-decoration-none fw-semibold"
-                    data-bs-toggle="modal"
-                    data-bs-target="#codeFModal"
-                >
-                    Total des sommes suivantes pour la période de paie
-                </button>
-                <div class="small text-muted">Cliquez pour saisir le détail du code F.</div>
-                {% if form.deduction_code_f.errors %}
-                    <div class="invalid-feedback d-block">{{ form.deduction_code_f.errors|striptags }}</div>
-                {% endif %}
-                <div class="small mt-1">Total calculé: <span id="code-f-total-display">0.00</span></div>
-            </div>
-            <div class="col-md-6">
-                <label class="form-label" for="{{ form.cotisation_supplementaire_rrq_csa.id_for_label }}">CSA RRQ</label>
-                {{ form.cotisation_supplementaire_rrq_csa }}{{ form.cotisation_supplementaire_rrq_csa.errors }}
-            </div>
-            <div class="col-12 d-flex justify-content-end">
-                <button type="submit" class="btn btn-primary">Calculer et enregistrer</button>
-            </div>
-        </form>
+        </div>
     </div>
-</div>
+
+    <div class="text-end mt-4">
+        <button
+            type="submit"
+            class="btn btn-success btn-lg px-5">
+            <i class="bi bi-check-circle me-2"></i>
+            Calculer et enregistrer la paie
+        </button>
+    </div>
+</form>
+
+<!-- ========================= -->
+<!-- MODALE CODE F             -->
+<!-- ========================= -->
+
 
 <div class="modal fade" id="codeFModal" tabindex="-1" aria-labelledby="codeFModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -182,6 +312,22 @@
         const datePaieInput = document.getElementById('{{ form.periode_date_paie.id_for_label }}');
         const vacancesSoldeDisplay = document.getElementById('vacances-solde-display');
         const tauxHoraireDisplay = document.getElementById('taux-horaire-display');
+        const heuresRegulieresInput = document.getElementById('{{ form.heures_travaillees.id_for_label }}');
+        const heuresSuppInput = document.getElementById('{{ form.heures_supp.id_for_label }}');
+        const vacancesPayeesInput = document.getElementById('{{ form.vacances_payees.id_for_label }}');
+        const salaireBrutEstime = document.getElementById('salaire-brut-estime');
+
+        function refreshSalaireBrut() {
+            if (!salaireBrutEstime) {
+                return;
+            }
+            const taux = Number.parseFloat((tauxHoraireDisplay?.textContent || '0').replace(',', '.')) || 0;
+            const heuresRegulieres = Number.parseFloat((heuresRegulieresInput?.value || '0').replace(',', '.')) || 0;
+            const heuresSupp = Number.parseFloat((heuresSuppInput?.value || '0').replace(',', '.')) || 0;
+            const vacancesPayees = Number.parseFloat((vacancesPayeesInput?.value || '0').replace(',', '.')) || 0;
+            const brut = heuresRegulieres * taux + heuresSupp * taux * 1.5 + vacancesPayees;
+            salaireBrutEstime.textContent = brut.toFixed(2);
+        }
 
         function updateTauxHoraire(value) {
             if (!tauxHoraireDisplay) {
@@ -191,6 +337,7 @@
             tauxHoraireDisplay.textContent = Number.isFinite(taux) ? taux.toFixed(2) : '0.00';
             tauxHoraireDisplay.classList.toggle('text-danger', !Number.isFinite(taux) || taux <= 0);
             tauxHoraireDisplay.classList.toggle('fw-semibold', !Number.isFinite(taux) || taux <= 0);
+            refreshSalaireBrut();
         }
 
         function updateDatePaieFromSelect() {
@@ -281,6 +428,9 @@
         if (dateFinInput) {
             dateFinInput.addEventListener('change', updateDatePaieFromSelect);
         }
+        [heuresRegulieresInput, heuresSuppInput, vacancesPayeesInput].filter(Boolean).forEach((input) => {
+            input.addEventListener('input', refreshSalaireBrut);
+        });
 
         const componentIds = [
             '{{ form.code_f_rpa.id_for_label }}',
@@ -345,6 +495,7 @@
         });
 
         refreshTotal();
+        refreshSalaireBrut();
         refreshPeriodeEmploye();
     })();
 </script>

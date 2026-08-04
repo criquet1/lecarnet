@@ -170,6 +170,7 @@ class PaieForm(forms.ModelForm):
         fields = [
             'employe',
             'heures_travaillees',
+            'heures_supp',
             'vacances_payees',
             'vacances',
             'montant_personnel_federal_td1',
@@ -183,6 +184,7 @@ class PaieForm(forms.ModelForm):
         widgets = {
             'employe': forms.Select(attrs={'class': 'form-select'}),
             'heures_travaillees': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'heures_supp': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
             'vacances_payees': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
             'vacances': forms.HiddenInput(),
             'montant_personnel_federal_td1': forms.HiddenInput(),
@@ -207,6 +209,7 @@ class PaieForm(forms.ModelForm):
         self._selected_candidate = None
         self.fields['employe'].queryset = Employe.objects.filter(actif=True).select_related('frequence_paie').order_by('nom', 'prenom', 'id')
         self.fields['vacances'].required = False
+        self.fields['heures_supp'].required = False
         self.fields['vacances_payees'].required = False
 
         if self.is_bound:
@@ -233,6 +236,22 @@ class PaieForm(forms.ModelForm):
         ]
         for field_name in optional_decimal_fields:
             self.fields[field_name].required = False
+
+        champs_alignes_droite = [
+            'heures_travaillees',
+            'heures_supp',
+            'vacances_payees',
+            'periode_date_paie',
+            'retenue_supplementaire_qc',
+            'deduction_code_f',
+            'cotisation_supplementaire_rrq_csa',
+        ]
+        for champ in champs_alignes_droite:
+            existing = self.fields[champ].widget.attrs.get('class', '')
+            self.fields[champ].widget.attrs['class'] = f'{existing} text-end'.strip()
+
+        existing_periode_date_fin = self.fields['periode_date_fin'].widget.attrs.get('class', '')
+        self.fields['periode_date_fin'].widget.attrs['class'] = f'{existing_periode_date_fin} text-center'.strip()
 
     @staticmethod
     def _add_months(base_date, months):
@@ -560,8 +579,9 @@ class PaieForm(forms.ModelForm):
         cleaned_data['montant_personnel_quebec_tp1015'] = employe.montant_personnel_quebec_defaut
 
         heures_travaillees = self._decimal_or_zero(cleaned_data.get('heures_travaillees'))
+        heures_supp = self._decimal_or_zero(cleaned_data.get('heures_supp'))
         taux_horaire = self._decimal_or_zero(cleaned_data.get('taux_horaire'))
-        if heures_travaillees > 0 and taux_horaire <= 0:
+        if (heures_travaillees > 0 or heures_supp > 0) and taux_horaire <= 0:
             self.add_error(
                 'employe',
                 'Le taux horaire de cet employe est absent ou invalide. Corrigez sa fiche avant de calculer la paie.',
@@ -569,6 +589,7 @@ class PaieForm(forms.ModelForm):
             return cleaned_data
 
         salaire_brut = heures_travaillees * taux_horaire
+        salaire_brut += heures_supp * taux_horaire * Paie.TAUX_HEURES_SUPP
         salaire_brut += self._decimal_or_zero(cleaned_data.get('vacances_payees'))
         taux_vacances = self._decimal_or_zero(employe.taux_vacances)
         cleaned_data['vacances'] = (salaire_brut * taux_vacances).quantize(Decimal('0.01'))

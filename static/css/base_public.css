@@ -1,0 +1,302 @@
+/* ==========================================================================
+   BASE PUBLIC
+   Mon carnet comptable
+   ========================================================================== */
+
+:root {
+
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+
+    --accent: #ff2d8d;
+    --accent-dark: #e91e79;
+
+    --text: #1f2a56;
+    --text-light: #5d6b89;
+
+    --background: #ffffff;
+    --border: #e8edf7;
+
+    --shadow:
+        0 10px 35px rgba(20,40,120,.08);
+
+}
+
+/* ========================================================================== */
+/* RESET */
+/* ========================================================================== */
+
+*,
+*::before,
+*::after{
+
+    box-sizing:border-box;
+
+}
+
+html{
+
+    scroll-behavior:smooth;
+
+}
+
+body{
+
+    margin:0;
+    font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;
+    background:#fff;
+    color:var(--text);
+
+}
+
+/* ========================================================================== */
+/* CONTAINER */
+/* ========================================================================== */
+
+.container-xl{
+
+    width:min(1400px,92%);
+    margin:auto;
+
+}
+
+/* ========================================================================== */
+/* HEADER */
+/* ========================================================================== */
+
+.public-header{
+
+    position:sticky;
+    top:0;
+    z-index:1000;
+
+    background:#fff;
+
+    border-bottom:1px solid var(--border);
+
+}
+
+.public-header-inner{
+
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+
+    height:96px;
+
+}
+
+/* ========================================================================== */
+/* LOGO */
+/* ========================================================================== */
+
+.logo{
+
+    display:flex;
+    align-items:center;
+    gap:20px;
+
+    text-decoration:none;
+    color:var(--text);
+
+}
+
+.logo:hover{
+
+    color:var(--text);
+
+}
+
+.logo-icon{
+
+    width:74px;
+    height:74px;
+
+    border-radius:22px;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    background:linear-gradient(
+        135deg,
+        #3b82f6,
+        #6366f1
+    );
+
+    color:#fff;
+
+    font-size:2rem;
+
+    box-shadow:
+
+        0 12px 30px rgba(59,130,246,.28);
+
+}
+
+.logo span{
+
+    font-size:2.3rem;
+    font-weight:800;
+    letter-spacing:-1px;
+
+}
+
+/* ========================================================================== */
+/* BOUTON */
+/* ========================================================================== */
+
+.login-btn{
+
+    display:inline-flex;
+    align-items:center;
+    gap:12px;
+
+    padding:
+
+        16px 34px;
+
+    border-radius:16px;
+
+    text-decoration:none;
+
+    color:#fff;
+
+    font-weight:700;
+
+    background:
+
+        linear-gradient(
+            135deg,
+            #ff4d94,
+            #ff1977
+        );
+
+    transition:.25s;
+
+    box-shadow:
+
+        0 14px 30px rgba(255,50,140,.28);
+
+}
+
+.login-btn:hover{
+
+    color:#fff;
+
+    transform:translateY(-3px);
+
+}
+
+/* ========================================================================== */
+/* MAIN */
+/* ========================================================================== */
+
+main{
+
+    min-height:70vh;
+
+}
+
+/* ========================================================================== */
+/* FOOTER */
+/* ========================================================================== */
+
+.site-footer{
+
+    margin-top:100px;
+
+    background:#0f1738;
+
+    color:#fff;
+
+}
+
+.site-footer-inner{
+
+    display:flex;
+    justify-content:center;
+    align-items:center;
+
+    height:80px;
+
+    font-size:.95rem;
+
+    opacity:.95;
+
+}
+
+/* ========================================================================== */
+/* UTILITAIRES */
+/* ========================================================================== */
+
+.text-primary{
+
+    color:var(--primary);
+
+}
+
+.text-pink{
+
+    color:var(--accent);
+
+}
+
+/* ========================================================================== */
+/* RESPONSIVE */
+/* ========================================================================== */
+
+@media(max-width:992px){
+
+    .public-header-inner{
+
+        height:auto;
+
+        padding:20px 0;
+
+        flex-direction:column;
+
+        gap:25px;
+
+    }
+
+    .logo span{
+
+        font-size:1.9rem;
+
+    }
+
+}
+
+@media(max-width:576px){
+
+    .logo{
+
+        gap:14px;
+
+    }
+
+    .logo-icon{
+
+        width:60px;
+        height:60px;
+
+        font-size:1.6rem;
+
+    }
+
+    .logo span{
+
+        font-size:1.55rem;
+
+    }
+
+    .login-btn{
+
+        width:100%;
+
+        justify-content:center;
+
+    }
+
+}

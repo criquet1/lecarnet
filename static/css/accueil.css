@@ -1,145 +1,114 @@
-/*==================================================
-MON CARNET COMPTABLE
-Page d'accueil
-==================================================*/
+/* ==========================================================
+   ACCUEIL
+========================================================== */
 
-:root{
+:root {
 
-    --primary:#ff3b8d;
-    --primary-dark:#ff1d74;
-
-    --secondary:#5d6bff;
-
-    --dark:#151b3b;
-
-    --text:#1f2744;
-
-    --muted:#687189;
-
-    --bg:#fafbff;
-
-    --card:#ffffff;
-
-    --radius:24px;
-
-    --shadow:
-        0 20px 60px rgba(24,36,72,.08);
+    --primary: #2563eb;
+    --secondary: #ff2f86;
+    --dark: #1d2746;
+    --text: #44506a;
+    --light: #f7f9fd;
+    --white: #ffffff;
 
 }
 
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-}
 
-body{
+/* ==========================================================
+   HERO
+========================================================== */
 
-    font-family:Inter,sans-serif;
+.hero {
 
-    background:var(--bg);
+    position: relative;
+    overflow: hidden;
 
-    color:var(--text);
+    padding: 70px 0 90px;
 
-}
+    background:
+        radial-gradient(circle at top left,
+            rgba(255, 72, 145, .10),
+            transparent 35%),
 
-img{
+        radial-gradient(circle at top right,
+            rgba(37,99,235,.12),
+            transparent 40%),
 
-    max-width:100%;
-
-}
-
-.container-xl{
-
-    max-width:1400px;
+        #fbfcff;
 
 }
 
-/*==================================================
-HEADER
-==================================================*/
 
-.public-header{
+.hero-grid{
 
-    background:white;
+    display:grid;
 
-    position:sticky;
-
-    top:0;
-
-    z-index:1000;
-
-    padding:30px 0;
-
-}
-
-.public-header-inner{
-
-    display:flex;
-
-    justify-content:space-between;
+    grid-template-columns:1fr 1fr;
 
     align-items:center;
 
-}
-
-.logo{
-
-    display:flex;
-
-    align-items:center;
-
-    gap:18px;
-
-    text-decoration:none;
-
-    color:var(--text);
+    gap:70px;
 
 }
 
-.logo:hover{
 
-    color:var(--text);
+.hero-content h1{
 
-}
+    font-size:4.2rem;
 
-.logo-icon{
-
-    width:70px;
-
-    height:70px;
-
-    border-radius:22px;
-
-    display:flex;
-
-    align-items:center;
-
-    justify-content:center;
-
-    background:linear-gradient(
-        135deg,
-        #5d6bff,
-        #4b63ff
-    );
-
-    color:white;
-
-    font-size:2rem;
-
-    box-shadow:0 15px 35px rgba(93,107,255,.30);
-
-}
-
-.logo span{
-
-    font-size:2.2rem;
+    line-height:1.08;
 
     font-weight:800;
 
+    color:var(--dark);
+
+    margin-bottom:30px;
+
 }
 
-.login-btn{
+
+.hero-content h1 span{
+
+    color:var(--primary);
+
+}
+
+
+.hero-content p{
+
+    font-size:1.35rem;
+
+    line-height:1.8;
+
+    color:var(--text);
+
+    max-width:560px;
+
+    margin-bottom:40px;
+
+}
+
+
+.hero-badge{
+
+    display:inline-block;
+
+    padding:8px 18px;
+
+    margin-bottom:25px;
+
+    border-radius:30px;
+
+    background:#edf4ff;
+
+    color:var(--primary);
+
+    font-weight:600;
+
+}
+
+
+.hero-btn{
 
     display:inline-flex;
 
@@ -149,138 +118,358 @@ HEADER
 
     padding:16px 34px;
 
-    border-radius:18px;
+    border-radius:15px;
+
+    background:linear-gradient(135deg,#ff4b97,#ff2f86);
+
+    color:#fff;
 
     text-decoration:none;
 
-    background:linear-gradient(
-        135deg,
-        var(--primary),
-        var(--primary-dark)
-    );
-
-    color:white;
-
     font-weight:700;
 
-    transition:.3s;
+    transition:.30s;
+
+    box-shadow:0 45px 80px rgba(15,23,56,.18);
 
 }
 
-.login-btn:hover{
+
+.hero-btn:hover{
 
     transform:translateY(-3px);
 
-    color:white;
+    color:#fff;
 
 }
 
-/*==================================================
-HERO
-==================================================*/
 
-.hero{
+.hero-features{
 
-    padding:80px 0 120px;
+    display:flex;
 
-    overflow:hidden;
+    gap:35px;
+
+    margin-top:60px;
+
+}
+
+
+.feature{
+
+    display:flex;
+
+    align-items:flex-start;
+
+    gap:15px;
+
+}
+
+
+.feature-icon{
+
+    width:56px;
+
+    height:56px;
+
+    border-radius:50%;
+
+    display:flex;
+
+    justify-content:center;
+
+    align-items:center;
+
+    font-size:1.4rem;
+
+    background:#eef4ff;
+
+    color:var(--primary);
+
+}
+
+
+.feature strong{
+
+    display:block;
+
+    margin-bottom:4px;
+
+    color:var(--dark);
+
+}
+
+
+.feature p{
+
+    margin:0;
+
+    font-size:.95rem;
+
+}
+
+
+/* ==========================================================
+   IMAGE
+========================================================== */
+
+.hero-image{
 
     position:relative;
 
-    background:
+    display:flex;
 
-        radial-gradient(circle at left top,
-        rgba(255,61,140,.08),
-        transparent 40%),
-
-        radial-gradient(circle at right top,
-        rgba(93,107,255,.08),
-        transparent 45%);
+    justify-content:center;
 
 }
 
-.hero-grid{
+
+.dashboard-glow{
+
+    position:absolute;
+
+    width:520px;
+
+    height:520px;
+
+    border-radius:50%;
+
+    background:radial-gradient(circle,
+        rgba(37,99,235,.22),
+        transparent 70%);
+
+    filter:blur(15px);
+
+}
+
+
+.hero-image img{
+
+    position:relative;
+
+    width:100%;
+
+    max-width:760px;
+
+    border-radius:26px;
+
+    box-shadow:
+        0 50px 90px rgba(25,35,80,.18);
+
+    transform:rotate(-5deg);
+
+    transition:.45s;
+
+}
+
+
+.hero-image img:hover{
+
+    transform:rotate(-3deg) scale(1.02);
+
+}
+
+
+/* ==========================================================
+   MODULES
+========================================================== */
+
+.modules{
+
+    padding:80px 0;
+
+    background:white;
+
+}
+
+
+.modules-grid{
 
     display:grid;
 
-    grid-template-columns:46% 54%;
+    grid-template-columns:repeat(4,1fr);
+
+    gap:35px;
+
+}
+
+
+.module-card{
+
+    background:white;
+
+    border-radius:22px;
+
+    padding:40px;
+
+    text-align:center;
+
+    box-shadow:0 18px 45px rgba(40,50,90,.08);
+
+    transition:.30s;
+
+}
+
+
+.module-card:hover{
+
+    transform:translateY(-8px);
+
+}
+
+
+.module-icon{
+
+    width:84px;
+
+    height:84px;
+
+    margin:auto auto 25px;
+
+    border-radius:50%;
+
+    display:flex;
+
+    justify-content:center;
 
     align-items:center;
 
-    gap:40px;
-
-}
-
-.hero-title{
-
-    font-size:5rem;
-
-    line-height:1.05;
-
-    font-weight:900;
-
-    margin-bottom:30px;
-
-}
-
-.hero-title span{
-
-    color:#2f6fff;
-
-}
-
-.hero-text{
-
-    font-size:1.45rem;
-
-    line-height:1.8;
-
-    color:var(--muted);
-
-    max-width:560px;
-
-    margin-bottom:40px;
-
-}
-
-.btn-primary-hero{
-
-    display:inline-flex;
-
-    align-items:center;
-
-    gap:14px;
-
-    padding:18px 36px;
-
-    border-radius:18px;
-
-    background:linear-gradient(
-        135deg,
-        var(--primary),
-        var(--primary-dark)
-    );
-
-    color:white;
-
-    text-decoration:none;
-
-    font-size:1.1rem;
-
-    font-weight:700;
-
-    transition:.3s;
-
-    box-shadow:0 15px 40px rgba(255,50,120,.25);
-
-}
-
-.btn-primary-hero:hover{
-
-    transform:translateY(-4px);
+    font-size:2rem;
 
     color:white;
 
 }
 
 
+.pink{
+
+    background:#ff4b97;
+
+}
+
+.purple{
+
+    background:#7c6dff;
+
+}
+
+.blue{
+
+    background:#2563eb;
+
+}
+
+.green{
+
+    background:#29c98b;
+
+}
+
+
+.module-card h3{
+
+    margin-bottom:18px;
+
+    font-size:1.7rem;
+
+    color:var(--dark);
+
+}
+
+
+.module-card p{
+
+    color:var(--text);
+
+    line-height:1.7;
+
+}
+
+
+/* ==========================================================
+   RESPONSIVE
+========================================================== */
+
+@media (max-width:1200px){
+
+.hero-grid{
+
+grid-template-columns:1fr;
+
+text-align:center;
+
+}
+
+.hero-content p{
+
+margin:auto auto 40px;
+
+}
+
+.hero-features{
+
+justify-content:center;
+
+}
+
+.hero-image{
+
+margin-top:60px;
+
+}
+
+}
+
+
+@media (max-width:900px){
+
+.hero h1{
+
+font-size:3rem;
+
+}
+
+.modules-grid{
+
+grid-template-columns:1fr 1fr;
+
+}
+
+.hero-features{
+
+flex-direction:column;
+
+align-items:center;
+
+}
+
+}
+
+
+@media (max-width:650px){
+
+.hero{
+
+padding:60px 0;
+
+}
+
+.hero h1{
+
+font-size:2.3rem;
+
+}
+
+.modules-grid{
+
+grid-template-columns:1fr;
+
+}
+
+.hero-image img{
+
+transform:none;
+
+}
+
+}

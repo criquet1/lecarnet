@@ -248,9 +248,12 @@ class ParametresTauxPaie(models.Model):
 
 
 class Paie(models.Model):
+    TAUX_HEURES_SUPP = Decimal('1.50')
+
     employe = models.ForeignKey(Employe, on_delete=models.PROTECT, related_name='paies')
     periode = models.ForeignKey(PeriodePaie, on_delete=models.PROTECT, related_name='paies')
     heures_travaillees = models.DecimalField(max_digits=7, decimal_places=2, default=Decimal('0.00'))
+    heures_supp = models.DecimalField(max_digits=7, decimal_places=2, default=Decimal('0.00'))
     vacances_payees = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     vacances = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     taux_horaire = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
@@ -285,6 +288,7 @@ class Paie(models.Model):
         'employe_id',
         'periode_id',
         'heures_travaillees',
+        'heures_supp',
         'vacances_payees',
         'vacances',
         'taux_horaire',
@@ -505,8 +509,9 @@ class Paie(models.Model):
     def recalculer(self):
         taux_horaire = self.taux_horaire if self.taux_horaire is not None else self.employe.taux_horaire_defaut
         heures_travaillees = self._decimal_or_zero(self.heures_travaillees)
+        heures_supp = self._decimal_or_zero(self.heures_supp)
         taux_horaire = self._decimal_or_zero(taux_horaire)
-        if heures_travaillees > 0 and taux_horaire <= 0:
+        if (heures_travaillees > 0 or heures_supp > 0) and taux_horaire <= 0:
             raise ValidationError(
                 'Le taux horaire de cet employe est absent ou invalide. Corrigez sa fiche avant de calculer la paie.'
             )
@@ -529,6 +534,7 @@ class Paie(models.Model):
         self.vacances_payees = self._decimal_or_zero(self.vacances_payees)
         salaire_brut_periode = (
             heures_travaillees * taux_horaire
+            + heures_supp * taux_horaire * self.TAUX_HEURES_SUPP
             + self.vacances_payees
         )
         cumuls = self._cumuls_precedents()

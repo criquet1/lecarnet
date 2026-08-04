@@ -29,6 +29,34 @@
             padding: .15rem .2rem;
         }
     }
+
+    #modal-ecriture-salaire-lignes .indent-credit {
+        padding-left: 2rem;
+    }
+
+    .statut-transmission {
+        display: inline-block;
+        width: .75rem;
+        height: .75rem;
+        border-radius: 50%;
+        margin-right: .4rem;
+        border: 1px solid #adb5bd;
+        vertical-align: middle;
+    }
+
+    .statut-transmission.statut-vert {
+        background-color: #198754;
+        border-color: #198754;
+    }
+
+    .statut-transmission.statut-jaune {
+        background-color: #ffc107;
+        border-color: #ffc107;
+    }
+
+    .statut-transmission.statut-blanc {
+        background-color: #fff;
+    }
 </style>
 {% endblock %}
 
@@ -42,11 +70,11 @@
 
 <ul class="nav nav-tabs mb-3" id="journalTabs" role="tablist">
     <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="journal-total-tab" data-bs-toggle="tab" data-bs-target="#journal-total" type="button" role="tab" aria-controls="journal-total" aria-selected="true">Total</button>
+        <button class="nav-link{% if not active_employe_tab_id %} active{% endif %}" id="journal-total-tab" data-bs-toggle="tab" data-bs-target="#journal-total" type="button" role="tab" aria-controls="journal-total" aria-selected="{% if not active_employe_tab_id %}true{% else %}false{% endif %}">Total</button>
     </li>
     {% for tab in employe_tabs %}
         <li class="nav-item" role="presentation">
-            <button class="nav-link" id="journal-{{ tab.tab_id }}-tab" data-bs-toggle="tab" data-bs-target="#journal-{{ tab.tab_id }}" type="button" role="tab" aria-controls="journal-{{ tab.tab_id }}" aria-selected="false">{{ tab.employe }}</button>
+            <button class="nav-link{% if tab.tab_id == active_employe_tab_id %} active{% endif %}" id="journal-{{ tab.tab_id }}-tab" data-bs-toggle="tab" data-bs-target="#journal-{{ tab.tab_id }}" type="button" role="tab" aria-controls="journal-{{ tab.tab_id }}" aria-selected="{% if tab.tab_id == active_employe_tab_id %}true{% else %}false{% endif %}">{{ tab.employe }}</button>
         </li>
     {% endfor %}
 </ul>
@@ -58,7 +86,7 @@
         </form>
     {% endif %}
 
-    <div class="tab-pane fade show active" id="journal-total" role="tabpanel" aria-labelledby="journal-total-tab" tabindex="0">
+    <div class="tab-pane fade{% if not active_employe_tab_id %} show active{% endif %}" id="journal-total" role="tabpanel" aria-labelledby="journal-total-tab" tabindex="0">
         <div class="row g-3 mb-4">
             <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Total brut</div><div class="display-6">{{ total_brut|default:0|floatformat:2 }}</div></div></div></div>
             <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Total net</div><div class="display-6">{{ total_net|default:0|floatformat:2 }}</div></div></div></div>
@@ -77,10 +105,10 @@
                                 <th colspan="3"></th>
                             </tr>
                             <tr>
-                                <th rowspan="2">Période</th>
+                                <th rowspan="2"># pér.</th>
                                 <th rowspan="2">Date fin</th>
                                 <th rowspan="2" class="text-end">Heures</th>
-                                <th rowspan="2" class="text-end">Vacances payées</th>
+                                <th rowspan="2" class="text-end">Vac. payées</th>
                                 <th rowspan="2" class="text-end">Brut</th>
                                 <th rowspan="2" class="text-end">Net</th>
                                 <th colspan="2" class="text-center" style="border-left: 6px solid #495057; border-right: 1px solid #6c757d;">RRQ</th>
@@ -96,19 +124,24 @@
                                 <th rowspan="2" class="text-end">Vacances</th>
                             </tr>
                             <tr>
-                                <th class="text-end" style="border-left: 6px solid #495057;">Employé</th>
-                                <th class="text-end" style="border-right: 1px solid #6c757d;">Employeur</th>
-                                <th class="text-end">Employé</th>
-                                <th class="text-end" style="border-right: 1px solid #6c757d;">Employeur</th>
-                                <th class="text-end" style="border-left: 6px solid #495057;">Employé</th>
-                                <th class="text-end" style="border-right: 1px solid #6c757d;">Employeur</th>
+                                <th class="text-end" style="border-left: 6px solid #495057;">yé</th>
+                                <th class="text-end" style="border-right: 1px solid #6c757d;">yeur</th>
+                                <th class="text-end">yé</th>
+                                <th class="text-end" style="border-right: 1px solid #6c757d;">yeur</th>
+                                <th class="text-end" style="border-left: 6px solid #495057;">yé</th>
+                                <th class="text-end" style="border-right: 1px solid #6c757d;">yeur</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for row in total_rows %}
                                 {% if row.type == 'period' %}
                                     <tr{% if can_create_salary_entry %} class="js-creer-ecriture-salaire" data-create-url="{% url 'paie:paie_creer_ecriture_salaire' row.totals.periode.id %}" role="button" tabindex="0"{% endif %}>
-                                        <td>{{ row.period_index }}</td>
+                                        <td>
+                                            {% if row.statut_transmission %}
+                                                <span class="statut-transmission statut-{{ row.statut_transmission }}" title="{% if row.statut_transmission == 'vert' %}Transmise au journal général{% elif row.statut_transmission == 'jaune' %}Transmise, mais les montants ont changé{% else %}Non transmise au journal général{% endif %}"></span>
+                                            {% endif %}
+                                            {{ row.period_index }}
+                                        </td>
                                         <td>{{ row.date_fin|date:"Y-m-d" }}</td>
                                         <td class="text-end">{{ row.totals.heures|floatformat:2 }}</td>
                                         <td class="text-end">{{ row.totals.vacances_payees|floatformat:2 }}</td>
@@ -192,7 +225,7 @@
     </div>
 
     {% for tab in employe_tabs %}
-        <div class="tab-pane fade" id="journal-{{ tab.tab_id }}" role="tabpanel" aria-labelledby="journal-{{ tab.tab_id }}-tab" tabindex="0">
+        <div class="tab-pane fade{% if tab.tab_id == active_employe_tab_id %} show active{% endif %}" id="journal-{{ tab.tab_id }}" role="tabpanel" aria-labelledby="journal-{{ tab.tab_id }}-tab" tabindex="0">
             <div class="row g-3 mb-4">
                 <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Total brut</div><div class="display-6">{{ tab.total_brut|default:0|floatformat:2 }}</div></div></div></div>
                 <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted small">Total net</div><div class="display-6">{{ tab.total_net|default:0|floatformat:2 }}</div></div></div></div>
@@ -223,7 +256,7 @@
                                     {% if row.type == 'paie' %}
                                         <tr>
                                             <td>{{ row.paie.periode.date_fin|date:"Y-m-d" }}</td>
-                                            <td class="text-end">{{ row.paie.heures_travaillees|floatformat:2 }}</td>
+                                            <td class="text-end">{{ row.paie.heures_travaillees|add:row.paie.heures_supp|floatformat:2 }}</td>
                                             <td class="text-end">{{ row.paie.vacances_payees|floatformat:2 }}</td>
                                             <td class="text-end">{{ row.paie.salaire_brut_periode|floatformat:2 }}</td>
                                             <td class="text-end">{{ row.paie.salaire_net|floatformat:2 }}</td>
@@ -266,12 +299,147 @@
 </div>
 
 {% if can_create_salary_entry %}
+<div class="modal fade" id="modal-ecriture-salaire" tabindex="-1" aria-labelledby="modal-ecriture-salaire-titre" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modal-ecriture-salaire-titre">Écriture de salaire</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <p id="modal-ecriture-salaire-message" class="mb-3"></p>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Compte</th>
+                                <th class="text-end">Débit</th>
+                                <th class="text-end">Crédit</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modal-ecriture-salaire-lignes"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="modal-ecriture-salaire-update" class="btn btn-warning d-none">Mettre à jour</button>
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if can_create_salary_entry %}
 <script>
     (function () {
         const form = document.getElementById('form-creer-ecriture-salaire');
         const rows = document.querySelectorAll('.js-creer-ecriture-salaire');
-        if (!form || !rows.length) {
+        const modalElement = document.getElementById('modal-ecriture-salaire');
+        if (!form || !rows.length || !modalElement) {
             return;
+        }
+
+        const csrfToken = form.querySelector('[name=csrfmiddlewaretoken]').value;
+        const modal = new bootstrap.Modal(modalElement);
+        const modalMessage = document.getElementById('modal-ecriture-salaire-message');
+        const modalLignes = document.getElementById('modal-ecriture-salaire-lignes');
+        const updateButton = document.getElementById('modal-ecriture-salaire-update');
+        let currentRow = null;
+
+        function appliquerStatut(row, data) {
+            if (!row) {
+                return;
+            }
+            const pastille = row.querySelector('.statut-transmission');
+            if (!pastille) {
+                return;
+            }
+            const statut = (data.updated || data.matches) ? 'vert' : 'jaune';
+            pastille.classList.remove('statut-vert', 'statut-jaune', 'statut-blanc');
+            pastille.classList.add('statut-' + statut);
+        }
+
+        function poster(url) {
+            return fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            }).then(function (response) {
+                return response.json();
+            });
+        }
+
+        function afficherEcriture(data) {
+            let message;
+            if (data.updated) {
+                message = `L'écriture salaire a été mise à jour (${data.no_ej}).`;
+            } else if (data.already_existed) {
+                message = data.matches
+                    ? `L'écriture salaire existe déjà (${data.no_ej}).`
+                    : `L'écriture salaire existe déjà (${data.no_ej}), mais les montants ont changé depuis sa création.`;
+            } else {
+                message = `Écriture salaire créée (${data.no_ej}).`;
+            }
+            modalMessage.textContent = message;
+
+            modalLignes.innerHTML = '';
+            data.lines.forEach(function (ligne) {
+                const tr = document.createElement('tr');
+                const tdCompte = document.createElement('td');
+                if (ligne.credit) {
+                    tdCompte.className = 'indent-credit';
+                }
+                tdCompte.textContent = `${ligne.compte_numero} - ${ligne.compte_libelle}`;
+                const tdDebit = document.createElement('td');
+                tdDebit.className = 'text-end';
+                tdDebit.textContent = ligne.debit;
+                const tdCredit = document.createElement('td');
+                tdCredit.className = 'text-end';
+                tdCredit.textContent = ligne.credit;
+                tr.append(tdCompte, tdDebit, tdCredit);
+                modalLignes.appendChild(tr);
+            });
+
+            if (updateButton) {
+                const needsUpdate = Boolean(data.already_existed && data.matches === false && data.update_url);
+                updateButton.classList.toggle('d-none', !needsUpdate);
+                updateButton.disabled = false;
+                updateButton.dataset.updateUrl = needsUpdate ? data.update_url : '';
+            }
+
+            appliquerStatut(currentRow, data);
+
+            modal.show();
+        }
+
+        if (updateButton) {
+            updateButton.addEventListener('click', function () {
+                const updateUrl = updateButton.dataset.updateUrl;
+                if (!updateUrl) {
+                    return;
+                }
+
+                updateButton.disabled = true;
+                poster(updateUrl)
+                    .then(function (data) {
+                        if (data.ok) {
+                            afficherEcriture(data);
+                        } else {
+                            updateButton.disabled = false;
+                            window.alert(data.error || "Une erreur est survenue.");
+                        }
+                    })
+                    .catch(function () {
+                        updateButton.disabled = false;
+                        window.alert("Une erreur est survenue lors de la mise à jour de l'écriture.");
+                    });
+            });
         }
 
         rows.forEach(function (row) {
@@ -291,8 +459,18 @@
                     return;
                 }
 
-                form.action = createUrl;
-                form.submit();
+                currentRow = row;
+                poster(createUrl)
+                    .then(function (data) {
+                        if (data.ok) {
+                            afficherEcriture(data);
+                        } else {
+                            window.alert(data.error || "Une erreur est survenue.");
+                        }
+                    })
+                    .catch(function () {
+                        window.alert("Une erreur est survenue lors de la création de l'écriture.");
+                    });
             });
             row.addEventListener('keydown', function (event) {
                 if (event.key === 'Enter' || event.key === ' ') {
@@ -304,4 +482,12 @@
     })();
 </script>
 {% endif %}
+
+<script>
+    (function () {
+        if (window.parent !== window) {
+            window.parent.postMessage({ type: 'paie-tab-sync', tab: 'journal' }, window.location.origin);
+        }
+    })();
+</script>
 {% endblock %}

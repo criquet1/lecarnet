@@ -513,6 +513,45 @@ class AccountingSqlViewsTests(TestCase):
 		self.assertEqual(response.status_code, 302)
 		self.assertFalse(company.created_by_non_expert)
 
+	def test_company_can_be_edited(self):
+		user = get_user_model().objects.create_user(username='company-editor', password='pass1234')
+		other_account = Compte.objects.using(self.alias).create(
+			numero=4998,
+			libelle='Compte compagnie modifiee',
+			no_total=self.compte.no_total,
+		)
+		company = Compagnie.objects.using(self.alias).create(
+			nom='Compagnie avant',
+			logo='images.png',
+			cap_ou_car=Compagnie.MODE_AUTRE,
+			created_by_non_expert=True,
+		)
+
+		request = RequestFactory().post('/facture/', {
+			'action': 'edit_company',
+			'company_id': str(company.pk),
+			'company-nom': 'Compagnie apres',
+			'company-logo': 'images.png',
+			'company-cap_ou_car': Compagnie.MODE_CAP,
+			'company-comptes': [str(other_account.pk)],
+		})
+		request.user = user
+		request.active_client_alias = self.alias
+
+		token = set_current_tenant_alias(self.alias)
+		try:
+			response = facture(request)
+			company.refresh_from_db()
+			company_account_ids = list(company.comptes.values_list('pk', flat=True))
+		finally:
+			reset_current_tenant_alias(token)
+
+		self.assertEqual(response.status_code, 302)
+		self.assertEqual(company.nom, 'Compagnie apres')
+		self.assertEqual(company.cap_ou_car, Compagnie.MODE_CAP)
+		self.assertTrue(company.created_by_non_expert)
+		self.assertEqual(company_account_ids, [other_account.pk])
+
 	def test_invoice_accounts_must_match_invoice_total(self):
 		car_account = Compte.objects.using(self.alias).create(
 			numero=1201,
