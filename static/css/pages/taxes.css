@@ -31,6 +31,11 @@
     width: 250px;
 }
 
+/* MONTANTS */
+.table-rapport .montant {
+    text-align: right;
+}
+
 /* TOTaux */
 .table-rapport tfoot td {
     border-top: 1px solid black;

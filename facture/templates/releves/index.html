@@ -92,11 +92,12 @@ Téléchargement des relevés bancaires
                         {% if lignes %}
                             <table class="table table-sm table-striped table-hover releve-table mx-auto" style="table-layout:fixed;width:75%">
                                 <colgroup>
-                                    <col style="width:11%">
-                                    <col style="width:8%">
-                                    <col style="width:35%">
-                                    <col style="width:15%">
-                                    <col style="width:15%">
+                                    <col style="width:10%">
+                                    <col style="width:7%">
+                                    <col style="width:30%">
+                                    <col style="width:9%">
+                                    <col style="width:14%">
+                                    <col style="width:14%">
                                     <col style="width:16%">
                                 </colgroup>
                                 <thead class="table-dark">
@@ -104,6 +105,7 @@ Téléchargement des relevés bancaires
                                         <th>Date</th>
                                         <th>No ligne</th>
                                         <th>Description relevé</th>
+                                        <th>No chèque</th>
                                         <th class="text-end">Retrait</th>
                                         <th class="text-end">Dépôt</th>
                                         <th class="text-end">Solde</th>
@@ -124,6 +126,7 @@ Téléchargement des relevés bancaires
                                         data-no-ligne="{{ r.no_ligne|escape }}"
                                         data-desc-releve="{{ r.desc_releve|escape }}"
                                         data-desc-ctb="{{ r.desc_ctb|default:''|escape }}"
+                                        data-no-cheque="{{ r.no_cheque|default:''|escape }}"
                                         data-retrait="{% if r.retrait is not None %}{{ r.retrait|unlocalize }}{% endif %}"
                                         data-depot="{% if r.depot is not None %}{{ r.depot|unlocalize }}{% endif %}"
                                         data-debit="{% if r.retrait is not None %}{{ r.retrait|unlocalize }}{% endif %}"
@@ -150,6 +153,7 @@ Téléchargement des relevés bancaires
                                                 </span>
                                             {% endif %}
                                         </td>
+                                        <td>{{ r.no_cheque|default:'' }}</td>
                                         <td class="text-end">{% if r.retrait %}{{ r.retrait }}{% endif %}</td>
                                         <td class="text-end">{% if r.depot %}{{ r.depot }}{% endif %}</td>
                                         <td class="text-end">{{ r.solde }}</td>

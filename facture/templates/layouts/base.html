@@ -52,6 +52,28 @@
       <script>
             if (window.self !== window.top)
                   document.body.classList.add('embedded-report');
+
+            // Remonte la hauteur reelle du contenu embarque au parent (une seule barre de defilement).
+            if (window.self !== window.top) {
+                  (function () {
+                        function sendHeight() {
+                              var height = Math.max(
+                                    document.documentElement.scrollHeight,
+                                    document.body.scrollHeight
+                              );
+                              window.parent.postMessage({ type: 'report-frame-height', height: height }, window.location.origin);
+                        }
+
+                        window.addEventListener('load', sendHeight);
+                        window.addEventListener('resize', sendHeight);
+
+                        if (window.ResizeObserver) {
+                              new ResizeObserver(sendHeight).observe(document.documentElement);
+                        } else {
+                              setInterval(sendHeight, 500);
+                        }
+                  })();
+            }
       </script>
 
     {% block body %}

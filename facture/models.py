@@ -359,6 +359,7 @@ class Releve(models.Model):
     no_ligne = models.CharField(max_length=30, blank=False, null=False)
     desc_releve = models.CharField(max_length=255, blank=False, null=False)
     desc_ctb = models.CharField(max_length=40, blank=True, null=False, default='')
+    no_cheque = models.CharField(max_length=20, blank=True, null=False, default='')
     frais = models.CharField(max_length=20, blank=True, null=False, default='')
     retrait = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     depot = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)

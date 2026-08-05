@@ -129,26 +129,22 @@
 
 .report-tab-panel {
     width: 100%;
-    min-height: 680px;
+    min-height: 300px;
 }
 
 .report-frame {
     display: block;
     width: 100%;
-    min-height: 680px;
-    height: calc(100vh - 235px);
+    min-height: 300px;
+    height: 300px;
     border: 0;
     background: #fff;
+    overflow: hidden;
 }
 
 @media (max-width: 768px) {
     .report-tab-panel,
     .report-frame {
-        min-height: 620px;
+        min-height: 260px;
     }
-
-    .report-frame {
-        height: calc(100vh - 210px);
-    }
-
 }

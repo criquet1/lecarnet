@@ -50,9 +50,9 @@ class RapportTaxesAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 
 
 class ReleveBancaireAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ('id', 'fichier_source', 'nom_institut', 'no_compte', 'type_compte', 'date', 'no_ligne', 'desc_releve', 'desc_ctb')
+    list_display = ('id', 'fichier_source', 'nom_institut', 'no_compte', 'type_compte', 'date', 'no_ligne', 'desc_releve', 'desc_ctb', 'no_cheque')
     list_filter = ('nom_institut', 'date')
-    search_fields = ('nom_institut', 'desc_releve', 'desc_ctb')
+    search_fields = ('nom_institut', 'desc_releve', 'desc_ctb', 'no_cheque')
 
 
 class CompteReleveAdmin(ImportExportModelAdmin, admin.ModelAdmin):

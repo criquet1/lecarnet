@@ -18,7 +18,7 @@ import csv
 import json
 from io import TextIOWrapper
 import chardet
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from facture.constants import MONTH_LABELS_FR
 from facture.models import Compagnie, Tr_desc, Tr_detail, Source, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, Facture, SoldeFin, TransactionListe
 from compte.models import Setting
@@ -1940,6 +1940,12 @@ def _date_moins_mois(value, months):
     return date(target_year, target_month, target_day)
 
 
+def _dernier_jour_mois_precedent(value):
+    """Retourne le dernier jour du mois qui précède celui de `value`, afin d'exclure
+    le mois en cours de la recherche d'écritures similaires."""
+    return date(value.year, value.month, 1) - timedelta(days=1)
+
+
 def _candidats_ecriture_similaire(releve=None, max_candidats=500):
     """Precalcule une fois (par requete) la liste des lignes de relevé qui ont deja une
     ecriture, avec leurs lignes de detail hors compte lie. Les virements inter-relevés
@@ -1950,9 +1956,10 @@ def _candidats_ecriture_similaire(releve=None, max_candidats=500):
         ecriture_tr_desc__isnull=False,
     )
     if releve and releve.date:
+        date_maximum = _dernier_jour_mois_precedent(releve.date)
         candidats_qs = candidats_qs.filter(
             date__gte=_date_moins_mois(releve.date, 18),
-            date__lte=releve.date,
+            date__lte=date_maximum,
         )
 
     candidats_qs = candidats_qs.select_related(
@@ -2004,7 +2011,7 @@ def _meilleures_correspondances(releve, candidats_enrichis, limit=1):
 
     cible = _normalize_desc_releve(releve.desc_releve)
     date_minimum = _date_moins_mois(releve.date, 18).isoformat()
-    date_maximum = releve.date.isoformat()
+    date_maximum = _dernier_jour_mois_precedent(releve.date).isoformat()
     correspondances = []
     for candidat in candidats_enrichis:
         if candidat['releve_pk'] == releve.pk:
@@ -2081,10 +2088,12 @@ def _import_releve_csv(csv_file):
                 continue
 
             if type_compte:
+                no_cheque = row[6].strip() if len(row) > 6 else ''
                 retrait = parse_decimal(row[7] if len(row) > 7 else '', none_if_blank=True)
                 depot = parse_decimal(row[8] if len(row) > 8 else '', none_if_blank=True)
                 solde = parse_decimal(row[13] if len(row) > 13 else '', none_if_blank=False) or Decimal('0')
             else:
+                no_cheque = ''
                 charge = parse_decimal(row[11] if len(row) > 11 else '', none_if_blank=True)
                 paiement = parse_decimal(row[12] if len(row) > 12 else '', none_if_blank=True)
                 retrait = charge if charge and charge > 0 else None
@@ -2107,6 +2116,7 @@ def _import_releve_csv(csv_file):
                 'no_ligne': no_ligne,
                 'desc_releve': desc_releve,
                 'desc_ctb': desc_releve[:40],
+                'no_cheque': no_cheque,
                 'retrait': retrait,
                 'depot': depot,
                 'solde': solde,

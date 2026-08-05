@@ -4,7 +4,7 @@
 {% block title %}Rapports{% endblock %}
 
 {% block page_css %}
-<link rel="stylesheet" href="{% static 'css/pages/reports.css' %}?v=20260803-1">
+<link rel="stylesheet" href="{% static 'css/pages/reports.css' %}?v=20260805-1">
 {% endblock %}
 
 {% block page_title %}Rapports{% endblock %}
@@ -48,6 +48,7 @@
         });
 
         if (frame.dataset.activeTab !== activeTab.dataset.reportTab) {
+            frame.style.height = '';
             frame.src = activeTab.dataset.reportUrl;
             frame.dataset.activeTab = activeTab.dataset.reportTab;
             frame.title = activeTab.textContent.trim();
@@ -73,6 +74,15 @@
 
     window.addEventListener('popstate', function () {
         activate(new URLSearchParams(window.location.search).get('tab'), false);
+    });
+
+    // Une seule barre de defilement: l'iframe adopte la hauteur reelle de son contenu.
+    window.addEventListener('message', function (event) {
+        if (event.origin !== window.location.origin)
+            return;
+        if (!event.data || event.data.type !== 'report-frame-height' || typeof event.data.height !== 'number')
+            return;
+        frame.style.height = event.data.height + 'px';
     });
 
     activate(new URLSearchParams(window.location.search).get('tab'), false);
