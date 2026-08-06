@@ -56,7 +56,7 @@ Gestion des factures des fournisseurs.
     <div class="row g-3">
         {% for compagnie in compagnies %}
             <div class="col-md-3">
-                <div class="card h-100" role="button" data-bs-toggle="modal" data-bs-target="#invoiceModal" data-company-id="{{ compagnie.id }}" data-company-name="{{ compagnie.nom|escape }}" data-company-mode="{{ compagnie.cap_ou_car|default:'' }}" data-company-created-by-non-expert="{{ compagnie.created_by_non_expert|yesno:'1,0' }}" data-company-logo="{% if compagnie.logo %}{% static 'images/logos/'|add:compagnie.logo %}{% endif %}" data-company-logo-name="{{ compagnie.logo|escape }}" data-company-accounts="{% for compte in compagnie.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
+                <div class="card h-100" role="button" data-bs-toggle="modal" data-bs-target="#invoiceModal" data-company-id="{{ compagnie.id }}" data-company-name="{{ compagnie.nom|escape }}" data-company-mode="{{ compagnie.cap_ou_car|default:'' }}" data-company-created-by-non-expert="{{ compagnie.created_by_non_expert|yesno:'1,0' }}" data-company-active="{{ compagnie.active|yesno:'1,0' }}" data-company-logo="{% if compagnie.logo %}{% static 'images/logos/'|add:compagnie.logo %}{% endif %}" data-company-logo-name="{{ compagnie.logo|escape }}" data-company-accounts="{% for compte in compagnie.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
                     {% if compagnie.logo %}
                         <img src="{% static 'images/logos/'|add:compagnie.logo %}" class="company-logo" alt="Logo de {{ compagnie.nom }}" style="width:100px;height:100px;object-fit:contain;display:block;margin:0 auto 1rem;">
                     {% endif %}
@@ -64,6 +64,11 @@ Gestion des factures des fournisseurs.
                         <h5 class="card-title">
                             <span class="company-check text-success me-2" data-company-id="{{ compagnie.id }}" style="display:none;"><i class="bi bi-check-circle-fill fs-4"></i></span>{{ compagnie.nom }}
                         </h5>
+                        {% if compagnie.active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Non active</span>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -202,6 +207,7 @@ Gestion des factures des fournisseurs.
             var companyLogoInput = document.getElementById('id_company-logo');
             var companyAccountsInput = document.getElementById('id_company-comptes');
             var companyModeInput = document.getElementById('id_company-cap_ou_car');
+            var companyActiveInput = document.getElementById('id_company-active');
 
             function configureCompanyModal(trigger) {
                 var isEdit = trigger.getAttribute('data-company-action') === 'edit';
@@ -223,6 +229,9 @@ Gestion des factures des fournisseurs.
                 }
                 if (companyModeInput) {
                     companyModeInput.value = isEdit ? trigger.getAttribute('data-company-mode') || '' : '';
+                }
+                if (companyActiveInput) {
+                    companyActiveInput.checked = isEdit ? trigger.getAttribute('data-company-active') === '1' : true;
                 }
                 if (companyAccountsInput) {
                     var selectedAccountIds = isEdit
@@ -982,6 +991,7 @@ Gestion des factures des fournisseurs.
                     var companyLogo = button.getAttribute('data-company-logo');
                     var companyLogoName = button.getAttribute('data-company-logo-name') || '';
                     var companyAccountIds = button.getAttribute('data-company-accounts') || '';
+                    var companyActive = button.getAttribute('data-company-active') || '1';
                     activeCompanyMode = companyMode;
 
                     if (companyMode === 'CAP') {
@@ -1010,6 +1020,7 @@ Gestion des factures des fournisseurs.
                         editCompanyTrigger.setAttribute('data-company-logo-name', companyLogoName);
                         editCompanyTrigger.setAttribute('data-company-mode', companyMode);
                         editCompanyTrigger.setAttribute('data-company-accounts', companyAccountIds);
+                        editCompanyTrigger.setAttribute('data-company-active', companyActive);
                         editCompanyTrigger.setAttribute('aria-label', 'Modifier ' + (companyName || 'la compagnie'));
                     }
 

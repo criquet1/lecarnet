@@ -853,13 +853,22 @@ def facture(request):
         'compte_fr_retard',
     ).first()
     comptes_count = Compte.objects.count()
+    working_period = get_working_period(request)
+    invoice_detail_ids = Facture.objects.values('transaction_id')
     compagnies = Compagnie.objects.prefetch_related(
         'comptes',
         Prefetch(
             'tr_desc',
             queryset=_company_invoices_queryset()
         )
-    ).exclude(nom__in=TAX_AUTHORITY_COMPANY_NAMES).order_by('nom', 'id')
+    ).exclude(nom__in=TAX_AUTHORITY_COMPANY_NAMES).filter(
+        # Une compagnie non active reste visible si elle a servi a facturer sur la periode affichee.
+        Q(active=True) | Q(
+            tr_desc__date__year=working_period['year'],
+            tr_desc__date__month=working_period['month'],
+            tr_desc__details__id__in=Subquery(invoice_detail_ids),
+        )
+    ).distinct().order_by('nom', 'id')
     comptes_queryset = Compte.objects.all()
 
     all_comptes = [

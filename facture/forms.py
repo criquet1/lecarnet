@@ -14,7 +14,7 @@ class CompagnieForm(forms.ModelForm):
 
     class Meta:
         model = Compagnie
-        fields = ['nom', 'logo', 'comptes', 'cap_ou_car']
+        fields = ['nom', 'logo', 'comptes', 'cap_ou_car', 'active']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

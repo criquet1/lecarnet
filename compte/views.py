@@ -17,6 +17,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.connection import ConnectionDoesNotExist
 from django.utils import timezone
+from django.utils.html import format_html
 
 from facture.models import Compagnie, CompagnieSoldeDepart, CompteReleve, SoldeFin, Source, Tr_desc, Tr_detail
 from facture.utils import ensure_tax_authority_companies, expert_required, get_settings, parse_decimal, read_csv_rows
@@ -532,6 +533,11 @@ def _configured_tenant_aliases():
 	return set(tenants.keys())
 
 
+def _tenant_env_snippet(alias, db_config):
+	"""Extrait JSON pret a fusionner dans la variable Render TENANT_DATABASES_JSON."""
+	return json.dumps({alias: db_config}, indent=2, ensure_ascii=False)
+
+
 @login_required
 @expert_required
 def creer_tenant_page(request):
@@ -632,7 +638,19 @@ def creer_tenant_page(request):
 
 					messages.success(request, f"Le tenant '{name}' a ete cree et active. Utilisateur cree: {username}")
 					if (os.environ.get('TENANT_DATABASES_JSON') or '').strip():
-						messages.warning(request, 'TENANT_DATABASES_JSON est defini: ajoute aussi ce tenant dans cette variable pour le prochain redemarrage.')
+						snippet = _tenant_env_snippet(db_alias, db_config)
+						messages.warning(
+							request,
+							format_html(
+								'TENANT_DATABASES_JSON est defini sur ce serveur: ce tenant ne survivra pas au '
+								'prochain redemarrage tant que tu n\'as pas ajoute la cle "{alias}" ci-dessous dans '
+								'cette variable d\'environnement (fusionne-la avec les cles existantes, ne remplace '
+								'pas les autres tenants), puis redeploie.<br>'
+								'<pre class="mt-2 mb-0 p-2 bg-light border rounded" style="white-space: pre-wrap;">{snippet}</pre>',
+								alias=db_alias,
+								snippet=snippet,
+							),
+						)
 					return redirect('settings')
 				except Exception as exc:
 					if tenant_user is not None:
