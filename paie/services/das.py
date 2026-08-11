@@ -24,6 +24,7 @@ class DASInputs:
     max_assurable_rqap: Decimal
     taux_ae_employe: Decimal
     max_assurable_ae: Decimal
+    taux_rrq_premiere_cotisation_supplementaire_employe: Decimal = Decimal("0.00")
     montant_personnel_federal_td1: Decimal = Decimal("0.00")
     montant_personnel_quebec_tp1015: Decimal = Decimal("0.00")
     cumul_salaire_brut_annee: Decimal = Decimal("0.00")
@@ -88,7 +89,7 @@ def calculer_rqap(
     return arrondir_monnaie(_positive_or_zero(rqap))
 
 
-def calculer_rrq(
+def calculer_rrq_composantes(
     salaire_brut_periode: Decimal,
     periodes_par_annee: int,
     cumul_salaire_brut_annee: Decimal,
@@ -98,7 +99,14 @@ def calculer_rrq(
     exemption_base_rrq: Decimal,
     max_assurable_rrq: Decimal,
     max_supplementaire_rrq: Decimal,
-) -> Decimal:
+) -> tuple[Decimal, Decimal]:
+    """Retourne (C, C2), tel que definis au guide TP-1015.F:
+    C = cotisation de base + premiere cotisation supplementaire au RRQ
+        pour la periode (tranche sous le MGA).
+    C2 = deuxieme cotisation supplementaire au RRQ pour la periode
+        (tranche entre le MGA et le max supplementaire).
+    Chacune est arrondie individuellement, car elles representent des
+    montants distincts retenus sur la paie."""
     if periodes_par_annee <= 0:
         raise ValueError("periodes_par_annee doit etre superieur a zero")
 
@@ -116,21 +124,60 @@ def calculer_rrq(
     cumul_apres = cumul_salaire_brut_annee + salaire_brut_periode
     exemption_periode = exemption_base_rrq / Decimal(periodes_par_annee)
 
-    # Part des revenus de la periode qui tombe dans la tranche [0, MGA].
     base_avant = min(cumul_salaire_brut_annee, max_assurable_rrq)
     base_apres = min(cumul_apres, max_assurable_rrq)
     revenus_tranche_base = _positive_or_zero(base_apres - base_avant)
     assiette_base = _positive_or_zero(revenus_tranche_base - exemption_periode)
-    cot_base = assiette_base * taux_rrq
+    c = arrondir_monnaie(_positive_or_zero(assiette_base * taux_rrq))
 
-    # Part des revenus de la periode qui tombe dans la tranche [MGA, max_supplementaire].
     supp2_avant = _positive_or_zero(min(cumul_salaire_brut_annee, max_supplementaire_rrq) - max_assurable_rrq)
     supp2_apres = _positive_or_zero(min(cumul_apres, max_supplementaire_rrq) - max_assurable_rrq)
     revenus_tranche_supp2 = _positive_or_zero(supp2_apres - supp2_avant)
-    cot_supp2 = revenus_tranche_supp2 * taux_rrq_supplementaire_2
+    c2 = arrondir_monnaie(_positive_or_zero(revenus_tranche_supp2 * taux_rrq_supplementaire_2))
 
-    rrq = cot_base + cot_supp2
-    return arrondir_monnaie(_positive_or_zero(rrq))
+    return c, c2
+
+
+def calculer_rrq(
+    salaire_brut_periode: Decimal,
+    periodes_par_annee: int,
+    cumul_salaire_brut_annee: Decimal,
+    cumul_rrq_annee: Decimal,
+    taux_rrq: Decimal,
+    taux_rrq_supplementaire_2: Decimal,
+    exemption_base_rrq: Decimal,
+    max_assurable_rrq: Decimal,
+    max_supplementaire_rrq: Decimal,
+) -> Decimal:
+    c, c2 = calculer_rrq_composantes(
+        salaire_brut_periode,
+        periodes_par_annee,
+        cumul_salaire_brut_annee,
+        cumul_rrq_annee,
+        taux_rrq=taux_rrq,
+        taux_rrq_supplementaire_2=taux_rrq_supplementaire_2,
+        exemption_base_rrq=exemption_base_rrq,
+        max_assurable_rrq=max_assurable_rrq,
+        max_supplementaire_rrq=max_supplementaire_rrq,
+    )
+    return arrondir_monnaie(c + c2)
+
+
+# Ratio fixe utilise par le guide TP-1015.F pour isoler la premiere
+# cotisation supplementaire au RRQ a l'interieur de C (formule CS).
+RATIO_PREMIERE_COTISATION_SUPPLEMENTAIRE_RRQ = Decimal("0.01") / Decimal("0.0630")
+
+
+def calculer_csa_rrq(c: Decimal, c2: Decimal) -> Decimal:
+    """CSA (guide TP-1015.F, partie 2.1.1): deduction des cotisations
+    supplementaires de l'employee ou de l'employe au RRQ, admissible en
+    reduction du revenu imposable provincial.
+    CS = C x (0,01 / 0,0630) + C2
+    CSA = CS x [(S3 - B2) / S3], mais ce systeme ne gere pas les
+    gratifications/paiements forfaitaires distincts (B2 = 0), donc
+    CSA = CS."""
+    cs = Decimal(c) * RATIO_PREMIERE_COTISATION_SUPPLEMENTAIRE_RRQ + Decimal(c2)
+    return arrondir_monnaie(_positive_or_zero(cs))
 
 
 def calculer_ae(
@@ -294,7 +341,7 @@ def calculer_das(inputs: DASInputs) -> DASResult:
         taux_rqap=inputs.taux_rqap_employe,
         max_assurable_rqap=inputs.max_assurable_rqap,
     )
-    rrq = calculer_rrq(
+    rrq_c, rrq_c2 = calculer_rrq_composantes(
         salaire_brut_periode,
         inputs.periodes_par_annee,
         inputs.cumul_salaire_brut_annee,
@@ -305,6 +352,9 @@ def calculer_das(inputs: DASInputs) -> DASResult:
         max_assurable_rrq=inputs.max_assurable_rrq,
         max_supplementaire_rrq=inputs.max_supplementaire_rrq,
     )
+    rrq = arrondir_monnaie(rrq_c + rrq_c2)
+    csa_calculee = calculer_csa_rrq(rrq_c, rrq_c2)
+    csa_totale = arrondir_monnaie(csa_calculee + Decimal(inputs.cotisation_supplementaire_rrq_csa))
     ae = calculer_ae(
         salaire_brut_periode,
         inputs.cumul_ae_annee,
@@ -341,7 +391,7 @@ def calculer_das(inputs: DASInputs) -> DASResult:
         deduction_tp1015_j=inputs.deduction_tp1015_j,
         deduction_tp1016_j1=inputs.deduction_tp1016_j1,
         retenue_supplementaire_qc=inputs.retenue_supplementaire_qc,
-        cotisation_supplementaire_rrq_csa=inputs.cotisation_supplementaire_rrq_csa,
+        cotisation_supplementaire_rrq_csa=csa_totale,
         credit_personnel_quebec_min=inputs.credit_personnel_quebec_min,
         deduction_travailleur_qc_max_annuelle=inputs.deduction_travailleur_qc_max_annuelle,
         seuil_qc_1=inputs.seuil_qc_1,

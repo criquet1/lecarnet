@@ -166,6 +166,7 @@ class ParametresTauxPaie(models.Model):
 
     taux_rrq_employe = models.DecimalField(max_digits=7, decimal_places=5)
     taux_rrq_supplementaire_2_employe = models.DecimalField(max_digits=7, decimal_places=5, default=Decimal('4.00000'))
+    taux_rrq_premiere_cotisation_supplementaire_employe = models.DecimalField(max_digits=7, decimal_places=5, default=Decimal('1.00000'))
     taux_rrq_employeur = models.DecimalField(max_digits=7, decimal_places=5)
     exemption_base_rrq = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('3500.00'))
     max_assurable_rrq = models.DecimalField(max_digits=12, decimal_places=2)
@@ -386,6 +387,7 @@ class Paie(models.Model):
         fallback = {
             'taux_rrq_employe': Decimal('6.30000'),
             'taux_rrq_supplementaire_2_employe': Decimal('4.00000'),
+            'taux_rrq_premiere_cotisation_supplementaire_employe': Decimal('1.00000'),
             'exemption_base_rrq': Decimal('3500.00'),
             'max_assurable_rrq': Decimal('74600.00'),
             'max_supplementaire_rrq': Decimal('85000.00'),
@@ -466,14 +468,18 @@ class Paie(models.Model):
 
         rrq_rate = Paie._rate_to_ratio(_value(rrq_row, 'taux_rrq_employe'))
         rrq_supp2_rate = Paie._rate_to_ratio(_value(rrq_row, 'taux_rrq_supplementaire_2_employe'))
+        rrq_premiere_supp_rate = Paie._rate_to_ratio(_value(rrq_row, 'taux_rrq_premiere_cotisation_supplementaire_employe'))
         if rrq_rate <= 0 or rrq_rate <= rrq_supp2_rate:
             rrq_rate = Paie._rate_to_ratio(fallback['taux_rrq_employe'])
         if rrq_supp2_rate < 0:
             rrq_supp2_rate = Paie._rate_to_ratio(fallback['taux_rrq_supplementaire_2_employe'])
+        if rrq_premiere_supp_rate < 0 or rrq_premiere_supp_rate >= rrq_rate:
+            rrq_premiere_supp_rate = Paie._rate_to_ratio(fallback['taux_rrq_premiere_cotisation_supplementaire_employe'])
 
         return {
             'taux_rrq_employe': rrq_rate,
             'taux_rrq_supplementaire_2_employe': rrq_supp2_rate,
+            'taux_rrq_premiere_cotisation_supplementaire_employe': rrq_premiere_supp_rate,
             'exemption_base_rrq': rrq_exemption,
             'max_assurable_rrq': rrq_max_assurable,
             'max_supplementaire_rrq': rrq_max_supplementaire,
@@ -557,6 +563,7 @@ class Paie(models.Model):
                 cotisation_supplementaire_rrq_csa=self._decimal_or_zero(self.cotisation_supplementaire_rrq_csa),
                 taux_rrq_employe=self._decimal_or_zero(taux_effectifs['taux_rrq_employe']),
                 taux_rrq_supplementaire_2_employe=self._decimal_or_zero(taux_effectifs['taux_rrq_supplementaire_2_employe']),
+                taux_rrq_premiere_cotisation_supplementaire_employe=self._decimal_or_zero(taux_effectifs['taux_rrq_premiere_cotisation_supplementaire_employe']),
                 exemption_base_rrq=self._decimal_or_zero(taux_effectifs['exemption_base_rrq']),
                 max_assurable_rrq=taux_effectifs['max_assurable_rrq'],
                 max_supplementaire_rrq=taux_effectifs['max_supplementaire_rrq'],
