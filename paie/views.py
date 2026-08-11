@@ -1,8 +1,9 @@
 import calendar as py_calendar
 import re
 from datetime import date as date_type
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from urllib.parse import urlencode
+
 
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -184,7 +185,7 @@ def _next_no_ej_paie():
 
 
 def _money(value):
-	return Decimal(value).quantize(Decimal('0.01'))
+	return Decimal(value).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
 def _compute_employer_totals_for_period(paies, settings_instance):
@@ -640,7 +641,7 @@ def journal_paies_page(request):
 		return value if value is not None else Decimal('0.00')
 
 	def _money(value):
-		return Decimal(value).quantize(Decimal('0.01'))
+		return Decimal(value).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 	taux_cnesst_setting = _d(getattr(settings_instance, 'taux_cnesst_employeur', None))
 	taux_fss_setting = _d(getattr(settings_instance, 'taux_fss_employeur', None))
@@ -1178,7 +1179,7 @@ def remises_mensuelles_page(request):
 		return value if value is not None else Decimal('0.00')
 
 	def _money(value):
-		return Decimal(value).quantize(Decimal('0.01'))
+		return Decimal(value).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 	taux_cnesst_setting = _d(getattr(settings_instance, 'taux_cnesst_employeur', None))
 	taux_fss_setting = _d(getattr(settings_instance, 'taux_fss_employeur', None))
@@ -1219,20 +1220,27 @@ def remises_mensuelles_page(request):
 	federal_total = {
 		'ae_employe': Decimal('0.00'),
 		'ae_employeur': Decimal('0.00'),
+		'ae_total': Decimal('0.00'),
 		'impot_federal': Decimal('0.00'),
 		'total': Decimal('0.00'),
 	}
 	provincial_total = {
 		'rrq_employe': Decimal('0.00'),
 		'rrq_employeur': Decimal('0.00'),
+		'rrq_total': Decimal('0.00'),
 		'rqap_employe': Decimal('0.00'),
 		'rqap_employeur': Decimal('0.00'),
+		'rqap_total': Decimal('0.00'),
 		'impot_provincial': Decimal('0.00'),
+		'fss_employeur': Decimal('0.00'),
+		'cnesst_employeur': Decimal('0.00'),
 		'total': Decimal('0.00'),
 	}
+	revenu_brut_total = Decimal('0.00')
 
 	for paie in paies:
 		date_paie = paie.periode.date_paie or paie.periode.date_fin
+		revenu_brut_total += _d(paie.salaire_brut_periode)
 		rrq_row = _row_for_block(date_paie, 'rrq_date_debut_effet', 'rrq_date_fin_effet')
 		rqap_row = _row_for_block(date_paie, 'rqap_date_debut_effet', 'rqap_date_fin_effet')
 		ae_row = _row_for_block(date_paie, 'ae_date_debut_effet', 'ae_date_fin_effet')
@@ -1259,19 +1267,26 @@ def remises_mensuelles_page(request):
 		federal_total['ae_employeur'] += ae_employeur
 		federal_total['impot_federal'] += _d(paie.impot_federal)
 		federal_total['total'] += _d(paie.ae) + ae_employeur + _d(paie.impot_federal)
+		federal_total['ae_total'] = federal_total['ae_employe'] + federal_total['ae_employeur']
 
 		provincial_total['rrq_employe'] += _d(paie.rrq)
 		provincial_total['rrq_employeur'] += rrq_employeur
 		provincial_total['rqap_employe'] += _d(paie.rqap)
 		provincial_total['rqap_employeur'] += rqap_employeur
 		provincial_total['impot_provincial'] += _d(paie.impot_provincial)
-		provincial_total['total'] += _d(paie.rrq) + rrq_employeur + _d(paie.rqap) + rqap_employeur + _d(paie.impot_provincial) + cnesst_employeur
+		provincial_total['fss_employeur'] += fss_employeur
+		provincial_total['cnesst_employeur'] += cnesst_employeur
+		provincial_total['total'] += _d(paie.rrq) + rrq_employeur + _d(paie.rqap) + rqap_employeur + _d(paie.impot_provincial) + fss_employeur + cnesst_employeur
+		provincial_total['rrq_total'] = provincial_total['rrq_employe'] + provincial_total['rrq_employeur']
+		provincial_total['rqap_total'] = provincial_total['rqap_employe'] + provincial_total['rqap_employeur']
+		
 
 	return render(request, 'paie/remises_mensuelles.html', {
 		'title': 'Remises mensuelles',
 		'federal_total': federal_total,
 		'provincial_total': provincial_total,
 		'paies_count': len(paies),
+		'revenu_brut_total': revenu_brut_total,
 	})
 
 
