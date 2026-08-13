@@ -13,6 +13,12 @@
 
 {% endblock %}
 
+{% if request.GET.embed != "1" %}
+{% block sidebar %}
+{% include "includes/navigation/app_sidebar.html" %}
+{% endblock %}
+{% endif %}
+
 
 {% block body %}
 

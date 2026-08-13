@@ -581,12 +581,20 @@ def journal_general(request):
     report_date = max((entry.date for entry in journal_entries if entry.date), default=None)
     report_year_label = _closing_date_label(report_date, settings_instance)
 
+    # --- ajout : donnees necessaires pour transactions_form.html ---
+    compagnies = Compagnie.objects.order_by('nom')
+    comptes = Compte.objects.order_by('numero')
+
     return render(request, "rapports/journal_general.html", {
         'title': "Journal général",
         'journal_entries': journal_entries,
         'total_debit': total_debit,
         'total_credit': total_credit,
         'report_year_label': report_year_label,
+        'compagnies': compagnies,
+        'comptes': comptes,
+        'compte_cap_id': settings_instance.cap_id if settings_instance else None,
+        'compte_car_id': settings_instance.car_id if settings_instance else None,
     })
 
 

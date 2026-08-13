@@ -1,7 +1,7 @@
 from django.contrib import admin
 from facture.models import Compagnie, Facture, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
 from compte.models import Setting
-from import_export.admin import ImportExportModelAdmin
+from import_export.admin import ExportMixin, ImportExportModelAdmin
 
 
 class SettingAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -61,7 +61,7 @@ class CompteReleveAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     search_fields = ('nom_affichage', 'no_compte', 'nom_institut', 'compte_comptable__libelle')
 
 
-class SoldeFinAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+class SoldeFinAdmin(ExportMixin, admin.ModelAdmin):
     list_display = ('compte_numero', 'solde_depart', 'total_transactions', 'solde_final')
     ordering = ('compte_numero',)
     readonly_fields = ('compte_numero', 'solde_depart', 'total_transactions', 'solde_final')
@@ -78,7 +78,7 @@ class SoldeFinAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 
 
 
-class TransactionListeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+class TransactionListeAdmin(ExportMixin, admin.ModelAdmin):
     list_display = ('transaction_id', 'no_ej', 'date', 'compagnie', 'description', 'source', 'compte_numero', 'compte_libelle', 'rapport_taxes_id', 'debit', 'credit')
     ordering = ('transaction_id',)
     readonly_fields = ('transaction_id', 'no_ej', 'date', 'compagnie', 'description', 'source', 'compte_numero', 'compte_libelle', 'rapport_taxes_id', 'debit', 'credit')
@@ -93,7 +93,7 @@ class TransactionListeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
         return False
 
 
-class FactureAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+class FactureAdmin(ExportMixin, admin.ModelAdmin):
     list_display = ('transaction_id', 'no_ej', 'date', 'compagnie', 'description', 'source', 'compte_numero', 'compte_libelle', 'rapport_taxes_id', 'debit', 'credit')
     ordering = ('transaction_id',)
     readonly_fields = ('transaction_id', 'no_ej', 'date', 'compagnie', 'description', 'source', 'compte_numero', 'compte_libelle', 'rapport_taxes_id', 'debit', 'credit')

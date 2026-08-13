@@ -9,6 +9,7 @@ from django.db.utils import OperationalError, ProgrammingError
 from django.utils.connection import ConnectionDoesNotExist
 
 from paie.services.das import DASInputs, calculer_das
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from django.core.cache import cache
 from django.db.models.signals import post_save, post_delete
@@ -65,6 +66,12 @@ class Employe(models.Model):
     )
     actif = models.BooleanField(default=True)
 
+    # --- nouveaux champs ---
+    adresse_postale = models.CharField(max_length=255, blank=True, null=True)
+    telephone = models.CharField(max_length=20, blank=True, null=True)
+    email = models.EmailField(max_length=254, blank=True, null=True)
+    nas = models.CharField(max_length=11, blank=True, null=True)  # format: 123-456-789
+
     class Meta:
         indexes = [
             models.Index(fields=['date_embauche', 'id'], name='paie_employe_date_id_idx'),
@@ -79,6 +86,19 @@ class Employe(models.Model):
             return Decimal(normalized)
         except (InvalidOperation, TypeError, ValueError):
             return Decimal('0.00')
+
+    def solde_vacances(self):
+        from django.db.models import Sum
+        from django.db.models.functions import Coalesce
+
+        result = (
+            self.paies
+            .aggregate(
+                accumule=Coalesce(Sum('vacances'), Decimal('0.00')),
+                verse=Coalesce(Sum('vacances_payees'), Decimal('0.00')),
+            )
+        )
+        return result['accumule'] - result['verse']
 
     @property
     def taux_horaire_defaut(self):
@@ -184,7 +204,6 @@ class ParametresTauxPaie(models.Model):
 
     taux_ae_employe = models.DecimalField(max_digits=7, decimal_places=5)
     taux_ae_employeur = models.DecimalField(max_digits=7, decimal_places=5)
-    taux_cnt_employeur = models.DecimalField(max_digits=7, decimal_places=5, default=Decimal('0.06000'))
     max_assurable_ae = models.DecimalField(max_digits=12, decimal_places=2)
 
     credit_personnel_federal_min = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('16452.00'))
@@ -275,6 +294,13 @@ class Paie(models.Model):
     salaire_net = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     cree_le = models.DateTimeField(auto_now_add=True)
     modifie_le = models.DateTimeField(auto_now=True)
+    gains_assurables_ae = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))       # case 24 T4
+    gains_ouvrant_droit_rrq = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))   # case 26 T4 / case B RL1
+    rrq_employeur = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    rqap_employeur = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    ae_employeur = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    cnesst_employeur = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    fss_employeur = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
 
     class Meta:
         ordering = ['-periode__date_fin', '-id']
@@ -475,6 +501,17 @@ class Paie(models.Model):
             rrq_supp2_rate = Paie._rate_to_ratio(fallback['taux_rrq_supplementaire_2_employe'])
         if rrq_premiere_supp_rate < 0 or rrq_premiere_supp_rate >= rrq_rate:
             rrq_premiere_supp_rate = Paie._rate_to_ratio(fallback['taux_rrq_premiere_cotisation_supplementaire_employe'])
+        if rqap_row is None or rqap_row.taux_rqap_employeur is None:
+            raise ValidationError(
+                "Aucun taux RQAP employeur configure pour la date %s. "
+                "Ajoutez une ligne ParametresTauxPaie couvrant cette periode." % date_reference
+            )
+        if ae_row is None or ae_row.taux_ae_employeur is None:
+            raise ValidationError(
+                "Aucun taux AE employeur configure pour la date %s. "
+                "Ajoutez une ligne ParametresTauxPaie couvrant cette periode." % date_reference
+            )
+
 
         return {
             'taux_rrq_employe': rrq_rate,
@@ -484,8 +521,10 @@ class Paie(models.Model):
             'max_assurable_rrq': rrq_max_assurable,
             'max_supplementaire_rrq': rrq_max_supplementaire,
             'taux_rqap_employe': Paie._percent_to_ratio(_value(rqap_row, 'taux_rqap_employe')),
+            'taux_rqap_employeur': Paie._percent_to_ratio(rqap_row.taux_rqap_employeur),
             'max_assurable_rqap': _value(rqap_row, 'max_assurable_rqap'),
             'taux_ae_employe': Paie._percent_to_ratio(_value(ae_row, 'taux_ae_employe')),
+            'taux_ae_employeur': Paie._percent_to_ratio(ae_row.taux_ae_employeur),
             'max_assurable_ae': _value(ae_row, 'max_assurable_ae'),
             'credit_personnel_federal_min': _value(fiscal_row, 'credit_personnel_federal_min'),
             'taux_credit_federal': Paie._percent_to_ratio(_value(fiscal_row, 'taux_credit_federal')),
@@ -511,7 +550,47 @@ class Paie(models.Model):
             'taux_qc_4': Paie._percent_to_ratio(_value(fiscal_row, 'taux_qc_4')),
             'taux_credit_quebec': Paie._percent_to_ratio(_value(fiscal_row, 'taux_credit_quebec')),
         }
+
+    def _taux_employeur_tenant(self):
+        from compte.models import Setting
+
+        db_alias = self._state.db or 'default'
+        try:
+            settings_instance = (
+                Setting.objects.using(db_alias)
+                .only('taux_cnesst_employeur', 'taux_fss_employeur')
+                .first()
+            )
+        except (ConnectionDoesNotExist, OperationalError, ProgrammingError):
+            settings_instance = None
+
+        if settings_instance is None:
+            raise ValidationError(
+                "Aucune configuration Setting trouvee pour ce tenant (base %s). "
+                "Impossible de calculer les cotisations CNESST/FSS employeur." % db_alias
+            )
+        if settings_instance.taux_cnesst_employeur is None:
+            raise ValidationError(
+                "Le taux CNESST employeur n'est pas configure dans Parametres (Setting) pour ce tenant."
+            )
+        if settings_instance.taux_fss_employeur is None:
+            raise ValidationError(
+                "Le taux FSS employeur n'est pas configure dans Parametres (Setting) pour ce tenant."
+            )
+
+        taux_cnesst = self._decimal_or_zero(settings_instance.taux_cnesst_employeur)
+        taux_fss = self._decimal_or_zero(settings_instance.taux_fss_employeur)
+        return taux_cnesst, taux_fss
     
+    def _gains_plafonnes(self, salaire_brut_periode, cumul_brut_precedent, plafond):
+        plafond = self._decimal_or_zero(plafond)
+        cumul_brut_precedent = self._decimal_or_zero(cumul_brut_precedent)
+        espace_restant = plafond - min(cumul_brut_precedent, plafond)
+        if espace_restant <= 0:
+            return Decimal('0.00')
+        return min(salaire_brut_periode, espace_restant)
+
+
     def recalculer(self):
         taux_horaire = self.taux_horaire if self.taux_horaire is not None else self.employe.taux_horaire_defaut
         heures_travaillees = self._decimal_or_zero(self.heures_travaillees)
@@ -546,6 +625,16 @@ class Paie(models.Model):
         cumuls = self._cumuls_precedents()
         date_reference = self._date_value(self.periode.date_paie or self.periode.date_fin)
         taux_effectifs = self._taux_effectifs(date_reference)
+
+        cumul_brut_precedent = self._decimal_or_zero(cumuls['salaire_brut_periode__sum'])
+
+        self.gains_assurables_ae = self._gains_plafonnes(
+            salaire_brut_periode, cumul_brut_precedent, taux_effectifs['max_assurable_ae']
+        )
+        self.gains_ouvrant_droit_rrq = self._gains_plafonnes(
+            salaire_brut_periode, cumul_brut_precedent, taux_effectifs['max_supplementaire_rrq']
+        )
+
         resultat = calculer_das(
             DASInputs(
                 salaire_brut_periode=salaire_brut_periode,
@@ -606,6 +695,28 @@ class Paie(models.Model):
         self.total_retenues = resultat.total_retenues
         self.vacances = self._decimal_or_zero(self.vacances)
         self.salaire_net = resultat.salaire_net
+
+        # --- Cotisations employeur ---
+        self.rrq_employeur = self.rrq  # dollar pour dollar, confirmé
+
+        taux_rqap_employe = taux_effectifs['taux_rqap_employe']
+        if taux_rqap_employe <= 0:
+            raise ValidationError(
+                "Le taux RQAP employe est nul ou invalide, impossible de deriver la part employeur."
+            )
+        self.rqap_employeur = (
+            self.rqap * taux_effectifs['taux_rqap_employeur'] / taux_rqap_employe
+        ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        self.ae_employeur = (
+            self.gains_assurables_ae * taux_effectifs['taux_ae_employeur']
+        ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        taux_cnesst, taux_fss = self._taux_employeur_tenant()
+        self.cnesst_employeur = (self.salaire_brut_periode * taux_cnesst).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        self.fss_employeur = (self.salaire_brut_periode * taux_fss).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+
 
     def _needs_recalculation(self):
         if self.pk is None:
@@ -670,3 +781,89 @@ def prefill_periodes_sur_nouveaux_taux(sender, instance, created, **kwargs):
                     annee,
                     exc,
                 )
+
+
+class FeuilletFiscalAnnuel(models.Model):
+    employe = models.ForeignKey(Employe, on_delete=models.PROTECT, related_name="feuillets_fiscaux")
+    annee = models.PositiveIntegerField()
+
+    # T4
+    t4_revenu_emploi = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    t4_cotisation_rrq = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    t4_cotisation_ae = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    t4_impot_federal = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    t4_gains_assurables_ae = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    t4_gains_ouvrant_droit_rrq = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+
+    # Relevé 1
+    rl1_revenu_emploi = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    rl1_cotisation_rrq = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    rl1_cotisation_rqap = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    rl1_impot_quebec = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+
+    date_generation = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["employe", "annee"], name="feuillet_unique_employe_annee"),
+        ]
+
+    @classmethod
+    def generer_pour_annee(cls, employe, annee):          # <-- le bloc "totaux" va ICI, indenté sous cette méthode
+        totaux = Paie.objects.filter(
+            employe=employe,
+            periode__date_paie__year=annee,
+        ).aggregate(
+            salaire_brut=Sum("salaire_brut_periode"),
+            rrq=Sum("rrq"),
+            rqap=Sum("rqap"),
+            ae=Sum("ae"),
+            impot_federal=Sum("impot_federal"),
+            impot_provincial=Sum("impot_provincial"),
+            gains_assurables_ae=Sum("gains_assurables_ae"),
+            gains_ouvrant_droit_rrq=Sum("gains_ouvrant_droit_rrq"),
+        )
+
+        feuillet, _ = cls.objects.update_or_create(
+            employe=employe,
+            annee=annee,
+            defaults={
+                "t4_revenu_emploi": totaux["salaire_brut"] or Decimal("0.00"),
+                "t4_cotisation_rrq": totaux["rrq"] or Decimal("0.00"),
+                "t4_cotisation_ae": totaux["ae"] or Decimal("0.00"),
+                "t4_impot_federal": totaux["impot_federal"] or Decimal("0.00"),
+                "t4_gains_assurables_ae": totaux["gains_assurables_ae"] or Decimal("0.00"),
+                "t4_gains_ouvrant_droit_rrq": totaux["gains_ouvrant_droit_rrq"] or Decimal("0.00"),
+                "rl1_revenu_emploi": totaux["salaire_brut"] or Decimal("0.00"),
+                "rl1_cotisation_rrq": totaux["rrq"] or Decimal("0.00"),
+                "rl1_cotisation_rqap": totaux["rqap"] or Decimal("0.00"),
+                "rl1_impot_quebec": totaux["impot_provincial"] or Decimal("0.00"),
+            },
+        )
+        return feuillet
+
+    def __str__(self):
+        return f"Feuillet {self.annee} — {self.employe}"
+
+
+class PaieJournalLigne(models.Model):
+    paie_id = models.IntegerField(primary_key=True)
+    employe_nom = models.CharField(max_length=100)
+    employe_prenom = models.CharField(max_length=100)
+    date_fin = models.DateField()
+    brut = models.DecimalField(max_digits=10, decimal_places=2)
+    net = models.DecimalField(max_digits=10, decimal_places=2)
+    rrq_employe = models.DecimalField(max_digits=10, decimal_places=2)
+    rrq_employeur = models.DecimalField(max_digits=10, decimal_places=2)
+    rqap_employe = models.DecimalField(max_digits=10, decimal_places=2)
+    rqap_employeur = models.DecimalField(max_digits=10, decimal_places=2)
+    ae_employe = models.DecimalField(max_digits=10, decimal_places=2)
+    ae_employeur = models.DecimalField(max_digits=10, decimal_places=2)
+    cnesst_employeur = models.DecimalField(max_digits=10, decimal_places=2)
+    fss_employeur = models.DecimalField(max_digits=10, decimal_places=2)
+    impot_federal = models.DecimalField(max_digits=10, decimal_places=2)
+    impot_provincial = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        managed = False
+        db_table = 'paie_journal_lignes'

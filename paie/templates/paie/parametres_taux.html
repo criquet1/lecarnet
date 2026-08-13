@@ -52,7 +52,6 @@
                     <div class="col-md-4"><label class="form-label" for="{{ form.taux_ae_employe.id_for_label }}">Taux employe (%)</label>{{ form.taux_ae_employe }}{{ form.taux_ae_employe.errors }}</div>
                     <div class="col-md-4"><label class="form-label" for="{{ form.taux_ae_employeur.id_for_label }}">Taux employeur (%)</label>{{ form.taux_ae_employeur }}{{ form.taux_ae_employeur.errors }}</div>
                     <div class="col-md-4"><label class="form-label" for="{{ form.max_assurable_ae.id_for_label }}">Maximum assurable</label>{{ form.max_assurable_ae }}{{ form.max_assurable_ae.errors }}</div>
-                    <div class="col-md-4"><label class="form-label" for="{{ form.taux_cnt_employeur.id_for_label }}">Taux CNT employeur (%)</label>{{ form.taux_cnt_employeur }}{{ form.taux_cnt_employeur.errors }}</div>
 
                     <div class="col-12"><hr class="my-1"><div class="fw-semibold">Fiscal (annuel)</div></div>
                     <div class="col-md-4"><label class="form-label" for="{{ form.credit_personnel_federal_min.id_for_label }}">Credit personnel federal minimal</label>{{ form.credit_personnel_federal_min }}{{ form.credit_personnel_federal_min.errors }}</div>
@@ -112,7 +111,6 @@
                                 <th>Max RQAP</th>
                                 <th>AE emp.</th>
                                 <th>AE empl.</th>
-                                <th>CNT empl.</th>
                                 <th>Max AE</th>
                                 <th></th>
                             </tr>
@@ -136,7 +134,6 @@
                                     <td>{{ row.max_assurable_rqap|floatformat:2 }}</td>
                                     <td>{{ row.taux_ae_employe }}</td>
                                     <td>{{ row.taux_ae_employeur }}</td>
-                                    <td>{{ row.taux_cnt_employeur }}</td>
                                     <td>{{ row.max_assurable_ae|floatformat:2 }}</td>
                                     <td><a href="{% url 'paie:paie_parametres_taux' %}?edit={{ row.id }}" class="btn btn-sm btn-outline-primary">Modifier</a></td>
                                 </tr>

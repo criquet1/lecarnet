@@ -100,6 +100,20 @@ class Setting(models.Model):
     pays = models.CharField(max_length=255, blank=False, null=False)
     phone = models.CharField(max_length=100, blank=False, null=False)
     email = models.EmailField(blank=False, null=False)
+    numero_entreprise_federal = models.CharField(
+        max_length=15,
+        blank=True,
+        null=True,
+        verbose_name="Numéro d'entreprise (NE) fédéral",
+        help_text="Numéro d'entreprise attribué par l'ARC (ex: 123456789RP0001).",
+    )
+    numero_identification_quebec = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        verbose_name="Numéro d'identification Revenu Québec",
+        help_text="Numéro d'identification, dossier de retenues à la source (ex: 1234567890RS0001).",
+    )
     fin_annee_jour = models.PositiveSmallIntegerField(
         blank=True,
         null=True,

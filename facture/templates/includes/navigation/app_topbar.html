@@ -3,50 +3,35 @@
 <header class="app-topbar">
 
     <!-- Partie gauche -->
-
     <div class="topbar-left">
-
         <div class="topbar-company">
-
             {% if site_settings.logo %}
-
                 <img
                     src="{% static 'images/logos/' %}{{ site_settings.logo }}"
                     alt=""
                     class="topbar-company-bg">
-
             {% else %}
-
                 <i class="bi bi-building topbar-company-bg"></i>
-
             {% endif %}
 
             <span class="company-label">
-
                 {% if request.active_client %}
                     {{ request.active_client.name }}
                 {% else %}
                     {{ site_settings.nom }}
                 {% endif %}
-
             </span>
 
             <span class="company-tenant">
-
                 {{ site_settings.nom }}
-
             </span>
-
         </div>
-
     </div>
 
     <!-- Partie droite -->
 
     <div class="topbar-right">
-
         {% if can_switch_tenant and active_client_accesses|length > 1 %}
-
             <form method="post"
                   action="{% url 'set_active_client' %}"
                   class="topbar-tenant-form">
@@ -54,12 +39,9 @@
                 {% csrf_token %}
 
                 <input type="hidden" name="next" value="{{ request.get_full_path }}">
-
                 <label for="topbar-tenant" class="topbar-tenant-label">
-
                     <i class="bi bi-database"></i>
                     <span>Tenant</span>
-
                 </label>
 
                 <select id="topbar-tenant"
@@ -68,26 +50,19 @@
                         aria-label="Tenant actif">
 
                     {% for access in active_client_accesses %}
-
                         <option value="{{ access.client_id }}"{% if active_client and access.client_id == active_client.id %} selected{% endif %}>
                             {{ access.client.name }}
                         </option>
-
                     {% endfor %}
-
                 </select>
 
                 <button type="submit"
                         class="topbar-tenant-submit"
                         title="Changer de tenant"
                         aria-label="Changer de tenant">
-
                     <i class="bi bi-arrow-left-right"></i>
-
                 </button>
-
             </form>
-
         {% endif %}
 
         <form method="post"
@@ -104,11 +79,8 @@
 
             <label for="working-period"
                    class="topbar-period-label">
-
                 <i class="bi bi-calendar3"></i>
-
                 <span>Période</span>
-
             </label>
 
             <input
@@ -117,45 +89,31 @@
                 name="period"
                 value="{{ working_period.value }}"
                 class="form-control form-control-sm topbar-period-input">
-
             <button
                 type="submit"
                 class="topbar-period-submit"
                 title="Appliquer">
 
                 <i class="bi bi-check-lg"></i>
-
             </button>
-
         </form>
 
         <div class="topbar-user">
-
             <i class="bi bi-person-circle"></i>
-
             <span>
-
                 {{ request.user.first_name|default:request.user.username }}
-
             </span>
-
         </div>
 
         <form method="post" action="{% url 'logout' %}" class="topbar-logout-form">
-
             {% csrf_token %}
-
             <button type="submit"
                     class="topbar-logout"
                     title="Déconnexion"
                     aria-label="Déconnexion">
-
                 <i class="bi bi-box-arrow-right"></i>
-
             </button>
-
         </form>
-
     </div>
 
 </header>
@@ -171,7 +129,6 @@
         return;
 
     async function switchTenant() {
-
         if (isSubmitting)
             return;
 
@@ -180,7 +137,6 @@
         select.disabled = true;
 
         try {
-
             const response = await fetch(form.action, {
                 method: 'POST',
                 body: formData,
@@ -197,22 +153,16 @@
                 throw new Error(data.error || 'Le changement de tenant a échoué.');
 
             window.location.reload();
-
         } catch (error) {
-
             isSubmitting = false;
             select.disabled = false;
             window.alert(error.message);
-
         }
-
     }
 
     form.addEventListener('submit', function (event) {
-
         event.preventDefault();
         switchTenant();
-
     });
 
     select.addEventListener('change', function () {
@@ -232,14 +182,9 @@
         return;
 
     localStorage.setItem(form.dataset.storageKey, input.value);
-
     input.addEventListener('change', function () {
-
         localStorage.setItem(form.dataset.storageKey, input.value);
-
         form.requestSubmit();
-
     });
-
 })();
 </script>

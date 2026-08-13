@@ -3,6 +3,7 @@ from datetime import date as date_type
 from datetime import timedelta
 from decimal import Decimal
 from decimal import InvalidOperation
+import re
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -23,6 +24,10 @@ class EmployeForm(forms.ModelForm):
             'nom',
             'prenom',
             'date_embauche',
+            'adresse_postale',
+            'telephone',
+            'email',
+            'nas',
             'salH',
             'e_prov',
             'e_fed',
@@ -34,6 +39,10 @@ class EmployeForm(forms.ModelForm):
             'nom': forms.TextInput(attrs={'class': 'form-control'}),
             'prenom': forms.TextInput(attrs={'class': 'form-control'}),
             'date_embauche': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'adresse_postale': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: 123 rue Principale, Montréal, QC'}),
+            'telephone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: 514-555-1234'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: nom@exemple.com'}),
+            'nas': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: 123-456-789'}),
             'salH': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: 25.00'}),
             'e_prov': forms.NumberInput(attrs={'class': 'form-control', 'step': '1'}),
             'e_fed': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: 16452'}),
@@ -46,6 +55,10 @@ class EmployeForm(forms.ModelForm):
             'e_fed': 'Credit personnel federal',
             'taux_vacances': 'Taux de vacances (%)',
             'frequence_paie': 'Frequence de paie',
+            'adresse_postale': 'Adresse postale',
+            'telephone': 'Telephone',
+            'email': 'Courriel',
+            'nas': 'NAS',
         }
 
     def __init__(self, *args, **kwargs):
@@ -69,6 +82,24 @@ class EmployeForm(forms.ModelForm):
             settings_instance = get_setting('frequence_paie')
             if settings_instance and settings_instance.frequence_paie_id:
                 self.fields['frequence_paie'].initial = settings_instance.frequence_paie_id
+
+    def clean_telephone(self):
+        raw_value = (self.cleaned_data.get('telephone') or '').strip()
+        if not raw_value:
+            return raw_value
+        digits = re.sub(r'\D', '', raw_value)
+        if len(digits) != 10:
+            raise forms.ValidationError('Saisissez un numero de telephone valide a 10 chiffres.')
+        return f'{digits[0:3]}-{digits[3:6]}-{digits[6:10]}'
+
+    def clean_nas(self):
+        raw_value = (self.cleaned_data.get('nas') or '').strip()
+        if not raw_value:
+            return raw_value
+        digits = re.sub(r'\D', '', raw_value)
+        if len(digits) != 9:
+            raise forms.ValidationError('Le NAS doit contenir 9 chiffres.')
+        return f'{digits[0:3]}-{digits[3:6]}-{digits[6:9]}'
 
     def clean_salH(self):
         raw_value = (self.cleaned_data.get('salH') or '').strip()
@@ -678,7 +709,6 @@ class ParametresTauxPaieForm(forms.ModelForm):
         'taux_rqap_employeur',
         'taux_ae_employe',
         'taux_ae_employeur',
-        'taux_cnt_employeur',
         'taux_credit_federal',
         'abattement_federal_quebec',
         'taux_federal_1',
@@ -713,7 +743,6 @@ class ParametresTauxPaieForm(forms.ModelForm):
             'ae_date_fin_effet',
             'taux_ae_employe',
             'taux_ae_employeur',
-            'taux_cnt_employeur',
             'max_assurable_ae',
             'credit_personnel_federal_min',
             'taux_credit_federal',
@@ -757,7 +786,6 @@ class ParametresTauxPaieForm(forms.ModelForm):
             'ae_date_fin_effet': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'taux_ae_employe': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 1,30'}),
             'taux_ae_employeur': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 2,28'}),
-            'taux_cnt_employeur': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 0,06'}),
             'max_assurable_ae': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
             'credit_personnel_federal_min': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
             'taux_credit_federal': forms.TextInput(attrs={'class': 'form-control', 'inputmode': 'decimal', 'placeholder': 'Ex.: 14,00'}),

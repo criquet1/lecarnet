@@ -109,6 +109,32 @@
         </div>
     </div>
 
+
+    <!-- Groupe: Numéros d'entreprise -->
+    <div class="col-12">
+        <div class="border rounded p-3">
+            <h5 class="mb-3">Numéros d'entreprise</h5>
+            <table class="table align-middle mb-0">
+                <tbody>
+                    <tr>
+                        <th style="width: 320px;"><label for="{{ form.numero_entreprise_federal.id_for_label }}">Numéro d'entreprise (NE) fédéral</label></th>
+                        <td>
+                            {{ form.numero_entreprise_federal }}{{ form.numero_entreprise_federal.errors }}
+                            {% if form.numero_entreprise_federal.help_text %}<div class="form-text">{{ form.numero_entreprise_federal.help_text }}</div>{% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.numero_identification_quebec.id_for_label }}">Numéro d'identification Revenu Québec</label></th>
+                        <td>
+                            {{ form.numero_identification_quebec }}{{ form.numero_identification_quebec.errors }}
+                            {% if form.numero_identification_quebec.help_text %}<div class="form-text">{{ form.numero_identification_quebec.help_text }}</div>{% endif %}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- Groupe: Comptes de référence -->
     <div class="col-12">
         <div class="border rounded p-3">

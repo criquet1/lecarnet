@@ -1,6 +1,6 @@
 from django.contrib import admin
-from import_export.admin import ImportExportModelAdmin
-from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie
+from import_export.admin import ExportMixin, ImportExportModelAdmin
+from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie, PaieJournalLigne
 
 
 @admin.register(FrequencePaie)
@@ -19,7 +19,7 @@ class EmployeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 class PeriodePaieAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 	list_display = ('frequence_paie', 'date_debut', 'date_fin', 'date_paie', 'fermee')
 	list_filter = ('frequence_paie', 'fermee')
-
+ 
 
 @admin.register(Paie)
 class PaieAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -44,3 +44,18 @@ class ParametresTauxPaieAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 		'taux_ae_employeur',
 	)
 	ordering = ('-rrq_date_debut_effet', '-id')
+
+@admin.register(PaieJournalLigne)
+# 2. On change la classe parente ici
+class PaieJournalLigneAdmin(ExportMixin, admin.ModelAdmin):
+    list_display = ('paie_id', 'date_fin', 'rrq_employeur', 'rqap_employeur', 'cnesst_employeur', 'fss_employeur')
+    ordering = ('paie_id',)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

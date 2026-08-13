@@ -10,8 +10,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import JsonResponse
-from django.db.models.functions import Coalesce
-from django.db.models import Count, Sum
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
@@ -23,6 +22,10 @@ from facture.working_period import get_working_period
 
 from .forms import EmployeForm, PaieForm, ParametresTauxPaieForm
 from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie
+from django.http import HttpResponse
+from weasyprint import HTML
+from .models import FeuilletFiscalAnnuel
+from compte.models import Setting
 
 
 def _ensure_default_frequences_paie():
@@ -86,7 +89,7 @@ def employe_edit_page(request, employe_id):
 		if form.is_valid():
 			employe = form.save()
 			messages.success(request, f'Employe mis a jour: {employe}.')
-			return redirect('paie:paie_employes')
+			return redirect(f"{reverse('paie:paie_employes')}?embed=1")
 	else:
 		form = EmployeForm(instance=employe)
 
@@ -153,12 +156,7 @@ def prochaine_periode_employe_api(request):
 		return JsonResponse({'ok': False, 'error': error_message}, status=404)
 
 	selected = next((o for o in options_payload if o['value'] == default_value), None)
-	vacances_cumulees = (
-		Paie.objects
-		.filter(employe=employe)
-		.aggregate(total=Coalesce(Sum('vacances'), Decimal('0.00')))
-		.get('total')
-	)
+	vacances_cumulees = employe.solde_vacances()
 
 	return JsonResponse({
 		'ok': True,
@@ -189,127 +187,23 @@ def _money(value):
 
 
 def _compute_employer_totals_for_period(paies, settings_instance):
-	if not paies:
-		return {
-			'rrq_employeur': Decimal('0.00'),
-			'rqap_employeur': Decimal('0.00'),
-			'ae_employeur': Decimal('0.00'),
-			'fss_employeur': Decimal('0.00'),
-			'cnesst_employeur': Decimal('0.00'),
-		}
-
-	taux_rows = list(
-		ParametresTauxPaie.objects.using('default')
-		.only(
-			'id',
-			'rrq_date_debut_effet',
-			'rrq_date_fin_effet',
-			'taux_rrq_employe',
-			'taux_rrq_employeur',
-			'rqap_date_debut_effet',
-			'rqap_date_fin_effet',
-			'taux_rqap_employe',
-			'taux_rqap_employeur',
-			'ae_date_debut_effet',
-			'ae_date_fin_effet',
-			'taux_ae_employe',
-			'taux_ae_employeur',
-			'taux_cnt_employeur',
-		)
-	)
-
-	taux_cnesst_setting = getattr(settings_instance, 'taux_cnesst_employeur', None) or Decimal('0.00')
-	taux_fss_setting = getattr(settings_instance, 'taux_fss_employeur', None) or Decimal('0.00')
-	block_cache = {}
-
-	def _d(value):
-		return value if value is not None else Decimal('0.00')
-
-	def _row_for_block(date_value, start_field, end_field):
-		cache_key = (date_value, start_field, end_field)
-		cached_row = block_cache.get(cache_key)
-		if cached_row is not None or cache_key in block_cache:
-			return cached_row
-		active_candidates = [
-			row for row in taux_rows
-			if getattr(row, start_field) <= date_value and (getattr(row, end_field) is None or getattr(row, end_field) >= date_value)
-		]
-		if active_candidates:
-			row = sorted(active_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
-			block_cache[cache_key] = row
-			return row
-
-		started_candidates = [
-			row for row in taux_rows
-			if getattr(row, start_field) <= date_value
-		]
-		if started_candidates:
-			row = sorted(started_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
-			block_cache[cache_key] = row
-			return row
-
-		future_candidates = [
-			row for row in taux_rows
-			if getattr(row, start_field) > date_value
-		]
-		if future_candidates:
-			row = sorted(future_candidates, key=lambda row: (getattr(row, start_field), row.id))[0]
-			block_cache[cache_key] = row
-			return row
-
-		block_cache[cache_key] = None
-		return None
-
-	def _employer_from_employee(employee_amount, employe_rate, employeur_rate, fallback_to_employee=True):
-		employee_amount = _d(employee_amount)
-		if employe_rate in (None, Decimal('0.00'), 0, '0', '0.0'):
-			return employee_amount if fallback_to_employee else Decimal('0.00')
-		if employeur_rate in (None, Decimal('0.00'), 0, '0', '0.0'):
-			return employee_amount if fallback_to_employee else Decimal('0.00')
-		ratio = Decimal(str(employeur_rate)) / Decimal(str(employe_rate))
-		return _money(employee_amount * ratio)
-
 	totals = {
 		'rrq_employeur': Decimal('0.00'),
 		'rqap_employeur': Decimal('0.00'),
 		'ae_employeur': Decimal('0.00'),
-		'cnt_employeur': Decimal('0.00'),
 		'fss_employeur': Decimal('0.00'),
 		'cnesst_employeur': Decimal('0.00'),
 	}
 
+	def _d(value):
+		return value if value is not None else Decimal('0.00')
+
 	for paie in paies:
-		date_paie = paie.periode.date_paie or paie.periode.date_fin
-		rrq_row = _row_for_block(date_paie, 'rrq_date_debut_effet', 'rrq_date_fin_effet')
-		rqap_row = _row_for_block(date_paie, 'rqap_date_debut_effet', 'rqap_date_fin_effet')
-		ae_row = _row_for_block(date_paie, 'ae_date_debut_effet', 'ae_date_fin_effet')
-
-		rrq_employeur = _employer_from_employee(
-			paie.rrq,
-			getattr(rrq_row, 'taux_rrq_employe', None),
-			getattr(rrq_row, 'taux_rrq_employeur', None),
-		)
-		rqap_employeur = _employer_from_employee(
-			paie.rqap,
-			getattr(rqap_row, 'taux_rqap_employe', None),
-			getattr(rqap_row, 'taux_rqap_employeur', None),
-		)
-		ae_employeur = _employer_from_employee(
-			paie.ae,
-			getattr(ae_row, 'taux_ae_employe', None),
-			getattr(ae_row, 'taux_ae_employeur', None),
-		)
-		taux_cnt_percent = getattr(rrq_row, 'taux_cnt_employeur', Decimal('0.06000')) if rrq_row else Decimal('0.06000')
-		cnt_employeur = _money(_d(paie.salaire_brut_periode) * (Decimal(str(taux_cnt_percent)) / Decimal('100')))
-		fss_employeur = _money(_d(paie.salaire_brut_periode) * taux_fss_setting)
-		cnesst_employeur = _money(_d(paie.salaire_brut_periode) * taux_cnesst_setting)
-
-		totals['rrq_employeur'] += rrq_employeur
-		totals['rqap_employeur'] += rqap_employeur
-		totals['ae_employeur'] += ae_employeur
-		totals['cnt_employeur'] += cnt_employeur
-		totals['fss_employeur'] += fss_employeur
-		totals['cnesst_employeur'] += cnesst_employeur
+		totals['rrq_employeur'] += _d(paie.rrq_employeur)
+		totals['rqap_employeur'] += _d(paie.rqap_employeur)
+		totals['ae_employeur'] += _d(paie.ae_employeur)
+		totals['fss_employeur'] += _d(paie.fss_employeur)
+		totals['cnesst_employeur'] += _d(paie.cnesst_employeur)
 
 	return totals
 
@@ -348,7 +242,7 @@ def _serialize_ecriture_salaire(tr_desc, already_existed, matches=True, updated=
 	}
 
 
-def _calculer_lignes_ecriture_salaire(periode):
+def _calculer_lignes_ecriture_salaire(periode, settings_instance=None, source_salaire=None):
 	"""Calcule (source, date, desc_ctb, lignes) pour l'ecriture de salaire d'une periode.
 
 	Leve ValueError avec un message utilisateur si le calcul est impossible.
@@ -367,8 +261,13 @@ def _calculer_lignes_ecriture_salaire(periode):
 			'vacances_payees',
 			'vacances',
 			'rrq',
+			'rrq_employeur',
 			'rqap',
+			'rqap_employeur',
 			'ae',
+			'ae_employeur',
+			'cnesst_employeur',
+			'fss_employeur',
 			'impot_federal',
 			'impot_provincial',
 		)
@@ -377,17 +276,18 @@ def _calculer_lignes_ecriture_salaire(periode):
 	if not paies:
 		raise ValueError('Aucune paie trouvee pour cette periode.')
 
-	settings_instance = get_setting(
-		'compte_salaire',
-		'compte_vacances',
-		'compte_benefices_marginaux',
-		'compte_salaires_a_payer',
-		'compte_vacances_a_payer',
-		'compte_das_federales',
-		'compte_das_provinciales',
-		'taux_cnesst_employeur',
-		'taux_fss_employeur',
-	)
+	if settings_instance is None:
+		settings_instance = get_setting(
+			'compte_salaire',
+			'compte_vacances',
+			'compte_benefices_marginaux',
+			'compte_salaires_a_payer',
+			'compte_vacances_a_payer',
+			'compte_das_federales',
+			'compte_das_provinciales',
+			'taux_cnesst_employeur',
+			'taux_fss_employeur',
+		)
 
 	required_accounts = [
 		('Salaires (débit)', getattr(settings_instance, 'compte_salaire', None)),
@@ -403,7 +303,8 @@ def _calculer_lignes_ecriture_salaire(periode):
 	if missing_labels:
 		raise ValueError('Comptes de paie manquants dans les paramètres: ' + ', '.join(missing_labels))
 
-	source_salaire, _ = Source.objects.get_or_create(nom='Salaire')
+	if source_salaire is None:
+		source_salaire, _ = Source.objects.get_or_create(nom='Salaire')
 	entry_date = periode.date_paie or periode.date_fin
 	desc_ctb = f"Paie P{periode.id} {periode.date_fin:%Y-%m-%d}"[:40]
 
@@ -431,7 +332,6 @@ def _calculer_lignes_ecriture_salaire(periode):
 		employer_totals['rrq_employeur']
 		+ employer_totals['rqap_employeur']
 		+ employer_totals['ae_employeur']
-		+ employer_totals['cnt_employeur']
 		+ employer_totals['fss_employeur']
 		+ employer_totals['cnesst_employeur']
 	)
@@ -442,7 +342,6 @@ def _calculer_lignes_ecriture_salaire(periode):
 		+ total_rqap
 		+ employer_totals['rqap_employeur']
 		+ total_impot_prov
-		+ employer_totals['cnt_employeur']
 		+ employer_totals['fss_employeur']
 		+ employer_totals['cnesst_employeur']
 	)
@@ -481,10 +380,14 @@ def _ecriture_salaire_correspond(tr_desc, detail_rows):
 	return attendu == actuel
 
 
-def _statut_transmission_ecriture_salaire(periode):
+def _statut_transmission_ecriture_salaire(periode, settings_instance=None, source_salaire=None):
 	"""Retourne 'vert' (transmise et à jour), 'jaune' (transmise mais montants différents) ou 'blanc' (non transmise)."""
 	try:
-		source_salaire, entry_date, desc_ctb, detail_rows = _calculer_lignes_ecriture_salaire(periode)
+		source_salaire, entry_date, desc_ctb, detail_rows = _calculer_lignes_ecriture_salaire(
+			periode,
+			settings_instance=settings_instance,
+			source_salaire=source_salaire,
+		)
 	except ValueError:
 		return 'blanc'
 
@@ -603,131 +506,42 @@ def journal_paies_page(request):
 			'salaire_net',
 			'vacances',
 			'rrq',
+			'rrq_employeur',
 			'rqap',
+			'rqap_employeur',
 			'ae',
+			'ae_employeur',
+			'cnesst_employeur',
+			'fss_employeur',
 			'impot_federal',
 			'impot_provincial',
 		)
 		.order_by('periode__date_paie', 'periode__date_fin', 'id')
 	)
-	taux_rows = list(
-		ParametresTauxPaie.objects.using('default')
-		.only(
-			'id',
-			'rrq_date_debut_effet',
-			'rrq_date_fin_effet',
-			'taux_rrq_employe',
-			'taux_rrq_employeur',
-			'rqap_date_debut_effet',
-			'rqap_date_fin_effet',
-			'taux_rqap_employe',
-			'taux_rqap_employeur',
-			'ae_date_debut_effet',
-			'ae_date_fin_effet',
-			'taux_ae_employe',
-			'taux_ae_employeur',
-			'taux_cnt_employeur',
-		)
-	)
-	settings_instance = get_setting(
-		'frequence_paie',
-		'date_debut_periode_paie_annee',
-		'date_premier_paiement_paie_annee',
-		'taux_cnesst_employeur',
-		'taux_fss_employeur',
-	)
-
 	def _d(value):
 		return value if value is not None else Decimal('0.00')
 
 	def _money(value):
 		return Decimal(value).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
-	taux_cnesst_setting = _d(getattr(settings_instance, 'taux_cnesst_employeur', None))
-	taux_fss_setting = _d(getattr(settings_instance, 'taux_fss_employeur', None))
-
-	def _row_for_block(date_value, start_field, end_field):
-		cache_key = (date_value, start_field, end_field)
-		cached_row = block_cache.get(cache_key)
-		if cached_row is not None or cache_key in block_cache:
-			return cached_row
-		active_candidates = [
-			row for row in taux_rows
-			if getattr(row, start_field) <= date_value and (getattr(row, end_field) is None or getattr(row, end_field) >= date_value)
-		]
-		if active_candidates:
-			row = sorted(active_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
-			block_cache[cache_key] = row
-			return row
-
-		started_candidates = [
-			row for row in taux_rows
-			if getattr(row, start_field) <= date_value
-		]
-		if started_candidates:
-			row = sorted(started_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
-			block_cache[cache_key] = row
-			return row
-
-		future_candidates = [
-			row for row in taux_rows
-			if getattr(row, start_field) > date_value
-		]
-		if future_candidates:
-			row = sorted(future_candidates, key=lambda row: (getattr(row, start_field), row.id))[0]
-			block_cache[cache_key] = row
-			return row
-
-		block_cache[cache_key] = None
-		return None
-
-	def _employer_from_employee(employee_amount, employe_rate, employeur_rate, fallback_to_employee=True):
-		employee_amount = _d(employee_amount)
-		if employe_rate in (None, Decimal('0.00'), 0, '0', '0.0'):
-			return employee_amount if fallback_to_employee else Decimal('0.00')
-		if employeur_rate in (None, Decimal('0.00'), 0, '0', '0.0'):
-			return employee_amount if fallback_to_employee else Decimal('0.00')
-		ratio = Decimal(str(employeur_rate)) / Decimal(str(employe_rate))
-		return _money(employee_amount * ratio)
-
 	def _employer_charges_for_paie(paie, date_paie):
-		rrq_row = _row_for_block(date_paie, 'rrq_date_debut_effet', 'rrq_date_fin_effet')
-		rqap_row = _row_for_block(date_paie, 'rqap_date_debut_effet', 'rqap_date_fin_effet')
-		ae_row = _row_for_block(date_paie, 'ae_date_debut_effet', 'ae_date_fin_effet')
+		rrq_employeur = _d(paie.rrq_employeur)
+		rqap_employeur = _d(paie.rqap_employeur)
+		ae_employeur = _d(paie.ae_employeur)
+		fss_employeur = _d(paie.fss_employeur)
+		cnesst_employeur = _d(paie.cnesst_employeur)
 
-		rrq_employeur = _employer_from_employee(
-			paie.rrq,
-			getattr(rrq_row, 'taux_rrq_employe', None),
-			getattr(rrq_row, 'taux_rrq_employeur', None),
-		)
-		rqap_employeur = _employer_from_employee(
-			paie.rqap,
-			getattr(rqap_row, 'taux_rqap_employe', None),
-			getattr(rqap_row, 'taux_rqap_employeur', None),
-		)
-		ae_employeur = _employer_from_employee(
-			paie.ae,
-			getattr(ae_row, 'taux_ae_employe', None),
-			getattr(ae_row, 'taux_ae_employeur', None),
-		)
-		taux_cnt_percent = getattr(rrq_row, 'taux_cnt_employeur', Decimal('0.06000')) if rrq_row else Decimal('0.06000')
-		cnt_employeur = _money(_d(paie.salaire_brut_periode) * (Decimal(str(taux_cnt_percent)) / Decimal('100')))
-		fss_employeur = _money(_d(paie.salaire_brut_periode) * taux_fss_setting)
-		cnesst_employeur = _money(_d(paie.salaire_brut_periode) * taux_cnesst_setting)
-
-		charge_employeur = _money(rrq_employeur + rqap_employeur + ae_employeur + cnt_employeur + fss_employeur + cnesst_employeur)
+		charge_employeur = _money(rrq_employeur + rqap_employeur + ae_employeur + fss_employeur + cnesst_employeur)
 		return {
 			'rrq_employeur': rrq_employeur,
 			'rqap_employeur': rqap_employeur,
 			'ae_employeur': ae_employeur,
-			'cnt_employeur': cnt_employeur,
 			'fss_employeur': fss_employeur,
 			'cnesst_employeur': cnesst_employeur,
 			'charge_employeur': charge_employeur,
 		}
 
 	paie_entries = []
-	block_cache = {}
 	for paie in paies:
 		date_paie = paie.periode.date_paie or paie.periode.date_fin
 		paie_entries.append({
@@ -774,7 +588,6 @@ def journal_paies_page(request):
 			'rqap_employeur': Decimal('0.00'),
 			'ae': Decimal('0.00'),
 			'ae_employeur': Decimal('0.00'),
-			'cnt_employeur': Decimal('0.00'),
 			'fss_employeur': Decimal('0.00'),
 			'cnesst_employeur': Decimal('0.00'),
 			'charge_employeur': Decimal('0.00'),
@@ -813,7 +626,6 @@ def journal_paies_page(request):
 					'rqap_employeur': Decimal('0.00'),
 					'ae': Decimal('0.00'),
 					'ae_employeur': Decimal('0.00'),
-					'cnt_employeur': Decimal('0.00'),
 					'fss_employeur': Decimal('0.00'),
 					'cnesst_employeur': Decimal('0.00'),
 					'charge_employeur': Decimal('0.00'),
@@ -839,7 +651,6 @@ def journal_paies_page(request):
 			month_totals['rqap_employeur'] += employer['rqap_employeur']
 			month_totals['ae'] += _d(paie.ae)
 			month_totals['ae_employeur'] += employer['ae_employeur']
-			month_totals['cnt_employeur'] += employer['cnt_employeur']
 			month_totals['fss_employeur'] += employer['fss_employeur']
 			month_totals['cnesst_employeur'] += employer['cnesst_employeur']
 			month_totals['charge_employeur'] += employer['charge_employeur']
@@ -860,7 +671,7 @@ def journal_paies_page(request):
 
 		return journal_rows, total_brut_local, total_net_local, total_charge_employeur_local
 
-	def _build_total_period_rows(paie_entries_list, compute_statut=False):
+	def _build_total_period_rows(paie_entries_list, compute_statut=False, statut_settings_instance=None, statut_source_salaire=None):
 		period_groups = {}
 		for entry in paie_entries_list:
 			paie = entry['paie']
@@ -884,7 +695,6 @@ def journal_paies_page(request):
 					'impot_provincial': Decimal('0.00'),
 					'ae': Decimal('0.00'),
 					'ae_employeur': Decimal('0.00'),
-					'cnt_employeur': Decimal('0.00'),
 					'fss_employeur': Decimal('0.00'),
 					'cnesst_employeur': Decimal('0.00'),
 					'charge_employeur': Decimal('0.00'),
@@ -905,7 +715,6 @@ def journal_paies_page(request):
 			bucket['impot_provincial'] += _d(paie.impot_provincial)
 			bucket['ae'] += _d(paie.ae)
 			bucket['ae_employeur'] += employer['ae_employeur']
-			bucket['cnt_employeur'] += employer['cnt_employeur']
 			bucket['fss_employeur'] += employer['fss_employeur']
 			bucket['cnesst_employeur'] += employer['cnesst_employeur']
 			bucket['charge_employeur'] += employer['charge_employeur']
@@ -916,7 +725,6 @@ def journal_paies_page(request):
 				+ _d(paie.rqap)
 				+ employer['rqap_employeur']
 				+ _d(paie.impot_provincial)
-				+ employer['cnt_employeur']
 				+ employer['fss_employeur']
 				+ employer['cnesst_employeur']
 			)
@@ -945,7 +753,6 @@ def journal_paies_page(request):
 			'impot_provincial': Decimal('0.00'),
 			'ae': Decimal('0.00'),
 			'ae_employeur': Decimal('0.00'),
-			'cnt_employeur': Decimal('0.00'),
 			'fss_employeur': Decimal('0.00'),
 			'cnesst_employeur': Decimal('0.00'),
 			'impot_federal': Decimal('0.00'),
@@ -968,7 +775,6 @@ def journal_paies_page(request):
 			'impot_provincial': Decimal('0.00'),
 			'ae': Decimal('0.00'),
 			'ae_employeur': Decimal('0.00'),
-			'cnt_employeur': Decimal('0.00'),
 			'fss_employeur': Decimal('0.00'),
 			'cnesst_employeur': Decimal('0.00'),
 			'charge_employeur': Decimal('0.00'),
@@ -1008,7 +814,6 @@ def journal_paies_page(request):
 					'impot_provincial': Decimal('0.00'),
 					'ae': Decimal('0.00'),
 					'ae_employeur': Decimal('0.00'),
-					'cnt_employeur': Decimal('0.00'),
 					'fss_employeur': Decimal('0.00'),
 					'cnesst_employeur': Decimal('0.00'),
 					'charge_employeur': Decimal('0.00'),
@@ -1023,7 +828,7 @@ def journal_paies_page(request):
 				'date_paie': group['date_paie'],
 				'date_fin': group['date_fin'],
 				'totals': group,
-				'statut_transmission': _statut_transmission_ecriture_salaire(periode) if compute_statut else None,
+				'statut_transmission': _statut_transmission_ecriture_salaire(periode, settings_instance=statut_settings_instance, source_salaire=statut_source_salaire) if compute_statut else None,
 			})
 
 			month_totals['heures'] += group['heures']
@@ -1038,7 +843,6 @@ def journal_paies_page(request):
 			month_totals['impot_provincial'] += group['impot_provincial']
 			month_totals['ae'] += group['ae']
 			month_totals['ae_employeur'] += group['ae_employeur']
-			month_totals['cnt_employeur'] += group['cnt_employeur']
 			month_totals['fss_employeur'] += group['fss_employeur']
 			month_totals['cnesst_employeur'] += group['cnesst_employeur']
 			month_totals['charge_employeur'] += group['charge_employeur']
@@ -1058,7 +862,6 @@ def journal_paies_page(request):
 			grand_totals['impot_provincial'] += group['impot_provincial']
 			grand_totals['ae'] += group['ae']
 			grand_totals['ae_employeur'] += group['ae_employeur']
-			grand_totals['cnt_employeur'] += group['cnt_employeur']
 			grand_totals['fss_employeur'] += group['fss_employeur']
 			grand_totals['cnesst_employeur'] += group['cnesst_employeur']
 			grand_totals['impot_federal'] += group['impot_federal']
@@ -1076,7 +879,27 @@ def journal_paies_page(request):
 
 	journal_rows, total_brut, total_net, total_charge_employeur = _build_journal_rows(paie_entries)
 	can_create_salary_entry = is_expert(request.user)
-	total_rows, total_rows_grand_totals = _build_total_period_rows(paie_entries, compute_statut=can_create_salary_entry)
+	statut_settings_instance = None
+	statut_source_salaire = None
+	if can_create_salary_entry:
+		statut_settings_instance = get_setting(
+			'compte_salaire',
+			'compte_vacances',
+			'compte_benefices_marginaux',
+			'compte_salaires_a_payer',
+			'compte_vacances_a_payer',
+			'compte_das_federales',
+			'compte_das_provinciales',
+			'taux_cnesst_employeur',
+			'taux_fss_employeur',
+		)
+		statut_source_salaire, _ = Source.objects.get_or_create(nom='Salaire')
+	total_rows, total_rows_grand_totals = _build_total_period_rows(
+		paie_entries,
+		compute_statut=can_create_salary_entry,
+		statut_settings_instance=statut_settings_instance,
+		statut_source_salaire=statut_source_salaire,
+	)
 
 	by_employe = {}
 	for entry in paie_entries:
@@ -1147,75 +970,21 @@ def remises_mensuelles_page(request):
 			'salaire_brut_periode',
 			'salaire_net',
 			'rrq',
+			'rrq_employeur',
 			'rqap',
+			'rqap_employeur',
 			'ae',
+			'ae_employeur',
+			'cnesst_employeur',
+			'fss_employeur',
 			'impot_federal',
 			'impot_provincial',
 		)
 		.filter(periode__date_paie__gte=selected_date, periode__date_paie__lt=next_month_date)
 		.order_by('periode__date_paie', 'periode__date_fin', 'id')
 	)
-	settings_instance = get_setting('taux_cnesst_employeur', 'taux_fss_employeur')
-	taux_rows = list(
-		ParametresTauxPaie.objects.using('default')
-		.only(
-			'id',
-			'rrq_date_debut_effet',
-			'rrq_date_fin_effet',
-			'taux_rrq_employe',
-			'taux_rrq_employeur',
-			'rqap_date_debut_effet',
-			'rqap_date_fin_effet',
-			'taux_rqap_employe',
-			'taux_rqap_employeur',
-			'ae_date_debut_effet',
-			'ae_date_fin_effet',
-			'taux_ae_employe',
-			'taux_ae_employeur',
-		)
-	)
-
 	def _d(value):
 		return value if value is not None else Decimal('0.00')
-
-	def _money(value):
-		return Decimal(value).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-
-	taux_cnesst_setting = _d(getattr(settings_instance, 'taux_cnesst_employeur', None))
-	taux_fss_setting = _d(getattr(settings_instance, 'taux_fss_employeur', None))
-
-	def _row_for_block(date_value, start_field, end_field):
-		active_candidates = [
-			row for row in taux_rows
-			if getattr(row, start_field) <= date_value and (getattr(row, end_field) is None or getattr(row, end_field) >= date_value)
-		]
-		if active_candidates:
-			return sorted(active_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
-
-		started_candidates = [
-			row for row in taux_rows
-			if getattr(row, start_field) <= date_value
-		]
-		if started_candidates:
-			return sorted(started_candidates, key=lambda row: (getattr(row, start_field), row.id), reverse=True)[0]
-
-		future_candidates = [
-			row for row in taux_rows
-			if getattr(row, start_field) > date_value
-		]
-		if future_candidates:
-			return sorted(future_candidates, key=lambda row: (getattr(row, start_field), row.id))[0]
-
-		return None
-
-	def _employer_from_employee(employee_amount, employe_rate, employeur_rate, fallback_to_employee=True):
-		employee_amount = _d(employee_amount)
-		if employe_rate in (None, Decimal('0.00'), 0, '0', '0.0'):
-			return employee_amount if fallback_to_employee else Decimal('0.00')
-		if employeur_rate in (None, Decimal('0.00'), 0, '0', '0.0'):
-			return employee_amount if fallback_to_employee else Decimal('0.00')
-		ratio = Decimal(str(employeur_rate)) / Decimal(str(employe_rate))
-		return _money(employee_amount * ratio)
 
 	federal_total = {
 		'ae_employe': Decimal('0.00'),
@@ -1241,27 +1010,12 @@ def remises_mensuelles_page(request):
 	for paie in paies:
 		date_paie = paie.periode.date_paie or paie.periode.date_fin
 		revenu_brut_total += _d(paie.salaire_brut_periode)
-		rrq_row = _row_for_block(date_paie, 'rrq_date_debut_effet', 'rrq_date_fin_effet')
-		rqap_row = _row_for_block(date_paie, 'rqap_date_debut_effet', 'rqap_date_fin_effet')
-		ae_row = _row_for_block(date_paie, 'ae_date_debut_effet', 'ae_date_fin_effet')
 
-		rrq_employeur = _employer_from_employee(
-			paie.rrq,
-			getattr(rrq_row, 'taux_rrq_employe', None),
-			getattr(rrq_row, 'taux_rrq_employeur', None),
-		)
-		rqap_employeur = _employer_from_employee(
-			paie.rqap,
-			getattr(rqap_row, 'taux_rqap_employe', None),
-			getattr(rqap_row, 'taux_rqap_employeur', None),
-		)
-		ae_employeur = _employer_from_employee(
-			paie.ae,
-			getattr(ae_row, 'taux_ae_employe', None),
-			getattr(ae_row, 'taux_ae_employeur', None),
-		)
-		cnesst_employeur = _money(_d(paie.salaire_brut_periode) * taux_cnesst_setting)
-		fss_employeur = _money(_d(paie.salaire_brut_periode) * taux_fss_setting)
+		rrq_employeur = _d(paie.rrq_employeur)
+		rqap_employeur = _d(paie.rqap_employeur)
+		ae_employeur = _d(paie.ae_employeur)
+		cnesst_employeur = _d(paie.cnesst_employeur)
+		fss_employeur = _d(paie.fss_employeur)
 
 		federal_total['ae_employe'] += _d(paie.ae)
 		federal_total['ae_employeur'] += ae_employeur
@@ -1440,3 +1194,38 @@ def parametres_taux_page(request):
 		'editing': bool(instance),
 		'editing_id': instance.id if instance else None,
 	})
+
+
+@login_required
+@xframe_options_sameorigin
+def test_temporaire_page(request):
+	employe = Employe.objects.filter(actif=True).first()
+	feuillet_debug = None
+	if employe:
+		from .models import FeuilletFiscalAnnuel
+		feuillet_debug = FeuilletFiscalAnnuel.generer_pour_annee(employe, 2026)
+
+	return render(request, 'paie/test_temporaire.html', {
+		'title': 'Test temporaire',
+		'feuillet_debug': feuillet_debug,
+	})
+
+
+
+@login_required
+@xframe_options_sameorigin
+def imprimer_feuillet_fiscal(request, employe_id, annee):
+	employe = get_object_or_404(Employe, pk=employe_id)
+	feuillet = FeuilletFiscalAnnuel.generer_pour_annee(employe, annee)
+	employeur = Setting.objects.first()
+
+	html_string = render(request, 'paie/feuillet_fiscal_pdf.html', {
+		'feuillets': [feuillet],
+		'employeur': employeur,
+	}).content.decode('utf-8')
+
+	pdf_file = HTML(string=html_string).write_pdf()
+
+	response = HttpResponse(pdf_file, content_type='application/pdf')
+	response['Content-Disposition'] = f'inline; filename="feuillet_{employe.nom}_{annee}.pdf"'
+	return response

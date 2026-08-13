@@ -14,7 +14,10 @@
             <tr>
                 <td>
                     <input id="date_select" name="date_select" type="date"
-                           class="form-control form-control-sm" required>
+                           class="form-control form-control-sm" required
+                           data-period-year="{{ working_period.year }}"
+                           data-period-month="{{ working_period.month }}"
+                           data-storage-key="transaction_date_{{ working_period.tenant_key }}">
                 </td>
 
 
@@ -100,6 +103,47 @@
 </form>
 
 <script>
+(function () {
+    const dateInput = document.getElementById("date_select");
+    if (!dateInput) return;
+
+    const storageKey = dateInput.dataset.storageKey;
+    const periodYear = parseInt(dateInput.dataset.periodYear, 10);
+    const periodMonth = parseInt(dateInput.dataset.periodMonth, 10); // 1-12
+
+    function isInPeriod(dateStr, year, month) {
+        if (!dateStr) return false;
+        const parts = dateStr.split("-");
+        if (parts.length !== 3) return false;
+        return parseInt(parts[0], 10) === year && parseInt(parts[1], 10) === month;
+    }
+
+    function formatDate(date) {
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, "0");
+        const dd = String(date.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    if (!dateInput.value) {
+        const savedDate = storageKey ? localStorage.getItem(storageKey) : null;
+
+        if (savedDate && isInPeriod(savedDate, periodYear, periodMonth)) {
+            dateInput.value = savedDate;
+        } else if (periodYear && periodMonth) {
+            const today = new Date();
+            const isCurrentPeriod = today.getFullYear() === periodYear && (today.getMonth() + 1) === periodMonth;
+            dateInput.value = formatDate(isCurrentPeriod ? today : new Date(periodYear, periodMonth - 1, 1));
+        }
+    }
+
+    dateInput.addEventListener("change", function () {
+        if (storageKey && dateInput.value) {
+            localStorage.setItem(storageKey, dateInput.value);
+        }
+    });
+})();
+
 (function () {
     const lineItems = document.getElementById("line-items");
     const addLineButton = document.getElementById("add-line");

@@ -22,7 +22,7 @@
 {% block content %}
 
 {% if request.user.is_expert or request.user.is_superuser %}
-<div class="border rounded p-3 mb-4 bg-light no-print" style="overflow:hidden;">
+<div class="border rounded p-3 mb-4 bg-light no-print mx-auto" style="overflow:hidden; max-width: 840px;">
     {% include "compte/transactions_form.html" %}
 </div>
 {% endif %}

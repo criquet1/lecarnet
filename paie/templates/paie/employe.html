@@ -4,6 +4,7 @@
 
 {% block page_title %}{{ title }}{% endblock %}
 
+
 {% block page_subtitle %}Modification des renseignements et paramètres de paie de l'employé.{% endblock %}
 
 {% block page_actions %}
@@ -27,6 +28,17 @@
             <div class="col-md-6"><label class="form-label" for="{{ form.prenom.id_for_label }}">Prenom</label>{{ form.prenom }}{{ form.prenom.errors }}</div>
             <div class="col-md-6"><label class="form-label" for="{{ form.date_embauche.id_for_label }}">Date d'embauche</label>{{ form.date_embauche }}{{ form.date_embauche.errors }}</div>
             <div class="col-md-6"><label class="form-label" for="{{ form.frequence_paie.id_for_label }}">Frequence de paie</label>{{ form.frequence_paie }}{{ form.frequence_paie.errors }}</div>
+
+            <div class="col-md-6"><label class="form-label" for="{{ form.adresse_postale.id_for_label }}">Adresse postale</label>{{ form.adresse_postale }}{{ form.adresse_postale.errors }}</div>
+            <div class="col-md-3"><label class="form-label" for="{{ form.telephone.id_for_label }}">Telephone</label>{{ form.telephone }}{{ form.telephone.errors }}</div>
+            <div class="col-md-3"><label class="form-label" for="{{ form.email.id_for_label }}">Courriel</label>{{ form.email }}{{ form.email.errors }}</div>
+            <div class="col-md-4">
+                <label class="form-label" for="{{ form.nas.id_for_label }}">NAS</label>
+                {{ form.nas }}
+                <div class="invalid-feedback">Ce numero de NAS ne semble pas valide.</div>
+                {{ form.nas.errors }}
+            </div>
+
             <div class="col-md-4"><label class="form-label" for="{{ form.salH.id_for_label }}">Taux horaire</label>{{ form.salH }}{{ form.salH.errors }}</div>
             <div class="col-md-4"><label class="form-label" for="{{ form.taux_vacances.id_for_label }}">Taux de vacances (%)</label>{{ form.taux_vacances }}{{ form.taux_vacances.errors }}</div>
             <div class="col-md-4"><label class="form-label" for="{{ form.e_prov.id_for_label }}">Credit Quebec</label>{{ form.e_prov }}{{ form.e_prov.errors }}</div>
@@ -34,9 +46,44 @@
             <div class="col-12"><div class="form-check">{{ form.actif }}<label class="form-check-label" for="{{ form.actif.id_for_label }}">Employe actif</label></div>{{ form.actif.errors }}</div>
             <div class="col-12 d-flex gap-2">
                 <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
-                <a href="{% url 'paie:paie_employes' %}" class="btn btn-outline-secondary">Annuler</a>
+                <a href="{% url 'paie:paie_employes' %}?embed=1" class="btn btn-outline-secondary">Annuler</a>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+function validerNas(nasDigits) {
+    let total = 0;
+    for (let i = 0; i < nasDigits.length; i++) {
+        let chiffre = parseInt(nasDigits[i], 10);
+        if (i % 2 === 1) {
+            chiffre *= 2;
+            if (chiffre > 9) {
+                chiffre -= 9;
+            }
+        }
+        total += chiffre;
+    }
+    return total % 10 === 0;
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const champNas = document.getElementById('{{ form.nas.id_for_label }}');
+    if (!champNas) return;
+
+    champNas.addEventListener('blur', function () {
+        const digits = champNas.value.replace(/\D/g, '');
+        if (digits.length === 0) return;
+
+        if (digits.length !== 9 || !validerNas(digits)) {
+            champNas.classList.add('is-invalid');
+        } else {
+            champNas.classList.remove('is-invalid');
+            champNas.value = `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6,9)}`;
+        }
+    });
+});
+</script>
+
 {% endblock %}

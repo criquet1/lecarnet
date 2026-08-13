@@ -1,0 +1,33 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block page_title %}{{ title }}{% endblock %}
+
+
+{% block content %}
+
+{% if feuillet_debug %}
+<div style="background:#fff3cd; border:3px solid red; padding:1em; margin:1em 0;">
+  <h3>🔧 DEBUG — Feuillet fiscal {{ feuillet_debug.annee }}</h3>
+  <p><strong>T4</strong></p>
+  <ul>
+    <li>Revenu d'emploi : {{ feuillet_debug.t4_revenu_emploi }}</li>
+    <li>Cotisation RRQ : {{ feuillet_debug.t4_cotisation_rrq }}</li>
+    <li>Cotisation AE : {{ feuillet_debug.t4_cotisation_ae }}</li>
+    <li>Impôt fédéral : {{ feuillet_debug.t4_impot_federal }}</li>
+    <li>Gains assurables AE (case 24) : {{ feuillet_debug.t4_gains_assurables_ae }}</li>
+    <li>Gains ouvrant droit RRQ (case 26) : {{ feuillet_debug.t4_gains_ouvrant_droit_rrq }}</li>
+  </ul>
+  <p><strong>Relevé 1</strong></p>
+  <ul>
+    <li>Revenu d'emploi : {{ feuillet_debug.rl1_revenu_emploi }}</li>
+    <li>Cotisation RRQ : {{ feuillet_debug.rl1_cotisation_rrq }}</li>
+    <li>Cotisation RQAP : {{ feuillet_debug.rl1_cotisation_rqap }}</li>
+    <li>Impôt Québec : {{ feuillet_debug.rl1_impot_quebec }}</li>
+  </ul>
+</div>
+{% endif %}
+
+
+{% endblock%}
