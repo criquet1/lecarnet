@@ -47,7 +47,7 @@ class TenantDatabaseRouter:
     def allow_migrate(self, db, app_label, model_name=None, **hints):
         running_tests = 'test' in sys.argv
         if app_label == 'paie' and model_name is None:
-            return True
+            return db != 'default' or running_tests
         if self._is_centralized_tenant_model(app_label, model_name):
             return db == 'default' or running_tests
         if app_label in self.tenant_app_labels:
