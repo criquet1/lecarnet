@@ -23,8 +23,9 @@ class PeriodePaieAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 
 @admin.register(Paie)
 class PaieAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-	list_display = ('employe', 'periode', 'salaire_brut_periode', 'total_retenues', 'salaire_net')
+	list_display = ('employe', 'periode', 'salaire_brut_periode', 'total_retenues', 'salaire_net', 'rrq_employeur', 'rqap_employeur',  'ae_employeur', 'cnesst_employeur', 'fss_employeur')
 	list_select_related = ('employe', 'periode', 'periode__frequence_paie')
+	list_editable = ('rrq_employeur', 'rqap_employeur',  'ae_employeur', 'cnesst_employeur', 'fss_employeur')
 
 
 @admin.register(ParametresTauxPaie)
