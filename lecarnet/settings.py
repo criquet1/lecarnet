@@ -44,7 +44,7 @@ SECRET_KEY = _env('SECRET_KEY', 'django-insecure-4yu1pvs&-g1oz$+skhpve!8*+45_efk
 
 # # SECURITY WARNING: don't run with debug turned on in production!
 # DEBUG = _env_bool('DEBUG', default=False)
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 ALLOWED_HOSTS.extend(_env_list('ALLOWED_HOSTS'))

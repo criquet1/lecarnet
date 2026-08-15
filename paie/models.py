@@ -229,6 +229,14 @@ class ParametresTauxPaie(models.Model):
     taux_qc_2 = models.DecimalField(max_digits=7, decimal_places=5, default=Decimal('19.00000'))
     taux_qc_3 = models.DecimalField(max_digits=7, decimal_places=5, default=Decimal('24.00000'))
     taux_qc_4 = models.DecimalField(max_digits=7, decimal_places=5, default=Decimal('25.75000'))
+    constante_qc_1 = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    constante_qc_2 = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    constante_qc_3 = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    constante_qc_4 = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    max_base_credit_rrq_federal = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('3768.30'))
+    max_ae_credit_federal_qc = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('895.70'))
+    taux_rqap_credit_federal = models.DecimalField(max_digits=7, decimal_places=5, default=Decimal('0.43000'))
+    max_rqap_credit_federal = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('442.90'))
     taux_credit_quebec = models.DecimalField(max_digits=7, decimal_places=5, default=Decimal('14.00000'))
 
     cree_le = models.DateTimeField(auto_now_add=True)
@@ -443,6 +451,14 @@ class Paie(models.Model):
             'taux_qc_2': Decimal('19.00000'),
             'taux_qc_3': Decimal('24.00000'),
             'taux_qc_4': Decimal('25.75000'),
+            'constante_qc_1': Decimal('0.00'),
+            'constante_qc_2': Decimal('2717.00'),
+            'constante_qc_3': Decimal('8151.00'),
+            'constante_qc_4': Decimal('10465.00'),
+            'max_base_credit_rrq_federal': Decimal('3768.30'),
+            'max_ae_credit_federal_qc': Decimal('895.70'),
+            'taux_rqap_credit_federal': Decimal('0.43000'),
+            'max_rqap_credit_federal': Decimal('442.90'),
             'taux_credit_quebec': Decimal('14.00000'),
         }
 
@@ -548,6 +564,14 @@ class Paie(models.Model):
             'taux_qc_2': Paie._percent_to_ratio(_value(fiscal_row, 'taux_qc_2')),
             'taux_qc_3': Paie._percent_to_ratio(_value(fiscal_row, 'taux_qc_3')),
             'taux_qc_4': Paie._percent_to_ratio(_value(fiscal_row, 'taux_qc_4')),
+            'constante_qc_1': _value(fiscal_row, 'constante_qc_1'),
+            'constante_qc_2': _value(fiscal_row, 'constante_qc_2'),
+            'constante_qc_3': _value(fiscal_row, 'constante_qc_3'),
+            'constante_qc_4': _value(fiscal_row, 'constante_qc_4'),
+            'max_base_credit_rrq_federal': _value(fiscal_row, 'max_base_credit_rrq_federal'),
+            'max_ae_credit_federal_qc': _value(fiscal_row, 'max_ae_credit_federal_qc'),
+            'taux_rqap_credit_federal': Paie._percent_to_ratio(_value(fiscal_row, 'taux_rqap_credit_federal')),
+            'max_rqap_credit_federal': _value(fiscal_row, 'max_rqap_credit_federal'),
             'taux_credit_quebec': Paie._percent_to_ratio(_value(fiscal_row, 'taux_credit_quebec')),
         }
 
@@ -682,7 +706,15 @@ class Paie(models.Model):
                 taux_qc_2=self._decimal_or_zero(taux_effectifs['taux_qc_2']),
                 taux_qc_3=self._decimal_or_zero(taux_effectifs['taux_qc_3']),
                 taux_qc_4=self._decimal_or_zero(taux_effectifs['taux_qc_4']),
+                constante_qc_1=self._decimal_or_zero(taux_effectifs['constante_qc_1']),
+                constante_qc_2=self._decimal_or_zero(taux_effectifs['constante_qc_2']),
+                constante_qc_3=self._decimal_or_zero(taux_effectifs['constante_qc_3']),
+                constante_qc_4=self._decimal_or_zero(taux_effectifs['constante_qc_4']),
                 taux_credit_quebec=self._decimal_or_zero(taux_effectifs['taux_credit_quebec']),
+                max_base_credit_rrq_federal=self._decimal_or_zero(taux_effectifs['max_base_credit_rrq_federal']),
+                max_ae_credit_federal_qc=self._decimal_or_zero(taux_effectifs['max_ae_credit_federal_qc']),
+                taux_rqap_credit_federal=self._decimal_or_zero(taux_effectifs['taux_rqap_credit_federal']),
+                max_rqap_credit_federal=self._decimal_or_zero(taux_effectifs['max_rqap_credit_federal']),
             )
         )
 

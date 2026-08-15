@@ -59,7 +59,15 @@ class DASInputs:
     taux_qc_2: Decimal = Decimal("0.00")
     taux_qc_3: Decimal = Decimal("0.00")
     taux_qc_4: Decimal = Decimal("0.00")
+    constante_qc_1: Decimal = Decimal("0.00")
+    constante_qc_2: Decimal = Decimal("0.00")
+    constante_qc_3: Decimal = Decimal("0.00")
+    constante_qc_4: Decimal = Decimal("0.00")
     taux_credit_quebec: Decimal = Decimal("0.00")
+    max_base_credit_rrq_federal: Decimal = Decimal("3768.30")
+    max_ae_credit_federal_qc: Decimal = Decimal("895.70")
+    taux_rqap_credit_federal: Decimal = Decimal("0.0043")
+    max_rqap_credit_federal: Decimal = Decimal("442.90")
 
 
 @dataclass(frozen=True)
@@ -235,6 +243,13 @@ def calculer_impot_federal(
     taux_federal_3: Decimal = Decimal("0.00"),
     taux_federal_4: Decimal = Decimal("0.00"),
     taux_federal_5: Decimal = Decimal("0.00"),
+    csa: Decimal = Decimal("0.00"),
+    max_base_credit_rrq_federal: Decimal = Decimal("3768.30"),
+    max_ae_credit_federal_qc: Decimal = Decimal("895.70"),
+    taux_rqap_credit_federal: Decimal = Decimal("0.0043"),
+    max_rqap_credit_federal: Decimal = Decimal("442.90"),
+    rrq_base: Decimal = Decimal("0.00"),
+    gains_assurables_rqap: Decimal = Decimal("0.00"),
 ) -> Decimal:
     if periodes_par_annee <= 0:
         raise ValueError("periodes_par_annee doit etre superieur a zero")
@@ -252,18 +267,30 @@ def calculer_impot_federal(
         else Decimal(credit_personnel_federal_min)
     )
 
-    # T4127 Etape 3: T3 = impot de base - K1 - K2 - K3 - K4.
-    # Cette implementation couvre K1 (credit personnel), K2 (cotisations) et K4 (emploi).
+    # T4127 Etape 3 (employes du Quebec) : T3 = (R x A) - K1 - K2Q - K4.
+    # K (constante de palier) est deja gere par calculer_impot_tranches (calcul progressif).
     taux_credit_federal = Decimal(taux_credit_federal)
     valeur_credit_k1 = credit_base_fed * taux_credit_federal
-    cotisations_annuelles = _positive_or_zero((Decimal(rrq) + Decimal(ae) + Decimal(rqap)) * Decimal(periodes_par_annee))
-    valeur_credit_k2 = cotisations_annuelles * taux_credit_federal
+
+    p = Decimal(periodes_par_annee)
+    credit_rrq_base_annuel = min(
+        Decimal(rrq_base) * (Decimal("0.0530") / Decimal("0.0630")) * p,
+        Decimal(max_base_credit_rrq_federal),
+    )
+    credit_ae_annuel = min(Decimal(ae) * p, Decimal(max_ae_credit_federal_qc))
+    credit_rqap_annuel = min(
+        Decimal(gains_assurables_rqap) * Decimal(taux_rqap_credit_federal) * p,
+        Decimal(max_rqap_credit_federal),
+    )
+    valeur_credit_k2 = (credit_rrq_base_annuel + credit_ae_annuel + credit_rqap_annuel) * taux_credit_federal
+
     valeur_credit_k4 = min(
         Decimal(revenu_annuel_estime),
         Decimal(montant_canadien_pour_emploi),
     ) * taux_credit_federal
 
-    impot_fed_annuel_brut = calculer_impot_tranches(Decimal(revenu_annuel_estime), tranches_federales)
+    revenu_imposable_federal = _positive_or_zero(Decimal(revenu_annuel_estime) - (Decimal(csa) * p))
+    impot_fed_annuel_brut = calculer_impot_tranches(revenu_imposable_federal, tranches_federales)
     impot_fed_annuel_net = _positive_or_zero(
         impot_fed_annuel_brut - valeur_credit_k1 - valeur_credit_k2 - valeur_credit_k4
     )
@@ -293,6 +320,10 @@ def calculer_impot_provincial(
     taux_qc_2: Decimal = Decimal("0.00"),
     taux_qc_3: Decimal = Decimal("0.00"),
     taux_qc_4: Decimal = Decimal("0.00"),
+    constante_qc_1: Decimal = Decimal("0.00"),
+    constante_qc_2: Decimal = Decimal("0.00"),
+    constante_qc_3: Decimal = Decimal("0.00"),
+    constante_qc_4: Decimal = Decimal("0.00"),
     taux_credit_quebec: Decimal = Decimal("0.00"),
 ) -> Decimal:
     if periodes_par_annee <= 0:
@@ -312,19 +343,23 @@ def calculer_impot_provincial(
 
     if i_revenu_imposable <= Decimal(seuil_qc_1):
         t = Decimal(taux_qc_1)
+        k = Decimal(constante_qc_1)
     elif i_revenu_imposable <= Decimal(seuil_qc_2):
         t = Decimal(taux_qc_2)
+        k = Decimal(constante_qc_2)
     elif i_revenu_imposable <= Decimal(seuil_qc_3):
         t = Decimal(taux_qc_3)
+        k = Decimal(constante_qc_3)
     else:
         t = Decimal(taux_qc_4)
+        k = Decimal(constante_qc_4)
 
     credit_base_qc = (
         Decimal(montant_personnel_quebec_tp1015)
         if Decimal(montant_personnel_quebec_tp1015) > 0
         else Decimal(credit_personnel_quebec_min)
     )
-    y_impot_annuel_qc = _positive_or_zero((t * i_revenu_imposable) - (Decimal(taux_credit_quebec) * credit_base_qc))
+    y_impot_annuel_qc = _positive_or_zero((t * i_revenu_imposable) - k - (Decimal(taux_credit_quebec) * credit_base_qc))
     return arrondir_monnaie(_positive_or_zero((y_impot_annuel_qc / p) + l))
 
 
@@ -382,6 +417,13 @@ def calculer_das(inputs: DASInputs) -> DASResult:
         taux_federal_3=inputs.taux_federal_3,
         taux_federal_4=inputs.taux_federal_4,
         taux_federal_5=inputs.taux_federal_5,
+        csa=csa_totale,
+        rrq_base=rrq_c,
+        gains_assurables_rqap=salaire_brut_periode,
+        max_base_credit_rrq_federal=inputs.max_base_credit_rrq_federal,
+        max_ae_credit_federal_qc=inputs.max_ae_credit_federal_qc,
+        taux_rqap_credit_federal=inputs.taux_rqap_credit_federal,
+        max_rqap_credit_federal=inputs.max_rqap_credit_federal,
     )
     impot_provincial = calculer_impot_provincial(
         salaire_brut_periode=salaire_brut_periode,
@@ -401,6 +443,10 @@ def calculer_das(inputs: DASInputs) -> DASResult:
         taux_qc_2=inputs.taux_qc_2,
         taux_qc_3=inputs.taux_qc_3,
         taux_qc_4=inputs.taux_qc_4,
+        constante_qc_1=inputs.constante_qc_1,
+        constante_qc_2=inputs.constante_qc_2,
+        constante_qc_3=inputs.constante_qc_3,
+        constante_qc_4=inputs.constante_qc_4,
         taux_credit_quebec=inputs.taux_credit_quebec,
     )
 
