@@ -20,9 +20,9 @@ from io import TextIOWrapper
 import chardet
 from datetime import date, datetime, timedelta
 from facture.constants import MONTH_LABELS_FR
-from facture.models import Compagnie, Tr_desc, Tr_detail, Source, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, Facture, SoldeFin, TransactionListe
+from facture.models import Cheque, Compagnie, Tr_desc, Tr_detail, Source, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, Facture, SoldeFin, TransactionListe
 from compte.models import Setting
-from facture.forms import CompagnieForm, TrDescForm, TrDetailFormSet
+from facture.forms import ChequeForm, CompagnieForm, TrDescForm, TrDetailFormSet
 from facture.working_period import (
     COOKIE_MAX_AGE,
     get_working_period,
@@ -528,18 +528,11 @@ def dashboard(request):
     )
 
 
-def rapports(request):
-    return render(request, "rapports/index.html", {
-        "title": "Rapports",
-    })
-
-
 @expert_required
 def administration(request):
     return render(request, "administration/index.html", {
         "title": "Administration",
     })
-
 
 
 @xframe_options_sameorigin
@@ -1321,8 +1314,8 @@ def _build_compte_mode_context(mode, settings_instance):
                 'date': None,
                 'source': None,
                 'description': 'Solde reporté',
-                'debit': solde_reporte if solde_reporte >= 0 else Decimal('0'),
-                'credit': abs(solde_reporte) if solde_reporte < 0 else Decimal('0'),
+                'debit': Decimal('0'),
+                'credit': Decimal('0'),
                 'solde': solde_reporte,
             })
 
@@ -1385,6 +1378,49 @@ def rapport_de_taxes(request):
                 tvq_payee_id,
             ] if account_id
         ]
+
+    def build_merged_rows(details):
+        rows_by_desc = {}
+
+        for detail in details:
+            tax_type = None
+            is_percue = False
+            amount = _money(detail.montant)
+
+            if detail.compte_id == tps_percue_id:
+                tax_type = 'TPS'
+                is_percue = True
+            elif detail.compte_id == tps_payee_id:
+                tax_type = 'TPS'
+                is_percue = False
+            elif detail.compte_id == tvq_percue_id:
+                tax_type = 'TVQ'
+                is_percue = True
+            elif detail.compte_id == tvq_payee_id:
+                tax_type = 'TVQ'
+                is_percue = False
+
+            if not tax_type:
+                continue
+
+            desc_id = detail.tr_desc_id
+            if desc_id not in rows_by_desc:
+                rows_by_desc[desc_id] = {
+                    'date': detail.tr_desc.date,
+                    'compagnie_nom': detail.tr_desc.compagnie.nom if detail.tr_desc.compagnie else '-',
+                    'facture': detail.tr_desc.desc_ctb or '-',
+                    'tps_percue': None,
+                    'tps_payee': None,
+                    'tvq_percue': None,
+                    'tvq_payee': None,
+                }
+
+            row = rows_by_desc[desc_id]
+            value = _money(abs(amount)) if is_percue else amount
+            key = f"{tax_type.lower()}_{'percue' if is_percue else 'payee'}"
+            row[key] = value
+
+        return sorted(rows_by_desc.values(), key=lambda r: r['date'])
 
     def build_tax_blocks(details):
         blocks = {
@@ -1679,6 +1715,34 @@ def rapport_de_taxes(request):
 
     if selected_report:
         selected_report.tax_blocks = build_tax_blocks(selected_report.details_taxes.all())
+        selected_report.merged_rows = build_merged_rows(selected_report.details_taxes.all())
+
+        tps = selected_report.tax_blocks['TPS']
+        tvq = selected_report.tax_blocks['TVQ']
+
+        total_taxes_percues = tps['total_percue'] + tvq['total_percue']
+        montant_101 = _money(total_taxes_percues / Decimal('1.14975'))
+        solde_300 = _money(tps['solde_a_reclamer'] + tvq['solde_a_reclamer'])
+
+        selected_report.formulaire = {
+            '101': montant_101,
+            '105': tps['total_percue'],
+            '108': tps['total_payee'],
+            '113': tps['solde_a_reclamer'],
+            '205': tvq['total_percue'],
+            '208': tvq['total_payee'],
+            '213': tvq['solde_a_reclamer'],
+            '300': solde_300,
+        }
+
+        period_start = date(selected_report.annee, selected_report.mois, 1)
+        period_end = date(
+            selected_report.annee,
+            selected_report.mois,
+            monthrange(selected_report.annee, selected_report.mois)[1],
+        )
+        selected_report.periode_debut = period_start
+        selected_report.periode_fin = period_end
 
     return render(request, "rapports/rapport_de_taxe.html", {
         'title': "Rapport de taxes",
@@ -2525,3 +2589,58 @@ def releve_bancaire(request):
     })
 
     return response
+
+
+@login_required
+@require_POST
+def creer_cheque(request):
+    if request.POST.get('annule') == '1':
+        no_cheque = (request.POST.get('no_cheque') or '').strip()
+        if not no_cheque:
+            return JsonResponse({'error': "Numéro de chèque manquant."}, status=400)
+        if Cheque.objects.filter(no_cheque=no_cheque).exists():
+            return JsonResponse({'error': f"Le numéro {no_cheque} est déjà utilisé."}, status=400)
+
+        cheque = Cheque.objects.create(no_cheque=no_cheque, date_emission=timezone.now().date(), annule=True)
+        return JsonResponse({'ok': True, 'cheque_id': cheque.id, 'annule': True})
+
+    settings_instance = get_setting()
+    if not settings_instance or not settings_instance.cap or not settings_instance.compte_cheques:
+        return JsonResponse(
+            {'error': "Configure le compte CAP et le compte chèques dans Setting avant d'inscrire un chèque."},
+            status=400,
+        )
+
+    form = ChequeForm(request.POST)
+    if not form.is_valid():
+        return JsonResponse({'error': "Formulaire invalide.", 'errors': form.errors}, status=400)
+
+    with transaction.atomic():
+        no_cheque = form.cleaned_data['no_cheque']
+        source_cheque, _ = Source.objects.get_or_create(nom=f"Ch # {no_cheque}")
+
+        tr_desc = Tr_desc.objects.create(
+            no_ej=_next_no_ej(),
+            date=form.cleaned_data['date_emission'],
+            compagnie=form.cleaned_data['compagnie'],
+            desc_ctb=form.cleaned_data['description'],
+            source=source_cheque,
+        )
+
+        montant = form.cleaned_data['montant']
+        Tr_detail.objects.create(tr_desc=tr_desc, compte=settings_instance.cap, montant=montant)
+        Tr_detail.objects.create(tr_desc=tr_desc, compte=settings_instance.compte_cheques, montant=-montant)
+
+        cheque = form.save(commit=False)
+        cheque.tr_desc = tr_desc
+        cheque.save()
+
+    return JsonResponse({'ok': True, 'no_ej': tr_desc.no_ej, 'cheque_id': cheque.id})
+
+
+def cheques(request):
+    cheques_list = Cheque.objects.select_related('compagnie').order_by('-date_emission', '-id')
+    return render(request, "cheques/index.html", {
+        'title': "Chèques",
+        'cheques': cheques_list,
+    })

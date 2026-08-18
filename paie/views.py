@@ -52,12 +52,6 @@ def _superuser_required(request):
 
 
 @login_required
-def paie_dashboard(request):
-	_ensure_default_frequences_paie()
-	return render(request, 'paie/dashboard.html', {'title': 'Paie'})
-
-
-@login_required
 @xframe_options_sameorigin
 def employes_page(request):
 	_ensure_default_frequences_paie()
@@ -1039,7 +1033,7 @@ def remises_mensuelles_page(request):
 		'title': 'Remises mensuelles',
 		'federal_total': federal_total,
 		'provincial_total': provincial_total,
-		'paies_count': len(paies),
+		'periodes_count': len({paie.periode_id for paie in paies}),
 		'revenu_brut_total': revenu_brut_total,
 	})
 

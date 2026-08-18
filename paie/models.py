@@ -883,6 +883,7 @@ class PaieJournalLigne(models.Model):
     employe_nom = models.CharField(max_length=100)
     employe_prenom = models.CharField(max_length=100)
     date_fin = models.DateField()
+    date_paie = models.DateField(null=True, blank=True)
     brut = models.DecimalField(max_digits=10, decimal_places=2)
     net = models.DecimalField(max_digits=10, decimal_places=2)
     rrq_employe = models.DecimalField(max_digits=10, decimal_places=2)

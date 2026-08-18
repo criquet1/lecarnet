@@ -1,0 +1,165 @@
+<!-- facture/templates/includes/components/creer_cheque.html -->
+<div class="modal fade" id="chequeModal" tabindex="-1" aria-labelledby="chequeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="chequeModalLabel">Inscrire un chèque</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <div id="cheque-modal-errors" class="alert alert-danger py-2 d-none"></div>
+                <form id="cheque-form">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="cheque-no">No de chèque</label>
+                            <input type="text" class="form-control" id="cheque-no" name="no_cheque" value="{{ prochain_no_cheque }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="cheque-date">Date</label>
+                            <input type="date" class="form-control" id="cheque-date" name="date_emission" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="cheque-compagnie">Compagnie</label>
+                            <select class="form-select" id="cheque-compagnie" name="compagnie" required>
+                                <option value="">-- choisir --</option>
+                                {% for compagnie in compagnies %}
+                                    <option value="{{ compagnie.id }}">{{ compagnie.nom }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="cheque-montant">Montant</label>
+                            <input type="number" step="0.01" class="form-control" id="cheque-montant" name="montant" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="cheque-description">Description</label>
+                            <input type="text" class="form-control" id="cheque-description" name="description">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" form="cheque-form" class="btn btn-primary" id="cheque-submit-btn">Enregistrer</button>
+                <button type="button" class="btn btn-outline-danger" id="cheque-annuler-btn">Annuler ce numéro</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const form = document.getElementById('cheque-form');
+    const modalElement = document.getElementById('chequeModal');
+    const errorsDiv = document.getElementById('cheque-modal-errors');
+    const submitBtn = document.getElementById('cheque-submit-btn');
+    const annulerBtn = document.getElementById('cheque-annuler-btn');
+
+    if (!form || !modalElement) {
+        return;
+    }
+
+    function getCookie(name) {
+        const match = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+        return match ? decodeURIComponent(match[2]) : '';
+    }
+
+    function showError(message) {
+        errorsDiv.textContent = message;
+        errorsDiv.classList.remove('d-none');
+    }
+
+    function clearError() {
+        errorsDiv.classList.add('d-none');
+        errorsDiv.textContent = '';
+    }
+
+    form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        clearError();
+        submitBtn.disabled = true;
+
+        const formData = new FormData(form);
+
+        fetch("{% url 'creer_cheque' %}", {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+            body: formData,
+        })
+            .then(function (response) {
+                return response.json().then(function (data) {
+                    return { ok: response.ok, data: data };
+                });
+            })
+            .then(function (result) {
+                submitBtn.disabled = false;
+                if (!result.ok) {
+                    showError(result.data.error || "Une erreur est survenue.");
+                    return;
+                }
+                bootstrap.Modal.getOrCreateInstance(modalElement).hide();
+                form.reset();
+                window.location.reload();
+            })
+            .catch(function () {
+                submitBtn.disabled = false;
+                showError("Erreur réseau lors de l'enregistrement du chèque.");
+            });
+    });
+
+    if (annulerBtn) {
+        annulerBtn.addEventListener('click', function () {
+            const noCheque = document.getElementById('cheque-no').value.trim();
+            if (!noCheque) {
+                showError("Indique un numéro de chèque avant de l'annuler.");
+                return;
+            }
+            if (!window.confirm(`Confirmer l'annulation du chèque no ${noCheque} ? Ce numéro ne sera plus proposé.`)) {
+                return;
+            }
+
+            clearError();
+            annulerBtn.disabled = true;
+            fetch("{% url 'creer_cheque' %}", {
+                method: 'POST',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                body: new URLSearchParams({ no_cheque: noCheque, annule: '1' }),
+            })
+                .then(function (response) {
+                    return response.json().then(function (data) {
+                        return { ok: response.ok, data: data };
+                    });
+                })
+                .then(function (result) {
+                    annulerBtn.disabled = false;
+                    if (!result.ok) {
+                        showError(result.data.error || "Une erreur est survenue.");
+                        return;
+                    }
+                    bootstrap.Modal.getOrCreateInstance(modalElement).hide();
+                    form.reset();
+                    window.location.reload();
+                })
+                .catch(function () {
+                    annulerBtn.disabled = false;
+                    showError("Erreur réseau lors de l'annulation du chèque.");
+                });
+        });
+    }
+})();
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.cheque-compagnie-trigger').forEach(function (trigger) {
+        trigger.style.cursor = 'context-menu';
+        trigger.addEventListener('contextmenu', function (event) {
+            event.preventDefault();
+            const compagnieId = trigger.dataset.compagnieId;
+            const select = document.getElementById('cheque-compagnie');
+            if (select && compagnieId) {
+                select.value = compagnieId;
+            }
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('chequeModal')).show();
+        });
+    });
+});
+</script>

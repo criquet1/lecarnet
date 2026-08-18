@@ -50,8 +50,11 @@
 <body{% if request.GET.embed == "1" %} class="embedded-report"{% endif %}>
 
       <script>
-            if (window.self !== window.top)
-                  document.body.classList.add('embedded-report');
+            if (window.self !== window.top) {
+                document.body.classList.add('embedded-report');
+                document.documentElement.style.overflow = 'hidden';
+                document.body.style.overflow = 'hidden';
+}
 
             // Remonte la hauteur reelle du contenu embarque au parent (une seule barre de defilement).
             if (window.self !== window.top) {

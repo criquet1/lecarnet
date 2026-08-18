@@ -81,6 +81,9 @@
 {% endblock %}
 
 {% block content %}
+
+{% include "includes/navigation/paie_tabs.html" %}
+
 <div class="text-center mb-4 no-print">
     <div class="d-flex justify-content-center align-items-center gap-2 flex-wrap">
         <a href="?mois={{ previous_year_value }}" class="btn btn-outline-secondary btn-sm">Année précédente</a>

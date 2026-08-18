@@ -10,6 +10,8 @@ Création et gestion des employés du client actif.
 
 {% block content %}
 
+{% include "includes/navigation/paie_tabs.html" %}
+
 {% if messages %}
     {% for message in messages %}
         <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">

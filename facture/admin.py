@@ -1,5 +1,5 @@
 from django.contrib import admin
-from facture.models import Compagnie, Facture, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
+from facture.models import Client, Compagnie, Facture, Fournisseur, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
 from compte.models import Setting
 from import_export.admin import ExportMixin, ImportExportModelAdmin
 
@@ -111,6 +111,8 @@ class FactureAdmin(ExportMixin, admin.ModelAdmin):
 admin.site.register(Facture, FactureAdmin)
 admin.site.register(TransactionListe, TransactionListeAdmin)
 admin.site.register(Compagnie, CompagnieAdmin)
+admin.site.register(Client)
+admin.site.register(Fournisseur)
 admin.site.register(Setting, SettingAdmin)
 admin.site.register(Tr_desc, TrDescAdmin)
 admin.site.register(Tr_detail, TrDetailAdmin)

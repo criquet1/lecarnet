@@ -46,6 +46,42 @@ class Compagnie(models.Model):
         return self.nom
 
 
+class Client(models.Model):
+    nom = models.CharField(max_length=60, blank=False, null=False)
+    logo = models.CharField(
+        max_length=100,
+        blank=False,
+        null=False,
+        default='images.png',
+        help_text="Nom du fichier logo dans static/images/logos (ex: images.png)."
+    )
+    comptes = models.ManyToManyField(Compte, related_name='clients', blank=True)
+    active = models.BooleanField(default=True)
+    afficher_card = models.BooleanField(default=True)
+    created_by_non_expert = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.nom
+
+
+class Fournisseur(models.Model):
+    nom = models.CharField(max_length=60, blank=False, null=False)
+    logo = models.CharField(
+        max_length=100,
+        blank=False,
+        null=False,
+        default='images.png',
+        help_text="Nom du fichier logo dans static/images/logos (ex: images.png)."
+    )
+    comptes = models.ManyToManyField(Compte, related_name='fournisseurs', blank=True)
+    active = models.BooleanField(default=True)
+    afficher_card = models.BooleanField(default=True)
+    created_by_non_expert = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.nom
+
+
 class Tr_desc(models.Model):
     no_ej = models.CharField(max_length=10, blank=False, null=False)
     compagnie = models.ForeignKey(Compagnie, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
@@ -440,3 +476,17 @@ class Facture(models.Model):
     class Meta:
         managed = False
         db_table = 'factures'
+
+
+class Cheque(models.Model):
+    no_cheque = models.CharField(max_length=20)
+    date_emission = models.DateField()
+    montant = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    compagnie = models.ForeignKey(Compagnie, on_delete=models.PROTECT, related_name='cheques', null=True, blank=True)
+    description = models.CharField(max_length=255, blank=True)
+    tr_desc = models.ForeignKey(Tr_desc, on_delete=models.PROTECT, related_name='cheques', null=True, blank=True)
+    releve_ligne = models.ForeignKey(Releve, on_delete=models.SET_NULL, null=True, blank=True, related_name='cheque_associe')
+    annule = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Ch # {self.no_cheque}"

@@ -40,7 +40,7 @@
         </a>
 
         <!-- Paies -->
-        <a href="{% url 'paie:paie_dashboard' %}"
+        <a href="{% url 'paie:paie_saisir' %}"
            class="sidebar-link{% if current_namespace == 'paie' and current_url != 'paie_parametres_taux' %} active{% endif %}"
               data-tooltip="Paies"
               aria-label="Paies"
@@ -51,11 +51,12 @@
         </a>
 
         <!-- Rapports -->
-        <a href="{% url 'rapports' %}"
-           class="sidebar-link{% if request.resolver_match.url_name in 'rapports,journal_general,grand_livre,balance_de_verification,compte_a_payer,compte_a_recevoir,rapport_de_taxes' %} active{% endif %}"
-              data-tooltip="Rapports"
-              aria-label="Rapports"
-              {% if current_url in 'rapports,journal_general,grand_livre,balance_de_verification,compte_a_payer,compte_a_recevoir,rapport_de_taxes' %}aria-current="page"{% endif %}>
+<!-- Rapports -->
+<a href="{% url 'journal_general' %}"
+   class="sidebar-link{% if request.resolver_match.url_name in 'journal_general,grand_livre,balance_de_verification,compte_a_payer,compte_a_recevoir,rapport_de_taxes' %} active{% endif %}"
+      data-tooltip="Rapports"
+      aria-label="Rapports"
+      {% if current_url in 'journal_general,grand_livre,balance_de_verification,compte_a_payer,compte_a_recevoir,rapport_de_taxes' %}aria-current="page"{% endif %}>
 
             <i class="bi bi-bar-chart-line"></i>
 

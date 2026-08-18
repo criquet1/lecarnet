@@ -1,0 +1,56 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+
+{% include "includes/navigation/banque_tabs.html" %}
+
+<button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#chequeModal">
+    + Inscrire un chèque
+</button>
+
+{% include "includes/components/creer_cheque.html" %}
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>No chèque</th>
+                        <th>Date</th>
+                        <th>Compagnie</th>
+                        <th>Description</th>
+                        <th class="text-end">Montant</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cheque in cheques %}
+                        <tr>
+                            <td>{{ cheque.no_cheque }}</td>
+                            <td>{{ cheque.date_emission|date:"Y-m-d" }}</td>
+                            <td>{% if cheque.compagnie %}{{ cheque.compagnie.nom }}{% endif %}</td>
+                            <td>{{ cheque.description }}</td>
+                            <td class="text-end">{% if cheque.montant %}{{ cheque.montant|floatformat:2 }}{% endif %}</td>
+                            <td>
+                                {% if cheque.annule %}
+                                    <span class="badge text-bg-secondary">Annulé</span>
+                                {% else %}
+                                    <span class="badge text-bg-success">En circulation</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-muted">Aucun chèque inscrit.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

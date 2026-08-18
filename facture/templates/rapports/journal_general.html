@@ -21,6 +21,8 @@
 
 {% block content %}
 
+{% include "includes/navigation/reports_tabs.html" %}
+
 {% if request.user.is_expert or request.user.is_superuser %}
 <div class="border rounded p-3 mb-4 bg-light no-print mx-auto" style="overflow:hidden; max-width: 840px;">
     {% include "compte/transactions_form.html" %}

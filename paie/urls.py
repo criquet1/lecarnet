@@ -5,7 +5,6 @@ from . import views
 app_name = 'paie'
 
 urlpatterns = [
-	path('', views.paie_dashboard, name='paie_dashboard'),
 	path('employes/', views.employes_page, name='paie_employes'),
 	path('employes/<int:employe_id>/', views.employe_edit_page, name='paie_employe_edit'),
 	path('employes/<int:employe_id>/desactiver/', views.employe_desactiver_page, name='paie_employe_desactiver'),

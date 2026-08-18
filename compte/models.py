@@ -130,6 +130,9 @@ class Setting(models.Model):
     # Ajout de related_name uniques pour éviter le conflit
     car = models.ForeignKey(Compte, on_delete=models.SET_NULL, null=True, blank=True, related_name='settings_car')
     cap = models.ForeignKey(Compte, on_delete=models.SET_NULL, null=True, blank=True, related_name='settings_cap')
+
+    compte_cheques = models.ForeignKey(Compte, on_delete=models.SET_NULL, null=True, blank=True, related_name='settings_compte_cheques')
+    no_cheque_depart = models.PositiveIntegerField(null=True, blank=True)
     
     compte_tps_percue = models.ForeignKey(
         Compte, 

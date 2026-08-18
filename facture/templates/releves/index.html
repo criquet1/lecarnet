@@ -13,6 +13,8 @@
 
 {% block content %}
 
+{% include "includes/navigation/banque_tabs.html" %}
+
     {% if errors %}
         <div class="alert alert-warning">
             {% for error in errors %}

@@ -13,6 +13,9 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import json
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -104,6 +107,8 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'tenancy.context_processors.active_client',
                 'facture.context_processors.site_settings',
+                'facture.context_processors.compagnies_actives',
+                'facture.context_processors.prochain_no_cheque',
             ],
         },
     },

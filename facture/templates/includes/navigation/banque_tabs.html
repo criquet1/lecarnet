@@ -1,0 +1,8 @@
+{% with active=request.resolver_match.url_name %}
+<nav class="section-tabs reports-tabs" role="tablist" aria-label="Banque">
+    <a href="{% url 'releve_bancaire' %}" class="section-tab{% if active == 'releve_bancaire' %} active{% endif %}" role="tab" aria-selected="{% if active == 'releve_bancaire' %}true{% else %}false{% endif %}">Relevés</a>
+    <a href="{% url 'cheques' %}" class="section-tab{% if active == 'cheques' %} active{% endif %}" role="tab" aria-selected="{% if active == 'cheques' %}true{% else %}false{% endif %}">Chèques</a>
+    <span class="section-tab disabled" role="tab" aria-disabled="true" tabindex="-1">Dépôts</span>
+    <span class="section-tab disabled" role="tab" aria-disabled="true" tabindex="-1">Conciliation bancaire</span>
+</nav>
+{% endwith %}

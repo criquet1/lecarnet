@@ -1,0 +1,9 @@
+{% with active=request.resolver_match.url_name %}
+<nav class="section-tabs reports-tabs" role="tablist" aria-label="Paie">
+    <a href="{% url 'paie:paie_saisir' %}" class="section-tab{% if active == 'paie_saisir' %} active{% endif %}" role="tab" aria-selected="{% if active == 'paie_saisir' %}true{% else %}false{% endif %}">Saisir une paie</a>
+    <a href="{% url 'paie:paie_journal' %}" class="section-tab{% if active == 'paie_journal' %} active{% endif %}" role="tab" aria-selected="{% if active == 'paie_journal' %}true{% else %}false{% endif %}">Journal des paies</a>
+    <a href="{% url 'paie:paie_employes' %}" class="section-tab{% if active == 'paie_employes' %} active{% endif %}" role="tab" aria-selected="{% if active == 'paie_employes' %}true{% else %}false{% endif %}">Employés</a>
+    <a href="{% url 'paie:paie_calendrier' %}" class="section-tab{% if active == 'paie_calendrier' %} active{% endif %}" role="tab" aria-selected="{% if active == 'paie_calendrier' %}true{% else %}false{% endif %}">Calendrier de paie</a>
+    <a href="{% url 'paie:paie_remises_mensuelles' %}" class="section-tab{% if active == 'paie_remises_mensuelles' %} active{% endif %}" role="tab" aria-selected="{% if active == 'paie_remises_mensuelles' %}true{% else %}false{% endif %}">Remises mensuelles</a>
+</nav>
+{% endwith %}

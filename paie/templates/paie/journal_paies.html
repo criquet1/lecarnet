@@ -30,10 +30,6 @@
         }
     }
 
-    #modal-ecriture-salaire-lignes .indent-credit {
-        padding-left: 2rem;
-    }
-
     .statut-transmission {
         display: inline-block;
         width: .75rem;
@@ -61,6 +57,8 @@
 {% endblock %}
 
 {% block content %}
+
+{% include "includes/navigation/paie_tabs.html" %}
 
 {% if messages %}
     {% for message in messages %}
@@ -294,38 +292,6 @@
     {% endfor %}
 </div>
 
-{% if can_create_salary_entry %}
-<div class="modal fade" id="modal-ecriture-salaire" tabindex="-1" aria-labelledby="modal-ecriture-salaire-titre" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="modal-ecriture-salaire-titre">Écriture de salaire</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
-            </div>
-            <div class="modal-body">
-                <p id="modal-ecriture-salaire-message" class="mb-3"></p>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th>Compte</th>
-                                <th class="text-end">Débit</th>
-                                <th class="text-end">Crédit</th>
-                            </tr>
-                        </thead>
-                        <tbody id="modal-ecriture-salaire-lignes"></tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" id="modal-ecriture-salaire-update" class="btn btn-warning d-none">Mettre à jour</button>
-                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
 {% endblock %}
 
 {% block scripts %}
@@ -334,16 +300,11 @@
     (function () {
         const form = document.getElementById('form-creer-ecriture-salaire');
         const rows = document.querySelectorAll('.js-creer-ecriture-salaire');
-        const modalElement = document.getElementById('modal-ecriture-salaire');
-        if (!form || !rows.length || !modalElement) {
+        if (!form || !rows.length) {
             return;
         }
 
         const csrfToken = form.querySelector('[name=csrfmiddlewaretoken]').value;
-        const modal = new bootstrap.Modal(modalElement);
-        const modalMessage = document.getElementById('modal-ecriture-salaire-message');
-        const modalLignes = document.getElementById('modal-ecriture-salaire-lignes');
-        const updateButton = document.getElementById('modal-ecriture-salaire-update');
         let currentRow = null;
 
         function appliquerStatut(row, data) {
@@ -371,7 +332,7 @@
             });
         }
 
-        function afficherEcriture(data) {
+        function construireTexte(data) {
             let message;
             if (data.updated) {
                 message = `L'écriture salaire a été mise à jour (${data.no_ej}).`;
@@ -382,60 +343,37 @@
             } else {
                 message = `Écriture salaire créée (${data.no_ej}).`;
             }
-            modalMessage.textContent = message;
 
-            modalLignes.innerHTML = '';
-            data.lines.forEach(function (ligne) {
-                const tr = document.createElement('tr');
-                const tdCompte = document.createElement('td');
+            const lignesTexte = data.lines.map(function (ligne) {
                 if (ligne.credit) {
-                    tdCompte.className = 'indent-credit';
+                    return `    ${ligne.compte_numero} - ${ligne.compte_libelle} : Crédit ${ligne.credit}`;
                 }
-                tdCompte.textContent = `${ligne.compte_numero} - ${ligne.compte_libelle}`;
-                const tdDebit = document.createElement('td');
-                tdDebit.className = 'text-end';
-                tdDebit.textContent = ligne.debit;
-                const tdCredit = document.createElement('td');
-                tdCredit.className = 'text-end';
-                tdCredit.textContent = ligne.credit;
-                tr.append(tdCompte, tdDebit, tdCredit);
-                modalLignes.appendChild(tr);
-            });
+                return `${ligne.compte_numero} - ${ligne.compte_libelle} : Débit ${ligne.debit}`;
+            }).join('\n');
 
-            if (updateButton) {
-                const needsUpdate = Boolean(data.already_existed && data.matches === false && data.update_url);
-                updateButton.classList.toggle('d-none', !needsUpdate);
-                updateButton.disabled = false;
-                updateButton.dataset.updateUrl = needsUpdate ? data.update_url : '';
-            }
-
-            appliquerStatut(currentRow, data);
-
-            modal.show();
+            return `${message}\n\n${lignesTexte}`;
         }
 
-        if (updateButton) {
-            updateButton.addEventListener('click', function () {
-                const updateUrl = updateButton.dataset.updateUrl;
-                if (!updateUrl) {
-                    return;
-                }
+        function afficherEcriture(data) {
+            appliquerStatut(currentRow, data);
+            window.alert(construireTexte(data));
 
-                updateButton.disabled = true;
-                poster(updateUrl)
-                    .then(function (data) {
-                        if (data.ok) {
-                            afficherEcriture(data);
-                        } else {
-                            updateButton.disabled = false;
-                            window.alert(data.error || "Une erreur est survenue.");
-                        }
-                    })
-                    .catch(function () {
-                        updateButton.disabled = false;
-                        window.alert("Une erreur est survenue lors de la mise à jour de l'écriture.");
-                    });
-            });
+            if (data.already_existed && data.matches === false && data.update_url) {
+                const veutMettreAJour = window.confirm("Les montants ont changé depuis la création de l'écriture. Voulez-vous la mettre à jour maintenant ?");
+                if (veutMettreAJour) {
+                    poster(data.update_url)
+                        .then(function (updatedData) {
+                            if (updatedData.ok) {
+                                afficherEcriture(updatedData);
+                            } else {
+                                window.alert(updatedData.error || "Une erreur est survenue lors de la mise à jour.");
+                            }
+                        })
+                        .catch(function () {
+                            window.alert("Une erreur est survenue lors de la mise à jour de l'écriture.");
+                        });
+                }
+            }
         }
 
         rows.forEach(function (row) {

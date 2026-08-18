@@ -13,6 +13,8 @@ Saisie des heures de travail d'un employé pour produire une paie.
 
 {% block content %}
 
+{% include "includes/navigation/paie_tabs.html" %}
+
 {% if messages %}
     {% for message in messages %}
         <div class="alert alert-{{ message.tags|default:'info' }}">

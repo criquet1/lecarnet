@@ -4,7 +4,7 @@ from django import forms
 from django.forms import formset_factory
 
 from .constants import MONTH_CHOICES_FR
-from .models import Compagnie, Tr_desc
+from .models import Cheque, Compagnie, Tr_desc, Client, Fournisseur
 from compte.models import Setting
 from .utils import get_available_logos
 
@@ -15,6 +15,36 @@ class CompagnieForm(forms.ModelForm):
     class Meta:
         model = Compagnie
         fields = ['nom', 'logo', 'comptes', 'cap_ou_car', 'active']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        logo_files = get_available_logos()
+
+        self.fields['logo'].choices = [(name, name) for name in logo_files]
+        self.fields['logo'].help_text = "Fichier pris depuis static/images/logos"
+
+
+class ClientForm(forms.ModelForm):
+    logo = forms.ChoiceField(label="Logo", required=True)
+
+    class Meta:
+        model = Client
+        fields = ['nom', 'logo', 'comptes', 'active']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        logo_files = get_available_logos()
+
+        self.fields['logo'].choices = [(name, name) for name in logo_files]
+        self.fields['logo'].help_text = "Fichier pris depuis static/images/logos"
+
+
+class FournisseurForm(forms.ModelForm):
+    logo = forms.ChoiceField(label="Logo", required=True)
+
+    class Meta:
+        model = Fournisseur
+        fields = ['nom', 'logo', 'comptes', 'active']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -161,3 +191,16 @@ class TrDetailForm(forms.Form):
 
 
 TrDetailFormSet = formset_factory(TrDetailForm, extra=25)
+
+
+class ChequeForm(forms.ModelForm):
+    class Meta:
+        model = Cheque
+        fields = ['no_cheque', 'date_emission', 'compagnie', 'montant', 'description']
+        widgets = {
+            'no_cheque': forms.TextInput(attrs={'class': 'form-control'}),
+            'date_emission': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'compagnie': forms.Select(attrs={'class': 'form-select'}),
+            'montant': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'description': forms.TextInput(attrs={'class': 'form-control'}),
+        }

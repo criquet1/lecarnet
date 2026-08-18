@@ -21,10 +21,18 @@
             font-size: .7rem;
         }
     }
+    .cheque-compagnie-trigger {
+        cursor: context-menu;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+
+{% include "includes/navigation/reports_tabs.html" %}
+
+
+{% include "includes/components/creer_cheque.html" %}
 
 <div class="mx-auto w-100" style="max-width: 980px;">
     <div class="d-flex flex-column gap-3">
@@ -52,7 +60,9 @@
 
         {% for block in blocks %}
             <div class="border rounded p-3">
-                <div class="fw-semibold mb-2">{{ block.compagnie.nom }}</div>
+                <div class="fw-semibold mb-2 cheque-compagnie-trigger" data-compagnie-id="{{ block.compagnie.id }}">
+                    {{ block.compagnie.nom }}
+                </div>
                 <div class="table-responsive">
                     <table class="table table-sm table-striped align-middle mb-0" style="table-layout: fixed; width: 100%;">
                         <colgroup>

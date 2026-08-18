@@ -9,15 +9,19 @@
 
 {% block page_title %}{{ title }}{% endblock %}
 
+
 {% block page_subtitle %}
     {% if report_year_label %}{{ report_year_label }}{% else %}Préparation et transmission des taxes de la période de travail.{% endif %}
 {% endblock %}
+
 
 {% block page_actions %}
     {% include "includes/components/print_button.html" %}
 {% endblock %}
 
 {% block content %}
+
+{% include "includes/navigation/reports_tabs.html" %}
 
 <div class="mx-auto w-100" style="max-width: 980px;">
     <div class="no-print">
@@ -35,7 +39,74 @@
         </div>
     {% endif %}
 
-    {% if selected_report %}
+
+{% if selected_report %}
+<div class="mb-4">
+    <div class="text-center mb-3">
+        <h5 class="mb-0">Déclaration mensuelle TPS / TVQ</h5>
+        <div class="text-muted small">
+            Pour la période du {{ selected_report.periode_debut|date:"Y-m-d" }} au {{ selected_report.periode_fin|date:"Y-m-d" }}
+        </div>
+    </div>
+
+    <div class="mb-3 pb-3 border-bottom">
+        <span class="formulaire-label">101 - Fournitures</span>
+        <span class="formulaire-boite">{{ selected_report.formulaire.101|floatformat:2 }} $</span>
+    </div>
+
+    <table class="table-formulaire mb-0">
+        <tr>
+            <td>
+                <span class="formulaire-label">105 - TPS exigible</span>
+                <span class="formulaire-boite">{{ selected_report.formulaire.105|floatformat:2 }} $</span>
+            </td>
+            <td>
+                <span class="formulaire-label">108 - CTI</span>
+                <span class="formulaire-boite">{{ selected_report.formulaire.108|floatformat:2 }} $</span>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="2"><hr></td>
+        </tr>
+        <tr>
+            <td>
+                <span class="formulaire-label">205 - TVQ exigible</span>
+                <span class="formulaire-boite">{{ selected_report.formulaire.205|floatformat:2 }} $</span>
+            </td>
+            <td>
+                <span class="formulaire-label">208 - RTI</span>
+                <span class="formulaire-boite">{{ selected_report.formulaire.208|floatformat:2 }} $</span>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="2"><hr></td>
+        </tr>
+        <tr>
+            <td>
+                <span class="formulaire-label">113 - TPS nette</span>
+                <span class="formulaire-boite">{% if selected_report.formulaire.113 < 0 %}({{ selected_report.formulaire.113|floatformat:2|slice:"1:" }}){% else %}{{ selected_report.formulaire.113|floatformat:2 }}{% endif %} $</span>
+            </td>
+            <td>
+                <span class="formulaire-label">213 - TVQ nette</span>
+                <span class="formulaire-boite">{% if selected_report.formulaire.213 < 0 %}({{ selected_report.formulaire.213|floatformat:2|slice:"1:" }}){% else %}{{ selected_report.formulaire.213|floatformat:2 }}{% endif %} $</span>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="2"><hr></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>
+                <span class="formulaire-label">300 - Solde {% if selected_report.formulaire.300 < 0 %}à payer{% else %}à réclamer{% endif %}</span>
+                <span class="formulaire-boite">{% if selected_report.formulaire.300 < 0 %}({{ selected_report.formulaire.300|floatformat:2|slice:"1:" }}){% else %}{{ selected_report.formulaire.300|floatformat:2 }}{% endif %} $</span>
+            </td>
+        </tr>
+    </table>
+</div>
+{% endif %}
+
+        {% if selected_report %}
+
         <div class="border rounded p-3 mb-3">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
@@ -72,78 +143,87 @@
             {% endif %}
         </div>
 
-        <div class="row g-3">
-            {% for tax_name, block in selected_report.tax_blocks.items %}
-                <div class="col-12">
-                    <div class="border rounded p-3 h-100">
-                        <h5 class="mb-3">{{ tax_name }}</h5>
-
-                        <div class="table-responsive">
-                            <table class="table-rapport">
-                                <thead>
-                                    <tr>
-                                        <th class="col-medium">Date</th>
-                                        <th class="col-large">Compagnie</th>
-                                        <th class="col-large">Facture</th>
-                                        <th class="col-small text-end">Perçue</th>
-                                        <th class="col-small text-end">Payée</th>
-
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for row in block.rows %}
-                                        <tr>
-                                            <td>{{ row.date|date:"Y-m-d" }}</td>
-                                            <td>{{ row.compagnie_nom }}</td>
-                                            <td>{{ row.facture }}</td>
-                                            <td class="montant">
-                                                {% if row.percue is not None %}
-                                                    {{ row.percue|floatformat:2 }}
-                                                {% endif %}
-                                            </td>
-
-                                            <td class="montant">
-                                                {% if row.payee is not None %}
-                                                    {{ row.payee|floatformat:2 }}
-                                                {% endif %}
-                                            </td>
-
-                                        </tr>
-                                    {% empty %}
-                                        <tr>
-                                            <td colspan="5" class="text-muted">Aucune ligne {{ tax_name }} pour cette periode.</td>
-                                        </tr>
-                                    {% endfor %}
-                                </tbody>
-                                <tfoot>
-                                    <tr>
-                                        <td colspan="3" class="text-end">Totaux</td>
-                                        <td class="montant">{{ block.total_percue|floatformat:2 }}</td>
-                                        <td class="montant">{{ block.total_payee|floatformat:2 }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td colspan="3" class="text-end">
-                                            {% if block.solde_a_reclamer < 0 %}
-                                                Montant à payer
-                                            {% else %}
-                                                Montant à réclamer
-                                            {% endif %}
-                                        </td>
-                                        <td colspan="2" class="montant">
-                                            {% if block.solde_a_reclamer < 0 %}
-                                                ({{ block.solde_a_reclamer|floatformat:2|slice:"1:" }})
-                                            {% else %}
-                                                {{ block.solde_a_reclamer|floatformat:2 }}
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                </tfoot>
-
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            {% endfor %}
+        <div class="border rounded p-3 mb-3">
+            <div class="table-responsive">
+                <table class="table-rapport">
+                    <thead>
+                        <tr>
+                            <th class="col-medium" rowspan="2">Date</th>
+                            <th class="col-large" rowspan="2">Compagnie</th>
+                            <th class="col-large" rowspan="2">Facture</th>
+                            <th class="text-center" colspan="2">TPS</th>
+                            <th class="text-center" colspan="2">TVQ</th>
+                        </tr>
+                        <tr>
+                            <th class="col-small text-end">Perçue</th>
+                            <th class="col-small text-end">Payée</th>
+                            <th class="col-small text-end">Perçue</th>
+                            <th class="col-small text-end">Payée</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in selected_report.merged_rows %}
+                            <tr>
+                                <td>{{ row.date|date:"Y-m-d" }}</td>
+                                <td>{{ row.compagnie_nom }}</td>
+                                <td>{{ row.facture }}</td>
+                                <td class="montant">
+                                    {% if row.tps_percue is not None %}{{ row.tps_percue|floatformat:2 }}{% endif %}
+                                </td>
+                                <td class="montant">
+                                    {% if row.tps_payee is not None %}{{ row.tps_payee|floatformat:2 }}{% endif %}
+                                </td>
+                                <td class="montant">
+                                    {% if row.tvq_percue is not None %}{{ row.tvq_percue|floatformat:2 }}{% endif %}
+                                </td>
+                                <td class="montant">
+                                    {% if row.tvq_payee is not None %}{{ row.tvq_payee|floatformat:2 }}{% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-muted">Aucune ligne pour cette periode.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3" class="text-end">TPS nette</td>
+                            <td colspan="2" class="montant">
+                                {% if selected_report.tax_blocks.TPS.solde_a_reclamer < 0 %}
+                                    ({{ selected_report.tax_blocks.TPS.solde_a_reclamer|floatformat:2|slice:"1:" }})
+                                {% else %}
+                                    {{ selected_report.tax_blocks.TPS.solde_a_reclamer|floatformat:2 }}
+                                {% endif %}
+                            </td>
+                            <td colspan="2"></td>
+                        </tr>
+                        <tr>
+                            <td colspan="3" class="text-end">TVQ nette</td>
+                            <td colspan="2"></td>
+                            <td colspan="2" class="montant">
+                                {% if selected_report.tax_blocks.TVQ.solde_a_reclamer < 0 %}
+                                    ({{ selected_report.tax_blocks.TVQ.solde_a_reclamer|floatformat:2|slice:"1:" }})
+                                {% else %}
+                                    {{ selected_report.tax_blocks.TVQ.solde_a_reclamer|floatformat:2 }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan="3" class="text-end">
+                                {% if selected_report.formulaire.300 < 0 %}Total à payer{% else %}Total à réclamer{% endif %}
+                            </td>
+                            <td colspan="4" class="montant">
+                                {% if selected_report.formulaire.300 < 0 %}
+                                    ({{ selected_report.formulaire.300|floatformat:2|slice:"1:" }})
+                                {% else %}
+                                    {{ selected_report.formulaire.300|floatformat:2 }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
         </div>
     {% else %}
         <div class="alert alert-info">Aucun rapport trouve pour la periode selectionnee.</div>

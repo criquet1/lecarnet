@@ -91,3 +91,30 @@ def site_settings(request):
         'fiscal_period_options': fiscal_period_options,
         'working_period': get_working_period(request),
     }
+
+
+from .models import Cheque, Compagnie
+
+
+def compagnies_actives(request):
+    if not request.user.is_authenticated:
+        return {}
+    return {'compagnies': Compagnie.objects.filter(active=True).order_by('nom')}
+
+def prochain_no_cheque(request):
+    if not request.user.is_authenticated:
+        return {}
+
+    settings_instance = Setting.objects.first()
+    depart = settings_instance.no_cheque_depart if settings_instance and settings_instance.no_cheque_depart else 1
+
+    numeros_utilises = set()
+    for valeur in Cheque.objects.values_list('no_cheque', flat=True):
+        if valeur and valeur.strip().isdigit():
+            numeros_utilises.add(int(valeur.strip()))
+
+    prochain = depart
+    while prochain in numeros_utilises:
+        prochain += 1
+
+    return {'prochain_no_cheque': str(prochain)}

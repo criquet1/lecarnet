@@ -11,9 +11,12 @@
 {% endblock %}
 
 {% block content %}
-{% if paies_count %}
+
+{% include "includes/navigation/paie_tabs.html" %}
+
+{% if periodes_count %}
     <div class="alert alert-light border mb-4 text-center">
-        <span class="fs-4 fw-bold">Revenu brut : {{ revenu_brut_total|floatformat:2 }} $</span><br>{{ paies_count }} paie{% if paies_count > 1 %}s{% endif %} incluse{% if paies_count > 1 %}s{% endif %} pour cette période.
+        <span class="fs-4 fw-bold">Salaire brut : {{ revenu_brut_total|floatformat:2 }} $</span><br>{{ periodes_count }} période{% if periodes_count > 1 %}s{% endif %} incluse{% if periodes_count > 1 %}s{% endif %} pour cette période.
     </div>
 {% else %}
     <div class="alert alert-warning border mb-4">
@@ -43,19 +46,11 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- <tr>
-                                <td>AE employé</td>
-                                <td class="text-end">{{ federal_total.ae_employe|floatformat:2 }}</td>
-                            </tr>
                             <tr>
-                                <td>AE employeur</td>
-                                <td class="text-end">{{ federal_total.ae_employeur|floatformat:2 }}</td>
-                            </tr>
-                            <tr> -->
-                            <tr>
-                                <td>Assurance-emploi</td>
+                                <td>Ass. Emploi</td>
                                 <td class="text-end">{{ federal_total.ae_total|floatformat:2 }}</td>
                             </tr>
+                            <tr>
                                 <td>Impôt fédéral</td>
                                 <td class="text-end">{{ federal_total.impot_federal|floatformat:2 }}</td>
                             </tr>
@@ -88,45 +83,25 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- <tr>
-                                <td>RRQ employé</td>
-                                <td class="text-end">{{ provincial_total.rrq_employe|floatformat:2 }}</td>
-                            </tr>
                             <tr>
-                                <td>RRQ employeur</td>
-                                <td class="text-end">{{ provincial_total.rrq_employeur|floatformat:2 }}</td>
+                                <td>IMP. PROV.</td>
+                                <td class="text-end">{{ provincial_total.impot_provincial|floatformat:2 }}</td>
                             </tr>
-                            <tr>
-                                <td>RQAP employé</td>
-                                <td class="text-end">{{ provincial_total.rqap_employe|floatformat:2 }}</td>
-                            </tr>
-                            <tr>
-                                <td>RQAP employeur</td>
-                                <td class="text-end">{{ provincial_total.rqap_employeur|floatformat:2 }}</td>
-                            </tr> -->
-
                             <tr>
                                 <td>RRQ</td>
                                 <td class="text-end">{{ provincial_total.rrq_total|floatformat:2 }}</td>
                             </tr>
-
+                            <tr>
+                                <td>FSS</td>
+                                <td class="text-end">{{ provincial_total.fss_employeur|floatformat:2 }}</td>
+                            </tr>
                             <tr>
                                 <td>RQAP</td>
                                 <td class="text-end">{{ provincial_total.rqap_total|floatformat:2 }}</td>
                             </tr>
                             <tr>
-                                <td>FSS employeur</td>
-                                <td class="text-end">{{ provincial_total.fss_employeur|floatformat:2 }}</td>
-                            </tr>
-                            <tr>
-                                <td>CNESST employeur</td>
+                                <td>CNESST</td>
                                 <td class="text-end">{{ provincial_total.cnesst_employeur|floatformat:2 }}</td>
-                            </tr>
-
-
-                            <tr>
-                                <td>Impôt provincial</td>
-                                <td class="text-end">{{ provincial_total.impot_provincial|floatformat:2 }}</td>
                             </tr>
                         </tbody>
                         <tfoot>
