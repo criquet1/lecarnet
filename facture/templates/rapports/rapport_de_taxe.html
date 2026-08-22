@@ -51,7 +51,7 @@
 
     <div class="mb-3 pb-3 border-bottom">
         <span class="formulaire-label">101 - Fournitures</span>
-        <span class="formulaire-boite">{{ selected_report.formulaire.101|floatformat:2 }} $</span>
+        <span class="formulaire-boite">{{ selected_report.montant_101|floatformat:2 }} $</span>
     </div>
 
     <table class="table-formulaire mb-0">
@@ -97,8 +97,8 @@
         <tr>
             <td></td>
             <td>
-                <span class="formulaire-label">300 - Solde {% if selected_report.formulaire.300 < 0 %}à payer{% else %}à réclamer{% endif %}</span>
-                <span class="formulaire-boite">{% if selected_report.formulaire.300 < 0 %}({{ selected_report.formulaire.300|floatformat:2|slice:"1:" }}){% else %}{{ selected_report.formulaire.300|floatformat:2 }}{% endif %} $</span>
+                <span class="formulaire-label">300 - Solde {% if selected_report.solde_300 < 0 %}à payer{% else %}à réclamer{% endif %}</span>
+                <span class="formulaire-boite">{% if selected_report.solde_300 < 0 %}({{ selected_report.solde_300|floatformat:2|slice:"1:" }}){% else %}{{ selected_report.solde_300|floatformat:2 }}{% endif %} $</span>
             </td>
         </tr>
     </table>

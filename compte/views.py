@@ -18,8 +18,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.connection import ConnectionDoesNotExist
 from django.utils import timezone
 from django.utils.html import format_html
-
-from facture.models import Compagnie, CompagnieSoldeDepart, CompteReleve, SoldeFin, Source, Tr_desc, Tr_detail
+from facture.models import Client, Compagnie, CompagnieSoldeDepart, CompteReleve, Fournisseur, SoldeFin, Source, Tr_desc, Tr_detail
 from facture.utils import ensure_tax_authority_companies, expert_required, get_settings, parse_decimal, read_csv_rows
 from tenancy.models import ClientDatabase, Societe, UserClientAccess, UserSocieteAccess
 from tenancy.services import mark_user_must_change_password, set_active_client_on_session, sync_user_client_accesses, user_must_change_password
@@ -782,7 +781,11 @@ def _resolve_transaction_date(raw_value):
 def transactions_page(request):
 	try:
 		try:
-			compagnies = list(Compagnie.objects.order_by('nom'))
+			compagnies = sorted(
+				[{'type': 'client', 'obj': c, 'key': f'client:{c.pk}'} for c in Client.objects.filter(active=True)] +
+				[{'type': 'fournisseur', 'obj': f, 'key': f'fournisseur:{f.pk}'} for f in Fournisseur.objects.filter(active=True)],
+				key=lambda item: item['obj'].nom.lower()
+			)
 			comptes = list(Compte.objects.order_by('numero'))
 			settings_instance = get_settings()
 		except (OperationalError, ProgrammingError, ConnectionDoesNotExist):
@@ -823,9 +826,14 @@ def transactions_page(request):
 				return _render_transactions_page()
 
 			compagnie = None
+			compagnie_type = 'client'
 			if raw_compagnie_id:
+				if ':' in raw_compagnie_id:
+					compagnie_type, raw_compagnie_id = raw_compagnie_id.split(':', 1)
+					compagnie_type = compagnie_type.strip().lower()
+				compagnie_model = Fournisseur if compagnie_type == 'fournisseur' else Client
 				try:
-					compagnie = Compagnie.objects.filter(pk=raw_compagnie_id).first()
+					compagnie = compagnie_model.objects.filter(pk=raw_compagnie_id).first()
 				except (ValueError, TypeError):
 					messages.error(request, 'Compagnie invalide.')
 					return _render_transactions_page()
@@ -936,14 +944,19 @@ def transactions_page(request):
 				with transaction.atomic():
 					source, _ = Source.objects.get_or_create(nom=source_name[:15])
 
-					tr_desc = Tr_desc.objects.create(
-						no_ej=_next_no_ej_transactions(),
-						compagnie=compagnie,
-						date=date_value,
-						desc_releve=description,
-						desc_ctb=description[:40],
-						source=source,
-					)
+					tr_desc_kwargs = {
+						'no_ej': _next_no_ej_transactions(),
+						'date': date_value,
+						'desc_releve': description,
+						'desc_ctb': description[:40],
+						'source': source,
+					}
+					if compagnie is not None:
+						if compagnie_type == 'fournisseur':
+							tr_desc_kwargs['fournisseur'] = compagnie
+						else:
+							tr_desc_kwargs['client'] = compagnie
+					tr_desc = Tr_desc.objects.create(**tr_desc_kwargs)
 
 					for line in lines:
 						Tr_detail.objects.create(

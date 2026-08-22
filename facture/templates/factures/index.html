@@ -33,10 +33,19 @@
         <form method="post" enctype="multipart/form-data" id="company-form">
             {% csrf_token %}
                 <input type="hidden" name="company_id" id="company-id" value="{{ editing_company_id }}">
-                {{ company_form.as_p }}
-            <div class="mt-3">
-                <button type="submit" class="btn btn-success" name="action" id="company-submit" value="{{ company_modal_action }}">{% if company_modal_action == 'edit_company' %}Enregistrer les modifications{% else %}Ajouter une compagnie{% endif %}</button>
-            </div>
+
+                    <div class="mb-3">
+                        <label for="company_type" class="form-label">Type</label>
+                        <select name="company_type" id="company_type" class="form-select">
+                            <option value="client">Client</option>
+                            <option value="fournisseur">Fournisseur</option>
+                        </select>
+                    </div>
+
+                    {{ company_form.as_p }}
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-success" name="action" id="company-submit" value="{{ company_modal_action }}">{% if company_modal_action == 'edit_company' %}Enregistrer les modifications{% else %}Ajouter une compagnie{% endif %}</button>
+                    </div>
         </form>
         
       </div>
@@ -50,15 +59,16 @@
 <div class="mb-4">
     <h3>Compagnies enregistrées</h3>
     <div class="row g-3">
-        {% for compagnie in compagnies %}
+        {% for item in cards %}
+            {% with compagnie=item.obj %}
             <div class="col-md-3">
-                <div class="card h-100" role="button" data-bs-toggle="modal" data-bs-target="#invoiceModal" data-company-id="{{ compagnie.id }}" data-company-name="{{ compagnie.nom|escape }}" data-company-mode="{{ compagnie.cap_ou_car|default:'' }}" data-company-created-by-non-expert="{{ compagnie.created_by_non_expert|yesno:'1,0' }}" data-company-active="{{ compagnie.active|yesno:'1,0' }}" data-company-logo="{% if compagnie.logo %}{% static 'images/logos/'|add:compagnie.logo %}{% endif %}" data-company-logo-name="{{ compagnie.logo|escape }}" data-company-accounts="{% for compte in compagnie.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
+                <div class="card h-100" role="button" data-bs-toggle="modal" data-bs-target="#invoiceModal" data-company-id="{{ compagnie.id }}" data-company-type="{{ item.type }}" data-company-name="{{ compagnie.nom|escape }}" data-company-mode="{% if item.type == 'fournisseur' %}CAP{% else %}CAR{% endif %}" data-company-created-by-non-expert="{{ compagnie.created_by_non_expert|yesno:'1,0' }}" data-company-active="{{ compagnie.active|yesno:'1,0' }}" data-company-logo="{% if compagnie.logo %}{% static 'images/logos/'|add:compagnie.logo %}{% endif %}" data-company-logo-name="{{ compagnie.logo|escape }}" data-company-accounts="{% for compte in compagnie.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
                     {% if compagnie.logo %}
                         <img src="{% static 'images/logos/'|add:compagnie.logo %}" class="company-logo" alt="Logo de {{ compagnie.nom }}" style="width:100px;height:100px;object-fit:contain;display:block;margin:0 auto 1rem;">
                     {% endif %}
                     <div class="card-body">
                         <h5 class="card-title">
-                            <span class="company-check text-success me-2" data-company-id="{{ compagnie.id }}" style="display:none;"><i class="bi bi-check-circle-fill fs-4"></i></span>{{ compagnie.nom }}
+                            <span class="company-check text-success me-2" data-company-id="{{ compagnie.id }}" data-company-type="{{ item.type }}" style="display:none;"><i class="bi bi-check-circle-fill fs-4"></i></span>{{ compagnie.nom }}
                         </h5>
                         {% if compagnie.active %}
                             <span class="badge bg-success">Active</span>
@@ -68,6 +78,7 @@
                     </div>
                 </div>
             </div>
+            {% endwith %}
         {% empty %}
             <div class="col-12">
                 <p>Aucune compagnie enregistrée.</p>
@@ -108,6 +119,7 @@
             {% endif %}
 
             <input type="hidden" name="selected_company_id" id="id_selected_company_id" value="{{ selected_company_id }}">
+            <input type="hidden" name="selected_company_type" id="id_selected_company_type" value="client">
             <input type="hidden" name="editing_tr_desc_id" id="id_editing_tr_desc_id" value="{{ editing_tr_desc_id }}">
 
             <div class="mb-3">
@@ -204,6 +216,8 @@
             var companyAccountsInput = document.getElementById('id_company-comptes');
             var companyModeInput = document.getElementById('id_company-cap_ou_car');
             var companyActiveInput = document.getElementById('id_company-active');
+            var companyTypeSelect = document.getElementById('company_type');
+
 
             function configureCompanyModal(trigger) {
                 var isEdit = trigger.getAttribute('data-company-action') === 'edit';
@@ -226,8 +240,8 @@
                 if (companyModeInput) {
                     companyModeInput.value = isEdit ? trigger.getAttribute('data-company-mode') || '' : '';
                 }
-                if (companyActiveInput) {
-                    companyActiveInput.checked = isEdit ? trigger.getAttribute('data-company-active') === '1' : true;
+                if (companyTypeSelect) {
+                    companyTypeSelect.value = isEdit ? (trigger.getAttribute('data-company-type') || 'client') : 'client';
                 }
                 if (companyAccountsInput) {
                     var selectedAccountIds = isEdit
@@ -262,7 +276,9 @@
 
                 for (var i = 0; i < checks.length; i++) {
                     var companyId = checks[i].getAttribute('data-company-id');
-                    var factures = companiesFactures[companyId] || [];
+                    var companyType = checks[i].getAttribute('data-company-type') || 'client';
+                    var companyKey = companyType + ':' + companyId;
+                    var factures = companiesFactures[companyKey] || [];
                     var hasFacture = factures.some(function (f) {
                         return f.date.substring(0, 7) === period;
                     });
@@ -306,6 +322,7 @@
                 bsModal.show();
             }
             var selectedCompanyInput = document.getElementById('id_selected_company_id');
+            var selectedCompanyTypeInput = document.getElementById('id_selected_company_type');
             var editingTrDescInput = document.getElementById('id_editing_tr_desc_id');
             var invoiceModalLabel = document.getElementById('invoiceModalLabel');
             var saveInvoiceBtn = invoiceForm ? invoiceForm.querySelector('button[name="action"][value="add_tr_desc"]') : null;
@@ -981,6 +998,7 @@
                     }
 
                     var companyId = button.getAttribute('data-company-id');
+                    var companyType = button.getAttribute('data-company-type') || '';
                     var companyName = button.getAttribute('data-company-name');
                     var companyMode = (button.getAttribute('data-company-mode') || '').toUpperCase();
                     var companyCreatedByNonExpert = button.getAttribute('data-company-created-by-non-expert') === '1';
@@ -1011,6 +1029,7 @@
 
                     for (var editIndex = 0; editIndex < invoiceCompanyEditTriggers.length; editIndex++) {
                         var editCompanyTrigger = invoiceCompanyEditTriggers[editIndex];
+                        editCompanyTrigger.setAttribute('data-company-type', companyType);
                         editCompanyTrigger.setAttribute('data-company-id', companyId || '');
                         editCompanyTrigger.setAttribute('data-company-name', companyName || '');
                         editCompanyTrigger.setAttribute('data-company-logo-name', companyLogoName);
@@ -1022,6 +1041,9 @@
 
                     if (selectedCompanyInput && companyId) {
                         selectedCompanyInput.value = companyId;
+                    }
+                    if (selectedCompanyTypeInput) {
+                        selectedCompanyTypeInput.value = companyType || 'client';
                     }
 
                     if (invoiceModalLabel) {
@@ -1062,9 +1084,11 @@
                     }
 
                     // Afficher les factures existantes
+                    // Afficher les factures existantes
+                    var companyKey = companyType + ':' + companyId;
                     var companiesFacturesRaw = '{{ companies_factures_json|escapejs }}';
                     var companiesFactures = companiesFacturesRaw ? JSON.parse(companiesFacturesRaw) : {};
-                    var factures = companiesFactures[companyId] || [];
+                    var factures = companiesFactures[companyKey] || [];
                     var facturesRecentes = factures.slice(0, 15);
 
                     if (facturesRecentes.length > 0) {
@@ -1136,12 +1160,12 @@
 
                     if (!activeCompteFrRetardId) {
                         activeCompteFrRetardId = findCompteIdByLabelPatternsInList(
-                            companiesComptes[companyId] || [],
+                            companiesComptes[companyKey] || [],
                             ['RETARD', 'INTERET', 'LATE', 'PENAL', 'FRAIS FIN']
                         );
                     }
 
-                    var comptes = ensureRequiredComptes(companiesComptes[companyId] || []);
+                    var comptes = ensureRequiredComptes(companiesComptes[companyKey] || []);
                     activeCompanyComptes = comptes;
                     var compteHiddenInputs = document.querySelectorAll('input[type="hidden"][name$="-compte"]');
                     var compteSelects = document.querySelectorAll('.compte-select');

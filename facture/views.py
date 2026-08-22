@@ -20,9 +20,11 @@ from io import TextIOWrapper
 import chardet
 from datetime import date, datetime, timedelta
 from facture.constants import MONTH_LABELS_FR
-from facture.models import Cheque, Compagnie, Tr_desc, Tr_detail, Source, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, Facture, SoldeFin, TransactionListe
+from facture.models import Cheque, Compagnie, Client, Fournisseur, Tr_desc, Tr_detail, Source, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, Facture, SoldeFin, TransactionListe
 from compte.models import Setting
-from facture.forms import ChequeForm, CompagnieForm, TrDescForm, TrDetailFormSet
+from facture.forms import ChequeForm, CompagnieForm, ClientForm, FournisseurForm, TrDescForm, TrDetailFormSet
+from facture.services.tax_report_enrich import enrich_report_with_calculations
+from facture.services.tax_report_actions import remove_line_from_report, transmit_report, undo_transmit_report
 from facture.working_period import (
     COOKIE_MAX_AGE,
     get_working_period,
@@ -42,6 +44,25 @@ from facture.utils import (
 from compte.models import Compte, SoldeAuxLivres
 
 
+
+
+from facture.services.dashboard_service import compute_dashboard_data
+from facture.services.journal_service import build_journal_context
+from facture.services.compte_mode_service import build_compte_mode_context
+from facture.services.ledger_sql import ledger_db_alias
+from facture.services.ledger_sql import fetch_or_create_monthly_tax_report
+from facture.services.tax_report_fetch import fetch_report_with_details
+from facture.services.taxes_service import (
+    build_tax_blocks,
+    construire_lignes_taxes,
+    calculer_montants_mensuels,
+    calculer_periode_mensuelle,
+    construire_formulaire_taxes,
+)
+
+
+
+
 def _money(value):
     return (value or Decimal('0')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
@@ -51,10 +72,6 @@ def _solde_depart_par_compte():
         row['compte_id']: (row['solde_depart'] or Decimal('0'))
         for row in SoldeAuxLivres.objects.values('compte_id', 'solde_depart')
     }
-
-
-def _ledger_db_alias():
-    return Tr_detail.objects.all().db
 
 
 def _coerce_decimal(value):
@@ -84,7 +101,7 @@ def _fetch_balance_rows():
 
 
 def _fetch_grand_livre_from_sql_view():
-    db_alias = _ledger_db_alias()
+    db_alias = ledger_db_alias()
     solde_depart_par_compte = _solde_depart_par_compte()
     query = """
         SELECT
@@ -247,7 +264,7 @@ def _fetch_compte_solde(compte_id):
 
 
 def _fetch_compte_mode_blocks_from_sql_view(mode, compte_id, compagnies):
-    db_alias = _ledger_db_alias()
+    db_alias = ledger_db_alias()
     query = """
         SELECT
             compagnie_id,
@@ -359,173 +376,8 @@ def update_working_period(request):
 
 
 def dashboard(request):
-
-
-    working_period = get_working_period(request)
-    mois = working_period['month']
-    annee = working_period['year']
-
-    nom_mois = calendar.month_name[mois]
-
-    mois_liste = [
-        (i, calendar.month_name[i])
-        for i in range(1, 13)
-    ]
-
-    annees = list(
-        range(
-            annee - 5,
-            annee + 2
-        )
-    )
-
-    # Nombre de compagnies actives
-    nb_compagnies = Compagnie.objects.filter(
-        active=True
-    ).count()
-
-    # Factures du mois courant
-    factures_mois = Facture.objects.filter(
-        date__month=mois,
-        date__year=annee
-    )
-
-    nb_factures = factures_mois.values('no_ej').distinct().count()
-
-    # Liste des compagnies actives
-    compagnies_actives = Compagnie.objects.filter(
-        active=True
-    ).values_list(
-        "nom",
-        flat=True
-    )
-
-    # Nombre de compagnies actives ayant au moins une facture
-    compagnies_avec_facture = factures_mois.filter(
-        compagnie__in=compagnies_actives
-    ).values(
-        "compagnie"
-    ).distinct().count()
-
-    # Compagnies actives sans facture ce mois-ci
-    compagnies_sans_facture = (
-        nb_compagnies - compagnies_avec_facture
-    )
-
-    # Message du rappel
-    if compagnies_sans_facture == 0:
-        reminder_factures = (
-            "Toutes les compagnies actives ont une facture "
-            "enregistrée ce mois-ci."
-        )
-        badge_class = "status-success"
-
-    elif compagnies_sans_facture == 1:
-        reminder_factures = (
-            "1 compagnie active n'a aucune facture "
-            "enregistrée ce mois-ci."
-        )
-        badge_class = "status-warning"
-
-    else:
-        reminder_factures = (
-            f"{compagnies_sans_facture} compagnies actives "
-            "n'ont aucune facture enregistrée ce mois-ci."
-        )
-        badge_class = "status-warning"
-
-
-    # ==========================================================
-    # RELEVÉS
-    # ==========================================================
-
-    # Nombre de comptes de relevés actifs
-    nb_releves_attendus = CompteReleve.objects.filter(
-        actif=True
-    ).count()
-
-    # Nombre de comptes ayant au moins un relevé
-    # pour la période sélectionnée
-    nb_releves_importes = (
-        Releve.objects.filter(
-            date__month=mois,
-            date__year=annee,
-            compte_releve__isnull=False,
-            compte_releve__actif=True,
-        )
-        .values("compte_releve")
-        .distinct()
-        .count()
-    )
-
-    releves_manquants = (
-        nb_releves_attendus -
-        nb_releves_importes
-    )
-
-    # Message du rappel
-    if releves_manquants == 0:
-
-        reminder_releves = (
-            "Tous les relevés attendus ont été importés."
-        )
-
-        badge_releves = "status-success"
-
-    elif releves_manquants == 1:
-
-        reminder_releves = (
-            "1 relevé est toujours attendu."
-        )
-
-        badge_releves = "status-warning"
-
-    else:
-
-        reminder_releves = (
-            f"{releves_manquants} relevés sont toujours attendus."
-        )
-
-        badge_releves = "status-warning"
-
-# =====================================================
-# PAIE
-# =====================================================
-
-
-
-
-
-
-    context = {
-        "nb_compagnies": nb_compagnies,
-        "nb_factures": nb_factures,
-        "compagnies_sans_facture": compagnies_sans_facture,
-        "reminder_factures": reminder_factures,
-        "badge_class": badge_class,
-        "mois": mois,
-        "annee": annee,
-        "nom_mois": nom_mois,
-        "mois_liste": mois_liste,
-        "mois_selectionne": mois,
-        "annee_selectionnee": annee,
-        "annees": annees,
-        "nb_releves_attendus": nb_releves_attendus,
-        "nb_releves_importes": nb_releves_importes,
-        "releves_manquants": releves_manquants,
-        "reminder_releves": reminder_releves,
-        "badge_releves": badge_releves,
-        "nb_employes": 0,
-        "nb_paies": 0,
-        "badge_paie": "badge-neutral",
-        "reminder_paie": "Le module Paie sera disponible prochainement.",
-    }
-
-    return render(
-        request,
-        "dashboard/index.html",
-        context
-    )
+    context = compute_dashboard_data(request)
+    return render(request, "dashboard/index.html", context)
 
 
 @expert_required
@@ -537,58 +389,8 @@ def administration(request):
 
 @xframe_options_sameorigin
 def journal_general(request):
-    entries_by_no_ej = {}
-    total_debit = Decimal('0')
-    total_credit = Decimal('0')
-
-    for row in TransactionListe.objects.all():
-        entry = entries_by_no_ej.setdefault(row.no_ej, SimpleNamespace(
-            no_ej=row.no_ej,
-            date=row.date,
-            description=row.description,
-            compagnie=row.compagnie,
-            source=row.source,
-            details=[],
-        ))
-        entry.details.append(row)
-        total_debit += row.debit or Decimal('0')
-        total_credit += row.credit or Decimal('0')
-
-    journal_entries = list(entries_by_no_ej.values())
-    for entry in journal_entries:
-        entry.details.sort(key=lambda detail: (
-            detail.credit > 0,
-            detail.compte_numero,
-            detail.transaction_id,
-        ))
-
-    def no_ej_sort_value(entry):
-        match = re.match(r'^EJ(\d+)$', entry.no_ej or '')
-        if match:
-            return int(match.group(1))
-        return -1
-
-    journal_entries.sort(key=no_ej_sort_value, reverse=True)
-
-    settings_instance = get_setting()
-    report_date = max((entry.date for entry in journal_entries if entry.date), default=None)
-    report_year_label = _closing_date_label(report_date, settings_instance)
-
-    # --- ajout : donnees necessaires pour transactions_form.html ---
-    compagnies = Compagnie.objects.order_by('nom')
-    comptes = Compte.objects.order_by('numero')
-
-    return render(request, "rapports/journal_general.html", {
-        'title': "Journal général",
-        'journal_entries': journal_entries,
-        'total_debit': total_debit,
-        'total_credit': total_credit,
-        'report_year_label': report_year_label,
-        'compagnies': compagnies,
-        'comptes': comptes,
-        'compte_cap_id': settings_instance.cap_id if settings_instance else None,
-        'compte_car_id': settings_instance.car_id if settings_instance else None,
-    })
+    context = build_journal_context()
+    return render(request, "rapports/journal_general.html", context)
 
 
 @xframe_options_sameorigin
@@ -598,7 +400,7 @@ def grand_livre(request):
     report_date = Tr_desc.objects.order_by('-date').values_list('date', flat=True).first()
     report_year_label = _closing_date_label(report_date, settings_instance)
     try:
-        with transaction.atomic(using=_ledger_db_alias()):
+        with transaction.atomic(using=ledger_db_alias()):
             comptes, grand_total_debit, grand_total_credit, grand_total_solde, is_balanced = _fetch_grand_livre_from_sql_view()
     except DatabaseError:
         # Fallback temporaire tant que la migration SQL view n'est pas appliquee.
@@ -768,13 +570,16 @@ def _next_no_ej():
     return f"EJ{int(match.group(1)) + 1}"
 
 
-def _company_invoices_queryset(company=None):
+def _company_invoices_queryset(company=None, company_type='client'):
     invoice_detail_ids = Facture.objects.values('transaction_id')
     queryset = Tr_desc.objects.filter(
         details__id__in=Subquery(invoice_detail_ids),
     )
     if company is not None:
-        queryset = queryset.filter(compagnie=company)
+        if company_type == 'fournisseur':
+            queryset = queryset.filter(fournisseur=company)
+        else:
+            queryset = queryset.filter(client=company)
 
     return queryset.distinct().annotate(
         invoice_total=Coalesce(
@@ -787,7 +592,7 @@ def _company_invoices_queryset(company=None):
 
 def _serialize_invoice(tr):
     settings_instance = get_setting()
-    company_mode = (getattr(tr.compagnie, 'cap_ou_car', '') or '').strip().upper()
+    company_mode = 'CAP' if tr.fournisseur_id else 'CAR' if tr.client_id else ''
     forced_compte_id = None
     if settings_instance:
         if company_mode == 'CAP' and settings_instance.cap:
@@ -845,7 +650,10 @@ def company_invoices_api(request, company_id):
 
 def facture(request):
     title = "Facture"
-    company_form = CompagnieForm(request.POST or None, prefix='company')
+    company_type = (request.POST.get('company_type') or 'client').strip().lower()
+    company_form_class = FournisseurForm if company_type == 'fournisseur' else ClientForm
+    company_model_class = Fournisseur if company_type == 'fournisseur' else Client
+    company_form = company_form_class(request.POST or None, prefix='company')
     settings_instance = Setting.objects.select_related(
         'compte_tps_percue',
         'compte_tps_payee',
@@ -870,6 +678,27 @@ def facture(request):
             tr_desc__details__id__in=Subquery(invoice_detail_ids),
         )
     ).distinct().order_by('nom', 'id')
+
+    clients = Client.objects.prefetch_related(
+        Prefetch('tr_desc', queryset=_company_invoices_queryset())
+    ).filter(active=True).order_by('nom')
+    fournisseurs = Fournisseur.objects.prefetch_related(
+        Prefetch('tr_desc', queryset=_company_invoices_queryset())
+    ).filter(active=True).order_by('nom')
+
+    cards = sorted(
+        [
+            {'type': 'client', 'obj': c} for c in clients.filter(afficher_card=True)
+        ] + [
+            {'type': 'fournisseur', 'obj': f} for f in fournisseurs.filter(afficher_card=True)
+        ],
+        key=lambda item: item['obj'].nom.lower()
+    )
+
+
+
+
+
     comptes_queryset = Compte.objects.all()
 
     all_comptes = [
@@ -882,7 +711,10 @@ def facture(request):
 
     companies_comptes = {}
     companies_factures = {}
-    for compagnie in compagnies:
+    for item in cards:
+        compagnie = item['obj']
+        item_type = item['type']
+        company_key = f"{item_type}:{compagnie.pk}"
         comptes_company = [
             {
                 'id': compte.pk,
@@ -894,7 +726,7 @@ def facture(request):
         # Injecte les comptes attendus selon le mode de compagnie.
         # Ces comptes sont forces en fin de liste pour apparaitre en bas du modal.
         tax_accounts = []
-        company_mode = (compagnie.cap_ou_car or '').strip().upper()
+        company_mode = 'CAP' if item_type == 'fournisseur' else 'CAR'
         if settings_instance:
             if company_mode == 'CAP':
                 tax_accounts = [
@@ -931,7 +763,7 @@ def facture(request):
             })
             existing_ids.add(tax_account.pk)
 
-        companies_comptes[str(compagnie.pk)] = comptes_company
+        companies_comptes[company_key] = comptes_company
         company_invoices = []
         for tr in compagnie.tr_desc.all():
             serialized = _serialize_invoice(tr)
@@ -944,7 +776,7 @@ def facture(request):
                 'total': float(serialized['total']),
                 'details': serialized['details'],
             })
-        companies_factures[str(compagnie.pk)] = company_invoices
+        companies_factures[company_key] = company_invoices
 
     tr_desc_form = TrDescForm(prefix='trdesc')
     tr_detail_formset = TrDetailFormSet(
@@ -974,8 +806,8 @@ def facture(request):
 
         elif action == 'edit_company':
             company_id = (request.POST.get('company_id') or '').strip()
-            company = Compagnie.objects.filter(pk=company_id).first()
-            company_form = CompagnieForm(request.POST, prefix='company', instance=company)
+            company = company_model_class.objects.filter(pk=company_id).first()
+            company_form = company_form_class(request.POST, prefix='company', instance=company)
             company_modal_action = 'edit_company'
             editing_company_id = company_id
 
@@ -991,13 +823,15 @@ def facture(request):
 
         elif action == 'delete_tr_desc':
             selected_company_id = request.POST.get('selected_company_id', '')
+            selected_company_type = (request.POST.get('selected_company_type') or 'client').strip().lower()
+            selected_company_model = Fournisseur if selected_company_type == 'fournisseur' else Client
             editing_tr_desc_id = (request.POST.get('editing_tr_desc_id') or '').strip()
-            selected_company = Compagnie.objects.filter(pk=selected_company_id).first()
+            selected_company = selected_company_model.objects.filter(pk=selected_company_id).first()
             editing_tr_desc = None
 
             if selected_company:
                 selected_company_name = selected_company.nom
-                editing_tr_desc = _company_invoices_queryset(selected_company).filter(
+                editing_tr_desc = _company_invoices_queryset(selected_company, selected_company_type).filter(
                     pk=editing_tr_desc_id,
                 ).first()
 
@@ -1019,10 +853,12 @@ def facture(request):
 
         elif action == 'add_tr_desc':
             selected_company_id = request.POST.get('selected_company_id', '')
-            selected_company = Compagnie.objects.filter(pk=selected_company_id).first()
+            selected_company_type = (request.POST.get('selected_company_type') or 'client').strip().lower()
+            selected_company_model = Fournisseur if selected_company_type == 'fournisseur' else Client
+            selected_company = selected_company_model.objects.filter(pk=selected_company_id).first()
             editing_tr_desc_id = (request.POST.get('editing_tr_desc_id') or '').strip()
             editing_tr_desc = None
-            company_mode = ''
+            company_mode = 'CAP' if selected_company_type == 'fournisseur' else 'CAR'
             forced_compte = None
 
             try:
@@ -1031,9 +867,10 @@ def facture(request):
                 facture_total_value = None
 
             if selected_company and editing_tr_desc_id:
+                editing_filter = {'fournisseur': selected_company} if selected_company_type == 'fournisseur' else {'client': selected_company}
                 editing_tr_desc = Tr_desc.objects.filter(
                     pk=editing_tr_desc_id,
-                    compagnie=selected_company
+                    **editing_filter
                 ).first()
 
             tr_desc_form = TrDescForm(request.POST, prefix='trdesc', instance=editing_tr_desc)
@@ -1049,8 +886,6 @@ def facture(request):
                 tr_desc_form.add_error(None, "Compagnie invalide.")
 
             if selected_company:
-                company_mode = (selected_company.cap_ou_car or '').strip().upper()
-
                 if company_mode == 'CAP':
                     if not settings_instance or not settings_instance.cap:
                         tr_desc_form.add_error(
@@ -1120,7 +955,12 @@ def facture(request):
                     tr_desc = tr_desc_form.save(commit=False)
                     source_facture, _ = Source.objects.get_or_create(nom='Facture')
                     sign_multiplier = -1 if tr_desc.note_de_credit else 1
-                    tr_desc.compagnie = selected_company
+                    if selected_company_type == 'fournisseur':
+                        tr_desc.fournisseur = selected_company
+                        tr_desc.client = None
+                    else:
+                        tr_desc.client = selected_company
+                        tr_desc.fournisseur = None
                     if not tr_desc.no_ej:
                         tr_desc.no_ej = _next_no_ej()
                     if not tr_desc.source_id:
@@ -1179,6 +1019,9 @@ def facture(request):
         'comptes_count': comptes_count,
         'compagnies': compagnies,
         'companies': compagnies,
+        'clients': clients,
+        'fournisseurs': fournisseurs,
+        'cards': cards,
         'tr_desc_form': tr_desc_form,
         'tr_detail_formset': tr_detail_formset,
         'next_no_ej': _next_no_ej(),
@@ -1344,181 +1187,56 @@ def _build_compte_mode_context(mode, settings_instance):
 @xframe_options_sameorigin
 def compte_a_payer(request):
     settings_instance = get_setting()
-    context = _build_compte_mode_context(Compagnie.MODE_CAP, settings_instance)
+    context = build_compte_mode_context(Compagnie.MODE_CAP, settings_instance)
     context['title'] = "Comptes à payer"
     return render(request, "rapports/compte_mode.html", context)
+
 
 
 @xframe_options_sameorigin
 def compte_a_recevoir(request):
     settings_instance = get_setting()
-    context = _build_compte_mode_context(Compagnie.MODE_CAR, settings_instance)
+    context = build_compte_mode_context(Compagnie.MODE_CAR, settings_instance)
     context['title'] = "Comptes à recevoir"
     return render(request, "rapports/compte_mode.html", context)
+
 
 
 @xframe_options_sameorigin
 def rapport_de_taxes(request):
     settings_instance = get_setting()
-    tps_percue_id = None
-    tps_payee_id = None
-    tvq_percue_id = None
-    tvq_payee_id = None
-    tax_account_ids = []
-    if settings_instance:
-        tps_percue_id = settings_instance.compte_tps_percue_id
-        tps_payee_id = settings_instance.compte_tps_payee_id
-        tvq_percue_id = settings_instance.compte_tvq_percue_id
-        tvq_payee_id = settings_instance.compte_tvq_payee_id
-        tax_account_ids = [
-            account_id for account_id in [
-                tps_percue_id,
-                tps_payee_id,
-                tvq_percue_id,
-                tvq_payee_id,
-            ] if account_id
-        ]
-
-    def build_merged_rows(details):
-        rows_by_desc = {}
-
-        for detail in details:
-            tax_type = None
-            is_percue = False
-            amount = _money(detail.montant)
-
-            if detail.compte_id == tps_percue_id:
-                tax_type = 'TPS'
-                is_percue = True
-            elif detail.compte_id == tps_payee_id:
-                tax_type = 'TPS'
-                is_percue = False
-            elif detail.compte_id == tvq_percue_id:
-                tax_type = 'TVQ'
-                is_percue = True
-            elif detail.compte_id == tvq_payee_id:
-                tax_type = 'TVQ'
-                is_percue = False
-
-            if not tax_type:
-                continue
-
-            desc_id = detail.tr_desc_id
-            if desc_id not in rows_by_desc:
-                rows_by_desc[desc_id] = {
-                    'date': detail.tr_desc.date,
-                    'compagnie_nom': detail.tr_desc.compagnie.nom if detail.tr_desc.compagnie else '-',
-                    'facture': detail.tr_desc.desc_ctb or '-',
-                    'tps_percue': None,
-                    'tps_payee': None,
-                    'tvq_percue': None,
-                    'tvq_payee': None,
-                }
-
-            row = rows_by_desc[desc_id]
-            value = _money(abs(amount)) if is_percue else amount
-            key = f"{tax_type.lower()}_{'percue' if is_percue else 'payee'}"
-            row[key] = value
-
-        return sorted(rows_by_desc.values(), key=lambda r: r['date'])
-
-    def build_tax_blocks(details):
-        blocks = {
-            'TPS': {
-                'rows': [],
-                'total_percue': Decimal('0'),
-                'total_percue_signee': Decimal('0'),
-                'total_payee': Decimal('0'),
-                'solde_a_reclamer': Decimal('0'),
-            },
-            'TVQ': {
-                'rows': [],
-                'total_percue': Decimal('0'),
-                'total_percue_signee': Decimal('0'),
-                'total_payee': Decimal('0'),
-                'solde_a_reclamer': Decimal('0'),
-            },
-        }
-
-        for detail in details:
-            tax_type = None
-            percue = None
-            percue_signee = None
-            payee = None
-            amount = _money(detail.montant)
-
-            if detail.compte_id == tps_percue_id:
-                tax_type = 'TPS'
-                percue_signee = amount
-                percue = _money(abs(amount))
-            elif detail.compte_id == tps_payee_id:
-                tax_type = 'TPS'
-                payee = amount
-            elif detail.compte_id == tvq_percue_id:
-                tax_type = 'TVQ'
-                percue_signee = amount
-                percue = _money(abs(amount))
-            elif detail.compte_id == tvq_payee_id:
-                tax_type = 'TVQ'
-                payee = amount
-
-            if not tax_type:
-                continue
-
-            if percue is not None:
-                blocks[tax_type]['total_percue'] = _money(blocks[tax_type]['total_percue'] + percue)
-            if percue_signee is not None:
-                blocks[tax_type]['total_percue_signee'] = _money(blocks[tax_type]['total_percue_signee'] + percue_signee)
-            if payee is not None:
-                blocks[tax_type]['total_payee'] = _money(blocks[tax_type]['total_payee'] + payee)
-
-            blocks[tax_type]['rows'].append({
-                'id': detail.id,
-                'date': detail.tr_desc.date,
-                'compagnie_nom': detail.tr_desc.compagnie.nom if detail.tr_desc.compagnie else '-',
-                'facture': detail.tr_desc.desc_ctb or '-',
-                'percue': percue,
-                'payee': payee,
-            })
-
-        for tax_type in ('TPS', 'TVQ'):
-            blocks[tax_type]['solde_a_reclamer'] = _money(
-                blocks[tax_type]['total_percue_signee'] + blocks[tax_type]['total_payee']
-            )
-
-        return blocks
-
-    base_tax_details = Tr_detail.objects.select_related(
-        'tr_desc__compagnie',
-        'compte',
-        'rapport_taxes',
-    ).filter(compte_id__in=tax_account_ids).order_by('tr_desc__date', 'id')
-
     feedback = []
     error_messages = []
 
+    # 1. Récupération de la période de travail
     working_period = get_working_period(request)
     selected_year = working_period['year']
     selected_month = working_period['month']
     selected_month_value = working_period['value']
 
-    month_tax_details = base_tax_details.filter(
-        tr_desc__date__year=selected_year,
-        tr_desc__date__month=selected_month,
+    # 2. Récupération des comptes TPS/TVQ
+    tps_percue_id = settings_instance.compte_tps_percue_id if settings_instance else None
+    tps_payee_id = settings_instance.compte_tps_payee_id if settings_instance else None
+    tvq_percue_id = settings_instance.compte_tvq_percue_id if settings_instance else None
+    tvq_payee_id = settings_instance.compte_tvq_payee_id if settings_instance else None
+
+    tax_account_ids = [
+        account_id for account_id in [
+            tps_percue_id,
+            tps_payee_id,
+            tvq_percue_id,
+            tvq_payee_id,
+        ] if account_id
+    ]
+
+    # 3. Récupération ou création du rapport + lignes du mois
+    selected_report, month_tax_details = fetch_or_create_monthly_tax_report(
+        selected_year,
+        selected_month,
+        tax_account_ids,
     )
 
-    selected_report = RapportTaxes.objects.filter(
-        annee=selected_year,
-        mois=selected_month,
-    ).first()
-
-    if tax_account_ids and month_tax_details.exists():
-        if not selected_report:
-            selected_report = RapportTaxes.objects.create(annee=selected_year, mois=selected_month)
-
-        if not selected_report.est_transmis:
-            month_tax_details.filter(rapport_taxes__isnull=True).update(rapport_taxes=selected_report)
-
+    # 4. Gestion des actions POST
     if request.method == 'POST':
         action = (request.POST.get('action') or '').strip()
 
@@ -1536,10 +1254,7 @@ def rapport_de_taxes(request):
             elif report.est_transmis:
                 error_messages.append("Ce rapport est deja transmis et ne peut plus etre modifie.")
             else:
-                removed_count = base_tax_details.filter(
-                    pk=detail_id,
-                    rapport_taxes=report,
-                ).update(rapport_taxes=None)
+                removed_count = remove_line_from_report(report, detail_id)
                 if removed_count == 0:
                     error_messages.append("La ligne de taxes n'a pas pu etre retiree du rapport.")
                 else:
@@ -1553,119 +1268,22 @@ def rapport_de_taxes(request):
                 error_messages.append("Rapport de taxes introuvable.")
             elif report.est_transmis:
                 error_messages.append("Ce rapport est deja transmis.")
+            elif not report.details_taxes.exists():
+                error_messages.append("Impossible de transmettre un rapport sans ligne de taxes.")
             else:
-                has_lines = base_tax_details.filter(rapport_taxes=report).exists()
-                if not has_lines:
-                    error_messages.append("Impossible de transmettre un rapport sans ligne de taxes.")
+                try:
+                    posted_count, mode_label = transmit_report(report, settings_instance, _next_no_ej)
+                except ValueError as exc:
+                    error_messages.append(str(exc))
                 else:
-                    tax_mode = tax_target_mode_from_setting(settings_instance)
-                    mode_label = "CAR" if tax_mode == Compagnie.MODE_CAR else "CAP"
-                    target_compte = settings_instance.car if tax_mode == Compagnie.MODE_CAR and settings_instance else settings_instance.cap if settings_instance else None
-
-                    if not target_compte:
-                        error_messages.append(
-                            f"Compte {mode_label} non configure dans Setting. Configure ce compte avant de transmettre le rapport."
+                    if posted_count:
+                        feedback.append(
+                            f"Rapport transmis. {posted_count} ecriture(s) de report creee(s) vers {mode_label}."
                         )
                     else:
-                        tax_account_map = {
-                            'TPS': {
-                                'percue': settings_instance.compte_tps_percue,
-                                'payee': settings_instance.compte_tps_payee,
-                            },
-                            'TVQ': {
-                                'percue': settings_instance.compte_tvq_percue,
-                                'payee': settings_instance.compte_tvq_payee,
-                            },
-                        }
-
-                        missing_accounts = [
-                            f"{tax_name} {line_name}"
-                            for tax_name, accounts in tax_account_map.items()
-                            for line_name, account in accounts.items()
-                            if account is None
-                        ]
-                        if missing_accounts:
-                            error_messages.append(
-                                "Comptes taxes manquants dans Setting pour la transmission: " + ", ".join(missing_accounts) + "."
-                            )
-                        else:
-                            ensure_tax_authority_companies(settings_instance)
-                            tax_companies = {
-                                'TPS': Compagnie.objects.filter(nom='Revenu Canada TPS').first(),
-                                'TVQ': Compagnie.objects.filter(nom='Revenu Quebec TVQ').first(),
-                            }
-                            if not tax_companies['TPS'] or not tax_companies['TVQ']:
-                                error_messages.append("Impossible de preparer les compagnies fiscales TPS/TVQ.")
-                            else:
-                                report_rows = base_tax_details.filter(rapport_taxes=report)
-                                tax_blocks = build_tax_blocks(report_rows)
-                                source_rapport, _ = Source.objects.get_or_create(nom='Rapport de taxes')
-                                report_date = date(report.annee, report.mois, monthrange(report.annee, report.mois)[1])
-                                posted_count = 0
-
-                                with transaction.atomic():
-                                    for tax_name in ('TPS', 'TVQ'):
-                                        percue_compte = tax_account_map[tax_name]['percue']
-                                        payee_compte = tax_account_map[tax_name]['payee']
-                                        compagnie_fiscale = tax_companies[tax_name]
-
-                                        # Solde reel a la fin du mois: on poste l'inverse pour ramener
-                                        # chaque compte de taxe a zero apres transmission.
-                                        percue_balance = Tr_detail.objects.filter(
-                                            compte=percue_compte,
-                                            tr_desc__date__lte=report_date,
-                                        ).aggregate(total=Sum('montant')).get('total') or Decimal('0')
-                                        payee_balance = Tr_detail.objects.filter(
-                                            compte=payee_compte,
-                                            tr_desc__date__lte=report_date,
-                                        ).aggregate(total=Sum('montant')).get('total') or Decimal('0')
-
-                                        percue_amount = _money(-percue_balance)
-                                        payee_amount = _money(-payee_balance)
-                                        target_line_amount = _money(-(percue_amount + payee_amount))
-
-                                        if percue_amount == Decimal('0') and payee_amount == Decimal('0') and target_line_amount == Decimal('0'):
-                                            continue
-
-                                        tr_desc = Tr_desc.objects.create(
-                                            no_ej=_next_no_ej(),
-                                            compagnie=compagnie_fiscale,
-                                            date=report_date,
-                                            desc_ctb=f"Rapport de taxes {tax_name} {report.annee}-{report.mois:02d}",
-                                            source=source_rapport,
-                                        )
-
-                                        if percue_amount != Decimal('0'):
-                                            Tr_detail.objects.create(
-                                                tr_desc=tr_desc,
-                                                compte=percue_compte,
-                                                montant=percue_amount,
-                                            )
-                                        if payee_amount != Decimal('0'):
-                                            Tr_detail.objects.create(
-                                                tr_desc=tr_desc,
-                                                compte=payee_compte,
-                                                montant=payee_amount,
-                                            )
-                                        if target_line_amount != Decimal('0'):
-                                            Tr_detail.objects.create(
-                                                tr_desc=tr_desc,
-                                                compte=target_compte,
-                                                montant=target_line_amount,
-                                            )
-                                        posted_count += 1
-
-                                    report.transmis_le = timezone.now()
-                                    report.save(update_fields=['transmis_le'])
-
-                                if posted_count:
-                                    feedback.append(
-                                        f"Rapport transmis. {posted_count} ecriture(s) de report creee(s) vers {mode_label}."
-                                    )
-                                else:
-                                    feedback.append(
-                                        "Rapport transmis. Aucun montant net TPS/TVQ a reporter pour cette periode."
-                                    )
+                        feedback.append(
+                            "Rapport transmis. Aucun montant net TPS/TVQ a reporter pour cette periode."
+                        )
 
         elif action == 'undo_transmit_report':
             report_id = request.POST.get('report_id')
@@ -1676,29 +1294,7 @@ def rapport_de_taxes(request):
             elif not report.est_transmis:
                 error_messages.append("Ce rapport est deja en brouillon.")
             else:
-                report_date = date(report.annee, report.mois, monthrange(report.annee, report.mois)[1])
-                expected_descriptions = [
-                    f"Rapport de taxes TPS {report.annee}-{report.mois:02d}",
-                    f"Rapport de taxes TVQ {report.annee}-{report.mois:02d}",
-                ]
-
-                with transaction.atomic():
-                    source_rapport = Source.objects.filter(nom='Rapport de taxes').first()
-                    transmission_entries = Tr_desc.objects.none()
-                    if source_rapport:
-                        transmission_entries = Tr_desc.objects.filter(
-                            source=source_rapport,
-                            date=report_date,
-                            description__in=expected_descriptions,
-                            compagnie__nom__in=TAX_AUTHORITY_COMPANY_NAMES,
-                        )
-
-                    deleted_entries = transmission_entries.count()
-                    if deleted_entries:
-                        transmission_entries.delete()
-
-                    RapportTaxes.objects.filter(pk=report.pk).update(transmis_le=None)
-
+                deleted_entries = undo_transmit_report(report)
                 feedback.append(
                     f"Transmission annulee. Rapport remis en brouillon ({deleted_entries} ecriture(s) supprimee(s))."
                 )
@@ -1706,43 +1302,53 @@ def rapport_de_taxes(request):
         elif action:
             error_messages.append("Action inconnue sur le rapport de taxes.")
 
-    selected_report = RapportTaxes.objects.prefetch_related(
-        Prefetch(
-            'details_taxes',
-            queryset=base_tax_details,
-        )
-    ).filter(annee=selected_year, mois=selected_month).first()
+
+    # 5. Recharger le rapport avec prefetch
+    selected_report = fetch_report_with_details(
+        selected_year,
+        selected_month,
+        tax_account_ids,
+    )
+
+
 
     if selected_report:
-        selected_report.tax_blocks = build_tax_blocks(selected_report.details_taxes.all())
-        selected_report.merged_rows = build_merged_rows(selected_report.details_taxes.all())
+        enrich_report_with_calculations(
+            selected_report,
+            tps_percue_id,
+            tps_payee_id,
+            tvq_percue_id,
+            tvq_payee_id,
+        )
 
-        tps = selected_report.tax_blocks['TPS']
-        tvq = selected_report.tax_blocks['TVQ']
 
-        total_taxes_percues = tps['total_percue'] + tvq['total_percue']
-        montant_101 = _money(total_taxes_percues / Decimal('1.14975'))
-        solde_300 = _money(tps['solde_a_reclamer'] + tvq['solde_a_reclamer'])
+        selected_report.formulaire = construire_formulaire_taxes(
+            selected_report.tax_blocks['TPS'],
+            selected_report.tax_blocks['TVQ'],
+)
 
-        selected_report.formulaire = {
-            '101': montant_101,
-            '105': tps['total_percue'],
-            '108': tps['total_payee'],
-            '113': tps['solde_a_reclamer'],
-            '205': tvq['total_percue'],
-            '208': tvq['total_payee'],
-            '213': tvq['solde_a_reclamer'],
-            '300': solde_300,
-        }
+        # 7. Fusion des lignes TPS/TVQ
+        selected_report.merged_rows = construire_lignes_taxes(
+            selected_report.details_taxes.all(),
+            tps_percue_id,
+            tps_payee_id,
+            tvq_percue_id,
+            tvq_payee_id,
+        )
 
-        period_start = date(selected_report.annee, selected_report.mois, 1)
-        period_end = date(
+        # 8. Calcul des montants mensuels (101, 300)
+        montants = calculer_montants_mensuels(
+            selected_report.tax_blocks['TPS'],
+            selected_report.tax_blocks['TVQ'],
+        )
+        selected_report.montant_101 = montants['montant_101']
+        selected_report.solde_300 = montants['solde_300']
+
+        # 9. Calcul de la période mensuelle
+        selected_report.periode_debut, selected_report.periode_fin = calculer_periode_mensuelle(
             selected_report.annee,
             selected_report.mois,
-            monthrange(selected_report.annee, selected_report.mois)[1],
         )
-        selected_report.periode_debut = period_start
-        selected_report.periode_fin = period_end
 
     return render(request, "rapports/rapport_de_taxe.html", {
         'title': "Rapport de taxes",
@@ -1753,6 +1359,7 @@ def rapport_de_taxes(request):
         'selected_month_value': selected_month_value,
         'report_year_label': None,
     })
+
 
 
 def _detecter_compte_csv(row):
@@ -2233,7 +1840,11 @@ def releve_bancaire(request):
     modal_releve_id = ''
     selected_compagnie_id = ''
     comptes_queryset = Compte.objects.all().order_by('numero')
-    compagnies = Compagnie.objects.order_by('nom')
+    compagnies = sorted(
+        [{'type': 'client', 'obj': c, 'key': f'client:{c.pk}'} for c in Client.objects.filter(active=True)] +
+        [{'type': 'fournisseur', 'obj': f, 'key': f'fournisseur:{f.pk}'} for f in Fournisseur.objects.filter(active=True)],
+        key=lambda item: item['obj'].nom.lower()
+    )
     settings_instance = get_setting()
     company_required_account_ids = {
         account_id
@@ -2255,14 +1866,21 @@ def releve_bancaire(request):
 
         if action == 'create_ecriture':
             releve_id = (request.POST.get('releve_id') or '').strip()
-            selected_compagnie_id = (request.POST.get('compagnie_id') or '').strip()
+            selected_compagnie_raw = (request.POST.get('compagnie_id') or '').strip()
+            if ':' in selected_compagnie_raw:
+                selected_compagnie_type, selected_compagnie_id = selected_compagnie_raw.split(':', 1)
+                selected_compagnie_type = selected_compagnie_type.strip().lower()
+            else:
+                selected_compagnie_type = 'client'
+                selected_compagnie_id = selected_compagnie_raw
             modal_releve_id = releve_id
             open_releve_modal = True
             releve = Releve.objects.select_related('ecriture_tr_desc', 'compte_releve', 'compte_releve__compte_comptable').filter(pk=releve_id).first()
             existing_tr_desc = releve.ecriture_tr_desc if releve and releve.ecriture_creee and releve.ecriture_tr_desc_id else None
+            selected_compagnie_model = Fournisseur if selected_compagnie_type == 'fournisseur' else Client
             selected_compagnie = None
             if selected_compagnie_id:
-                selected_compagnie = Compagnie.objects.filter(pk=selected_compagnie_id).first()
+                selected_compagnie = selected_compagnie_model.objects.filter(pk=selected_compagnie_id).first()
                 if not selected_compagnie:
                     errors.append("Compagnie invalide.")
 
@@ -2363,7 +1981,12 @@ def releve_bancaire(request):
                                     tr_desc.no_ej = _next_no_ej()
                                 tr_desc.desc_releve = tr_desc.desc_releve or releve.desc_releve or ''
                                 tr_desc.source = source_releve
-                                tr_desc.compagnie = compagnie_ecriture
+                                if selected_compagnie_type == 'fournisseur':
+                                    tr_desc.fournisseur = compagnie_ecriture
+                                    tr_desc.client = None
+                                else:
+                                    tr_desc.client = compagnie_ecriture
+                                    tr_desc.fournisseur = None
                                 tr_desc.save()
 
                                 releve.desc_ctb = tr_desc.desc_ctb or releve.desc_releve
@@ -2509,7 +2132,12 @@ def releve_bancaire(request):
             if tr_desc:
                 releve.ecriture_date = tr_desc.date.strftime('%Y-%m-%d') if tr_desc.date else ''
                 releve.ecriture_description = tr_desc.desc_ctb or ''
-                releve.ecriture_compagnie_id = str(tr_desc.compagnie_id or '')
+                if tr_desc.fournisseur_id:
+                    releve.ecriture_compagnie_id = f"fournisseur:{tr_desc.fournisseur_id}"
+                elif tr_desc.client_id:
+                    releve.ecriture_compagnie_id = f"client:{tr_desc.client_id}"
+                else:
+                    releve.ecriture_compagnie_id = ''
 
                 montant_releve = abs(releve.depot) if (releve.depot is not None and releve.depot != 0) else abs(releve.retrait) if (releve.retrait is not None and releve.retrait != 0) else None
                 montant_compte_lie = None
@@ -2605,9 +2233,9 @@ def creer_cheque(request):
         return JsonResponse({'ok': True, 'cheque_id': cheque.id, 'annule': True})
 
     settings_instance = get_setting()
-    if not settings_instance or not settings_instance.cap or not settings_instance.compte_cheques:
+    if not settings_instance or not settings_instance.compte_cheques:
         return JsonResponse(
-            {'error': "Configure le compte CAP et le compte chèques dans Setting avant d'inscrire un chèque."},
+            {'error': "Configure le compte chèques dans Setting avant d'inscrire un chèque."},
             status=400,
         )
 
@@ -2615,20 +2243,39 @@ def creer_cheque(request):
     if not form.is_valid():
         return JsonResponse({'error': "Formulaire invalide.", 'errors': form.errors}, status=400)
 
+    fournisseur = form.cleaned_data.get('fournisseur')
+    client = form.cleaned_data.get('client')
+
+    if not fournisseur and not client:
+        return JsonResponse({'error': "Choisis un fournisseur ou un client pour ce chèque."}, status=400)
+    if fournisseur and client:
+        return JsonResponse({'error': "Choisis soit un fournisseur, soit un client, pas les deux."}, status=400)
+
+    if fournisseur and not settings_instance.cap:
+        return JsonResponse({'error': "Configure le compte CAP dans Setting avant d'inscrire un chèque à un fournisseur."}, status=400)
+    if client and not settings_instance.car:
+        return JsonResponse({'error': "Configure le compte CAR dans Setting avant d'inscrire un chèque à un client."}, status=400)
+
     with transaction.atomic():
         no_cheque = form.cleaned_data['no_cheque']
         source_cheque, _ = Source.objects.get_or_create(nom=f"Ch # {no_cheque}")
 
-        tr_desc = Tr_desc.objects.create(
-            no_ej=_next_no_ej(),
-            date=form.cleaned_data['date_emission'],
-            compagnie=form.cleaned_data['compagnie'],
-            desc_ctb=form.cleaned_data['description'],
-            source=source_cheque,
-        )
+        tr_desc_kwargs = {
+            'no_ej': _next_no_ej(),
+            'date': form.cleaned_data['date_emission'],
+            'desc_ctb': form.cleaned_data['description'],
+            'source': source_cheque,
+        }
+        if fournisseur:
+            tr_desc_kwargs['fournisseur'] = fournisseur
+        else:
+            tr_desc_kwargs['client'] = client
+
+        tr_desc = Tr_desc.objects.create(**tr_desc_kwargs)
 
         montant = form.cleaned_data['montant']
-        Tr_detail.objects.create(tr_desc=tr_desc, compte=settings_instance.cap, montant=montant)
+        compte_contrepartie = settings_instance.cap if fournisseur else settings_instance.car
+        Tr_detail.objects.create(tr_desc=tr_desc, compte=compte_contrepartie, montant=montant)
         Tr_detail.objects.create(tr_desc=tr_desc, compte=settings_instance.compte_cheques, montant=-montant)
 
         cheque = form.save(commit=False)
@@ -2639,7 +2286,7 @@ def creer_cheque(request):
 
 
 def cheques(request):
-    cheques_list = Cheque.objects.select_related('compagnie').order_by('-date_emission', '-id')
+    cheques_list = Cheque.objects.select_related('client', 'fournisseur').order_by('-date_emission', '-id')
     return render(request, "cheques/index.html", {
         'title': "Chèques",
         'cheques': cheques_list,

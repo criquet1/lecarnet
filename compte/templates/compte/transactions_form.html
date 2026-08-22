@@ -26,7 +26,7 @@
                             class="form-select form-select-sm">
                         <option value="" selected disabled>Choisir une compagnie</option>
                         {% for compagnie in compagnies %}
-                            <option value="{{ compagnie.id }}">{{ compagnie.nom }}</option>
+                            <option value="{{ compagnie.key }}">{{ compagnie.obj.nom }}</option>
                         {% endfor %}
                     </select>
                 </td>
@@ -48,7 +48,8 @@
                            class="form-control form-control-sm"
                            placeholder="Source ex: Facture, banque, paie">
                 </td>
-
+            </tr>
+            <tr><td colspan="4"><p>DEBUG compagnies count: {{ compagnies|length }}</p></td></tr>
         </tbody>
     </table>
 

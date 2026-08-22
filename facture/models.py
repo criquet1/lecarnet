@@ -85,6 +85,8 @@ class Fournisseur(models.Model):
 class Tr_desc(models.Model):
     no_ej = models.CharField(max_length=10, blank=False, null=False)
     compagnie = models.ForeignKey(Compagnie, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
+    fournisseur = models.ForeignKey(Fournisseur, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
     date = models.DateField()
     desc_releve = models.CharField(max_length=255, blank=True, null=False, default='')
     desc_ctb = models.CharField(max_length=40, blank=True, null=True)
@@ -329,20 +331,29 @@ class Tr_detail(models.Model):
 
 
 class CompagnieSoldeDepart(models.Model):
-    compagnie = models.OneToOneField(
-        Compagnie,
+    client = models.OneToOneField(
+        Client,
         on_delete=models.CASCADE,
         related_name='solde_depart',
+        null=True,
+        blank=True,
+    )
+    fournisseur = models.OneToOneField(
+        Fournisseur,
+        on_delete=models.CASCADE,
+        related_name='solde_depart',
+        null=True,
+        blank=True,
     )
     montant = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     class Meta:
         verbose_name = 'Solde de depart compagnie'
         verbose_name_plural = 'Soldes de depart compagnies'
-        ordering = ['compagnie__nom']
 
     def __str__(self):
-        return f"{self.compagnie.nom} - {self.montant}"
+        nom = self.client.nom if self.client_id else (self.fournisseur.nom if self.fournisseur_id else '?')
+        return f"{nom} - {self.montant}"
     
 
 class CompteReleve(models.Model):
@@ -482,7 +493,8 @@ class Cheque(models.Model):
     no_cheque = models.CharField(max_length=20)
     date_emission = models.DateField()
     montant = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    compagnie = models.ForeignKey(Compagnie, on_delete=models.PROTECT, related_name='cheques', null=True, blank=True)
+    client = models.ForeignKey(Client, on_delete=models.PROTECT, related_name='cheques', null=True, blank=True)
+    fournisseur = models.ForeignKey(Fournisseur, on_delete=models.PROTECT, related_name='cheques', null=True, blank=True)
     description = models.CharField(max_length=255, blank=True)
     tr_desc = models.ForeignKey(Tr_desc, on_delete=models.PROTECT, related_name='cheques', null=True, blank=True)
     releve_ligne = models.ForeignKey(Releve, on_delete=models.SET_NULL, null=True, blank=True, related_name='cheque_associe')

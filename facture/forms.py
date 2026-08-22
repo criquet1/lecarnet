@@ -29,7 +29,7 @@ class ClientForm(forms.ModelForm):
 
     class Meta:
         model = Client
-        fields = ['nom', 'logo', 'comptes', 'active']
+        fields = ['nom', 'logo', 'comptes', 'active', 'afficher_card']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -44,7 +44,7 @@ class FournisseurForm(forms.ModelForm):
 
     class Meta:
         model = Fournisseur
-        fields = ['nom', 'logo', 'comptes', 'active']
+        fields = ['nom', 'logo', 'comptes', 'active', 'afficher_card']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -196,11 +196,12 @@ TrDetailFormSet = formset_factory(TrDetailForm, extra=25)
 class ChequeForm(forms.ModelForm):
     class Meta:
         model = Cheque
-        fields = ['no_cheque', 'date_emission', 'compagnie', 'montant', 'description']
+        fields = ['no_cheque', 'date_emission', 'client', 'fournisseur', 'montant', 'description']
         widgets = {
             'no_cheque': forms.TextInput(attrs={'class': 'form-control'}),
             'date_emission': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'compagnie': forms.Select(attrs={'class': 'form-select'}),
+            'client': forms.Select(attrs={'class': 'form-select'}),
+            'fournisseur': forms.Select(attrs={'class': 'form-select'}),
             'montant': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
             'description': forms.TextInput(attrs={'class': 'form-control'}),
         }

@@ -246,7 +246,7 @@
                                     <select name="compagnie_id" id="id_compagnie_id" class="form-select">
                                         <option value="">-- aucune --</option>
                                         {% for compagnie in compagnies %}
-                                            <option value="{{ compagnie.id }}" {% if selected_compagnie_id == compagnie.id|stringformat:'s' %}selected{% endif %}>{{ compagnie.nom }}</option>
+                                            <option value="{{ compagnie.key }}" {% if selected_compagnie_id == compagnie.obj.pk|stringformat:'s' and selected_compagnie_type == compagnie.type %}selected{% endif %}>{{ compagnie.obj.nom }}</option>
                                         {% endfor %}
                                     </select>
                                     <div class="form-text">Pour un virement entre relevés, laissez ce champ vide sauf si l'écriture utilise CAP ou CAR.</div>

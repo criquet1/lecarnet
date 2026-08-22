@@ -7,6 +7,7 @@ from django.utils.connection import ConnectionDoesNotExist
 from facture.constants import MONTH_LABELS_FR
 from facture.working_period import get_working_period
 from compte.models import Setting
+from .models import Cheque, Client, Compagnie, Fournisseur
 
 
 def _add_months(source_date, months):
@@ -99,7 +100,12 @@ from .models import Cheque, Compagnie
 def compagnies_actives(request):
     if not request.user.is_authenticated:
         return {}
-    return {'compagnies': Compagnie.objects.filter(active=True).order_by('nom')}
+    compagnies = sorted(
+        [{'type': 'client', 'obj': c, 'key': f'client:{c.pk}'} for c in Client.objects.filter(active=True)] +
+        [{'type': 'fournisseur', 'obj': f, 'key': f'fournisseur:{f.pk}'} for f in Fournisseur.objects.filter(active=True)],
+        key=lambda item: item['obj'].nom.lower()
+    )
+    return {'compagnies': compagnies}
 
 def prochain_no_cheque(request):
     if not request.user.is_authenticated:

@@ -11,7 +11,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils.connection import ConnectionDoesNotExist
 
-from facture.models import Compagnie
+from facture.models import Compagnie, Client, Fournisseur
 from compte.models import Setting
 
 
@@ -130,18 +130,17 @@ def tax_target_mode_from_setting(settings_instance):
 def ensure_tax_authority_companies(settings_instance=None):
 	settings_instance = settings_instance or get_setting()
 	target_mode = tax_target_mode_from_setting(settings_instance)
+	model_class = Fournisseur if target_mode == Compagnie.MODE_CAP else Client
 
+	tax_entities = {}
 	for company_name in TAX_AUTHORITY_COMPANY_NAMES:
-		compagnie, created = Compagnie.objects.get_or_create(
+		entity, _created = model_class.objects.get_or_create(
 			nom=company_name,
-			defaults={
-				'logo': 'images.png',
-				'cap_ou_car': target_mode,
-			},
+			defaults={'logo': 'images.png'},
 		)
-		if not created and compagnie.cap_ou_car != target_mode:
-			compagnie.cap_ou_car = target_mode
-			compagnie.save(update_fields=['cap_ou_car'])
+		tax_entities[company_name] = entity
+
+	return tax_entities
 
 
 def decode_csv_bytes(raw_bytes):

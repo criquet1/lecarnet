@@ -20,12 +20,14 @@
                         </div>
                         <div class="col-12">
                             <label class="form-label" for="cheque-compagnie">Compagnie</label>
-                            <select class="form-select" id="cheque-compagnie" name="compagnie" required>
+                            <select class="form-select" id="cheque-compagnie" required>
                                 <option value="">-- choisir --</option>
                                 {% for compagnie in compagnies %}
-                                    <option value="{{ compagnie.id }}">{{ compagnie.nom }}</option>
+                                    <option value="{{ compagnie.key }}">{{ compagnie.obj.nom }}</option>
                                 {% endfor %}
                             </select>
+                            <input type="hidden" id="cheque-client" name="client">
+                            <input type="hidden" id="cheque-fournisseur" name="fournisseur">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label" for="cheque-montant">Montant</label>
@@ -74,9 +76,28 @@
         errorsDiv.textContent = '';
     }
 
+    function syncCompagnieHiddenFields() {
+        const select = document.getElementById('cheque-compagnie');
+        const clientInput = document.getElementById('cheque-client');
+        const fournisseurInput = document.getElementById('cheque-fournisseur');
+        const raw = select ? select.value : '';
+        clientInput.value = '';
+        fournisseurInput.value = '';
+        if (!raw) {
+            return;
+        }
+        const [type, id] = raw.split(':');
+        if (type === 'fournisseur') {
+            fournisseurInput.value = id;
+        } else if (type === 'client') {
+            clientInput.value = id;
+        }
+    }
+
     form.addEventListener('submit', function (event) {
         event.preventDefault();
         clearError();
+        syncCompagnieHiddenFields();
         submitBtn.disabled = true;
 
         const formData = new FormData(form);
