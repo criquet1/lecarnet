@@ -191,29 +191,34 @@ def _build_repartition_state():
 		if car_solde:
 			car_total = car_solde.solde_depart
 
-	compagnies = Compagnie.objects.filter(
-		cap_ou_car__in=[Compagnie.MODE_CAP, Compagnie.MODE_CAR],
-	).order_by('cap_ou_car', 'nom')
+	entities = sorted(
+		[{'type': 'fournisseur', 'obj': f} for f in Fournisseur.objects.filter(active=True)] +
+		[{'type': 'client', 'obj': c} for c in Client.objects.filter(active=True)],
+		key=lambda item: item['obj'].nom.lower()
+	)
 
-	soldes_map = {
-		item.compagnie_id: item.montant
-		for item in CompagnieSoldeDepart.objects.select_related('compagnie')
-	}
+	soldes_map = {}
+	for item in CompagnieSoldeDepart.objects.filter(fournisseur__isnull=False):
+		soldes_map[('fournisseur', item.fournisseur_id)] = item.montant
+	for item in CompagnieSoldeDepart.objects.filter(client__isnull=False):
+		soldes_map[('client', item.client_id)] = item.montant
 
 	repartition_rows = []
 	cap_reparti = Decimal('0')
 	car_reparti = Decimal('0')
 
-	for compagnie in compagnies:
-		montant = soldes_map.get(compagnie.id, Decimal('0'))
+	for entity in entities:
+		key = (entity['type'], entity['obj'].pk)
+		montant = soldes_map.get(key, Decimal('0'))
 		repartition_rows.append({
-			'compagnie': compagnie,
+			'compagnie': entity['obj'],
+			'type_label': 'CAP' if entity['type'] == 'fournisseur' else 'CAR',
 			'montant': montant,
-			'field_name': f'repartition_{compagnie.id}',
+			'field_name': f"repartition_{entity['type']}_{entity['obj'].pk}",
 		})
-		if (compagnie.cap_ou_car or '').upper() == Compagnie.MODE_CAP:
+		if entity['type'] == 'fournisseur':
 			cap_reparti += montant
-		elif (compagnie.cap_ou_car or '').upper() == Compagnie.MODE_CAR:
+		else:
 			car_reparti += montant
 
 	return {
@@ -299,21 +304,28 @@ def compte_page(request):
 			if request.POST.get('save_repartition'):
 				import_form = CompteCsvImportForm()
 				form = CompteForm(instance=editing_compte)
-				compagnies = Compagnie.objects.filter(
-					cap_ou_car__in=[Compagnie.MODE_CAP, Compagnie.MODE_CAR],
+				entities = (
+					[('fournisseur', f) for f in Fournisseur.objects.filter(active=True)] +
+					[('client', c) for c in Client.objects.filter(active=True)]
 				)
 				errors = []
 				with transaction.atomic():
-					for compagnie in compagnies:
-						field_name = f'repartition_{compagnie.id}'
+					for entity_type, entity in entities:
+						field_name = f'repartition_{entity_type}_{entity.pk}'
 						montant = parse_decimal(request.POST.get(field_name, '0'))
 						if montant is None:
-							errors.append(f"{compagnie.nom}: montant invalide")
+							errors.append(f"{entity.nom}: montant invalide")
 							continue
-						CompagnieSoldeDepart.objects.update_or_create(
-							compagnie=compagnie,
-							defaults={'montant': montant},
-						)
+						if entity_type == 'fournisseur':
+							CompagnieSoldeDepart.objects.update_or_create(
+								fournisseur=entity,
+								defaults={'montant': montant},
+							)
+						else:
+							CompagnieSoldeDepart.objects.update_or_create(
+								client=entity,
+								defaults={'montant': montant},
+							)
 
 				if errors:
 					repartition_report = {
@@ -982,7 +994,7 @@ def transactions_page(request):
 				return _render_transactions_page()
 
 			messages.success(request, f"Transaction sauvegardee ({tr_desc.no_ej}).")
-			return redirect('transactions')
+			return redirect('journal_general')
 
 		return _render_transactions_page()
 	except Exception:

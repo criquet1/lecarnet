@@ -144,7 +144,7 @@
                     <select id="compagnie" name="compagnie">
                         <option value="" selected disabled>Compagnie</option>
                         {% for compagnie in compagnies %}
-                            <option value="{{ compagnie.id }}">{{ compagnie.nom }}</option>
+                            <option value="{{ compagnie.key }}">{{ compagnie.obj.nom }}</option>
                         {% endfor %}
                     </select>
                 </div>
