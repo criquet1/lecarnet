@@ -87,6 +87,48 @@
     </div>
 </div>
 
+<div class="mb-4">
+    <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#gestionCompagnies" aria-expanded="false" aria-controls="gestionCompagnies">
+        Gérer les compagnies
+    </button>
+    <div class="collapse mt-3" id="gestionCompagnies">
+        <table class="table table-sm table-striped">
+            <thead>
+                <tr>
+                    <th>Nom</th>
+                    <th>Type</th>
+                    <th>Actif</th>
+                    <th>Card</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in gestion_compagnies %}
+                <tr>
+                    <td>{{ item.obj.nom }}</td>
+                    <td>{% if item.type == 'fournisseur' %}Fournisseur{% else %}Client{% endif %}</td>
+                    <td>{% if item.obj.active %}<span class="badge bg-success">Actif</span>{% else %}<span class="badge bg-secondary">Inactif</span>{% endif %}</td>
+                    <td>{% if item.obj.afficher_card %}<span class="badge bg-info text-dark">Oui</span>{% else %}<span class="badge bg-light text-dark">Non</span>{% endif %}</td>
+                    <td>
+                        <button type="button" class="company-modal-trigger btn btn-sm btn-outline-primary" data-company-action="edit"
+                            data-company-id="{{ item.obj.id }}"
+                            data-company-type="{{ item.type }}"
+                            data-company-name="{{ item.obj.nom|escape }}"
+                            data-company-logo-name="{{ item.obj.logo|escape }}"
+                            data-company-active="{{ item.obj.active|yesno:'1,0' }}"
+                            data-company-accounts="{% for compte in item.obj.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
+                            Modifier
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-muted">Aucune compagnie.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
 <!-- Modal facture -->
 <div class="modal fade" id="invoiceModal" tabindex="-1" aria-labelledby="invoiceModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-xl">

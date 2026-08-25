@@ -673,7 +673,11 @@ def facture(request):
         key=lambda item: item['obj'].nom.lower()
     )
 
-
+    gestion_compagnies = sorted(
+        [{'type': 'client', 'obj': c} for c in Client.objects.all()] +
+        [{'type': 'fournisseur', 'obj': f} for f in Fournisseur.objects.all()],
+        key=lambda item: item['obj'].nom.lower()
+    )
 
 
 
@@ -993,6 +997,7 @@ def facture(request):
         'company_form': company_form,
         'open_company_modal': open_company_modal,
         'company_modal_action': company_modal_action,
+        'gestion_compagnies': gestion_compagnies,
         'editing_company_id': editing_company_id,
         'comptes_count': comptes_count,
         'clients': clients,
