@@ -86,7 +86,8 @@ def ledger_db_alias():
 def fetch_or_create_monthly_tax_report(selected_year, selected_month, tax_account_ids):
     # 1. Base query
     base_tax_details = Tr_detail.objects.select_related(
-        'tr_desc__compagnie',
+        'tr_desc__client',
+        'tr_desc__fournisseur',
         'compte',
         'rapport_taxes',
     ).filter(compte_id__in=tax_account_ids).order_by('tr_desc__date', 'id')

@@ -25,8 +25,8 @@ class CompagnieAdmin(ImportExportModelAdmin,admin.ModelAdmin):
     get_comptes.short_description = 'Comptes'
 
 class TrDescAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ('id', 'no_ej', 'compagnie', 'date', 'transaction_releve', 'desc_ctb', 'source')
-    list_filter = ('date', 'compagnie')
+    list_display = ('id', 'no_ej', 'date', 'transaction_releve', 'desc_ctb', 'source')
+    list_filter = ('date', 'fournisseur', 'client')
     search_fields = ('desc_releve', 'desc_ctb')
     ordering = ('-date',)
 
@@ -38,7 +38,7 @@ class TrDescAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 
 class TrDetailAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('id', 'tr_desc', 'compte', 'montant', 'rapport_taxes')
-    list_filter = ('compte', 'tr_desc__compagnie')
+    list_filter = ('compte',)
     search_fields = ('tr_desc__no_ej', 'compte__libelle')
     ordering = ('-id',)
 

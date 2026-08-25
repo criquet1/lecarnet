@@ -84,7 +84,6 @@ class Fournisseur(models.Model):
 
 class Tr_desc(models.Model):
     no_ej = models.CharField(max_length=10, blank=False, null=False)
-    compagnie = models.ForeignKey(Compagnie, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
     fournisseur = models.ForeignKey(Fournisseur, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
     date = models.DateField()

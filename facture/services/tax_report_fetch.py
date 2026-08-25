@@ -7,7 +7,8 @@ def fetch_report_with_details(year, month, tax_account_ids):
         Prefetch(
             'details_taxes',
             queryset=Tr_detail.objects.select_related(
-                'tr_desc__compagnie',
+                'tr_desc__client',
+                'tr_desc__fournisseur',
                 'compte',
                 'rapport_taxes',
             ).filter(compte_id__in=tax_account_ids)

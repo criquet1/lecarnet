@@ -410,7 +410,8 @@ def grand_livre(request):
 
         details = Tr_detail.objects.select_related(
             'compte',
-            'tr_desc__compagnie',
+            'tr_desc__client',
+            'tr_desc__fournisseur',
             'tr_desc__source'
         ).order_by('compte_id', 'tr_desc__date', 'tr_desc_id', 'id')
 
@@ -485,7 +486,7 @@ def grand_livre(request):
             current_entries.append({
                 'date': detail.tr_desc.date,
                 'no_ej': detail.tr_desc.no_ej,
-                'compagnie': detail.tr_desc.compagnie,
+                'compagnie': detail.tr_desc.client or detail.tr_desc.fournisseur,
                 'description': detail.tr_desc.desc_ctb,
                 'source': detail.tr_desc.source,
                 'debit': debit,
@@ -655,20 +656,6 @@ def facture(request):
     comptes_count = Compte.objects.count()
     working_period = get_working_period(request)
     invoice_detail_ids = Facture.objects.values('transaction_id')
-    compagnies = Compagnie.objects.prefetch_related(
-        'comptes',
-        Prefetch(
-            'tr_desc',
-            queryset=_company_invoices_queryset()
-        )
-    ).exclude(nom__in=TAX_AUTHORITY_COMPANY_NAMES).filter(
-        # Une compagnie non active reste visible si elle a servi a facturer sur la periode affichee.
-        Q(active=True) | Q(
-            tr_desc__date__year=working_period['year'],
-            tr_desc__date__month=working_period['month'],
-            tr_desc__details__id__in=Subquery(invoice_detail_ids),
-        )
-    ).distinct().order_by('nom', 'id')
 
     clients = Client.objects.prefetch_related(
         Prefetch('tr_desc', queryset=_company_invoices_queryset())
@@ -1008,8 +995,6 @@ def facture(request):
         'company_modal_action': company_modal_action,
         'editing_company_id': editing_company_id,
         'comptes_count': comptes_count,
-        'compagnies': compagnies,
-        'companies': compagnies,
         'clients': clients,
         'fournisseurs': fournisseurs,
         'cards': cards,
@@ -1521,7 +1506,8 @@ def _candidats_ecriture_similaire(releve=None, max_candidats=500):
 
     candidats_qs = candidats_qs.select_related(
         'ecriture_tr_desc',
-        'ecriture_tr_desc__compagnie',
+        'ecriture_tr_desc__client',
+        'ecriture_tr_desc__fournisseur',
         'compte_releve',
         'compte_releve__compte_comptable',
     ).prefetch_related(
@@ -1554,8 +1540,8 @@ def _candidats_ecriture_similaire(releve=None, max_candidats=500):
             'date_releve': candidat.date.strftime('%Y-%m-%d') if candidat.date else '',
             'no_ej': tr_desc.no_ej,
             'desc_ctb': tr_desc.desc_ctb or '',
-            'compagnie_id': str(tr_desc.compagnie_id or ''),
-            'compagnie_label': str(tr_desc.compagnie) if tr_desc.compagnie_id else '',
+            'compagnie_id': (f"client:{tr_desc.client_id}" if tr_desc.client_id else (f"fournisseur:{tr_desc.fournisseur_id}" if tr_desc.fournisseur_id else '')),
+            'compagnie_label': str(tr_desc.client or tr_desc.fournisseur or ''),
             'details': details,
         })
     return enrichis
@@ -1941,7 +1927,8 @@ def releve_bancaire(request):
         'compte_releve',
         'compte_releve__compte_comptable',
         'ecriture_tr_desc',
-        'ecriture_tr_desc__compagnie',
+        'ecriture_tr_desc__client',
+        'ecriture_tr_desc__fournisseur',
     ).prefetch_related(
         Prefetch('ecriture_tr_desc__details', queryset=Tr_detail.objects.select_related('compte').order_by('id')),
     ).order_by('date', 'no_ligne')
@@ -2071,7 +2058,7 @@ def releve_bancaire(request):
         'open_releve_modal': open_releve_modal,
         'modal_releve_id': modal_releve_id,
         'selected_compagnie_id': selected_compagnie_id,
-        'compagnies': compagnies,
+        # 'compagnies': compagnies,
         'compte_cap_id': settings_instance.cap_id if settings_instance else '',
         'compte_car_id': settings_instance.car_id if settings_instance else '',
         'selected_periode': selected_periode,
