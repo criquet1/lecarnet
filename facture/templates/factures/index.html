@@ -116,6 +116,7 @@
                             data-company-name="{{ item.obj.nom|escape }}"
                             data-company-logo-name="{{ item.obj.logo|escape }}"
                             data-company-active="{{ item.obj.active|yesno:'1,0' }}"
+                            data-company-created-by-non-expert="{{ item.obj.created_by_non_expert|yesno:'1,0' }}"
                             data-company-accounts="{% for compte in item.obj.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
                             Modifier
                         </button>

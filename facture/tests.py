@@ -17,7 +17,7 @@ from django.urls import resolve, reverse
 from django.utils import timezone
 
 from compte.models import Compte, SoldeAuxLivres, Total
-from facture.models import Compagnie, CompteReleve, Facture, RapportTaxes, Releve, SoldeFin, Source, TransactionListe, Tr_desc, Tr_detail
+from facture.models import Client, Compagnie, CompteReleve, Facture, Fournisseur, RapportTaxes, Releve, SoldeFin, Source, TransactionListe, Tr_desc, Tr_detail
 from facture.templatetags.facture_extras import accounting_amount
 from facture.views import _company_invoices_queryset, administration, dashboard, facture, grand_livre, journal_general, rapport_de_taxes, releve_bancaire, releve_ecriture_similaire, update_working_period
 from facture.working_period import set_working_period
@@ -254,10 +254,9 @@ class FactureMultiTenantTests(TestCase):
 			compte_fr_retard=fr_retard,
 		)
 
-		compagnie = Compagnie.objects.using(active_alias).create(
+		fournisseur = Fournisseur.objects.using(active_alias).create(
 			nom='Compagnie Test',
 			logo='images.png',
-			cap_ou_car=Compagnie.MODE_CAP,
 		)
 
 		before_active = Tr_desc.objects.using(active_alias).count()
@@ -271,7 +270,8 @@ class FactureMultiTenantTests(TestCase):
 
 		response = self.client.post(reverse('facture'), data={
 			'action': 'add_tr_desc',
-			'selected_company_id': str(compagnie.id),
+			'selected_company_id': str(fournisseur.id),
+			'selected_company_type': 'fournisseur',
 			'editing_tr_desc_id': '',
 			'facture_total': '100.00',
 			'trdesc-date': '2026-06-01',
@@ -311,16 +311,15 @@ class AccountingSqlViewsTests(TestCase):
 			libelle='Compte vues SQL',
 			no_total=total,
 		)
-		compagnie = Compagnie.objects.using(self.alias).create(
+		self.client_obj = Client.objects.using(self.alias).create(
 			nom='Compagnie vues SQL',
-			cap_ou_car=Compagnie.MODE_CAR,
 		)
 		source = Source.objects.using(self.alias).create(nom='Facture')
 		transaction = Tr_desc.objects.using(self.alias).create(
 			no_ej='EJ-VUE-1',
 			date=date(2026, 7, 31),
 			desc_ctb='Test des vues SQL',
-			compagnie=compagnie,
+			client=self.client_obj,
 			source=source,
 		)
 		self.detail = Tr_detail.objects.using(self.alias).create(
@@ -424,7 +423,7 @@ class AccountingSqlViewsTests(TestCase):
 			no_ej='EJ-NEG',
 			date=date(2026, 7, 31),
 			desc_ctb='Solde negatif',
-			compagnie=self.detail.tr_desc.compagnie,
+			client=self.detail.tr_desc.client,
 			source=self.detail.tr_desc.source,
 		)
 		Tr_detail.objects.using(self.alias).create(
@@ -464,9 +463,9 @@ class AccountingSqlViewsTests(TestCase):
 		user = get_user_model().objects.create_user(username='facture-user', password='pass1234')
 		request = RequestFactory().post('/facture/', {
 			'action': 'add_company',
+			'company_type': 'client',
 			'company-nom': 'Compagnie utilisateur',
 			'company-logo': 'images.png',
-			'company-cap_ou_car': Compagnie.MODE_AUTRE,
 		})
 		request.user = user
 		request.active_client_alias = self.alias
@@ -474,7 +473,7 @@ class AccountingSqlViewsTests(TestCase):
 		token = set_current_tenant_alias(self.alias)
 		try:
 			response = facture(request)
-			company = Compagnie.objects.get(nom='Compagnie utilisateur')
+			company = Client.objects.get(nom='Compagnie utilisateur')
 
 			page_request = RequestFactory().get('/facture/')
 			page_request.user = user
@@ -496,9 +495,9 @@ class AccountingSqlViewsTests(TestCase):
 		)
 		request = RequestFactory().post('/facture/', {
 			'action': 'add_company',
+			'company_type': 'client',
 			'company-nom': 'Compagnie expert',
 			'company-logo': 'images.png',
-			'company-cap_ou_car': Compagnie.MODE_AUTRE,
 		})
 		request.user = user
 		request.active_client_alias = self.alias
@@ -506,7 +505,7 @@ class AccountingSqlViewsTests(TestCase):
 		token = set_current_tenant_alias(self.alias)
 		try:
 			response = facture(request)
-			company = Compagnie.objects.get(nom='Compagnie expert')
+			company = Client.objects.get(nom='Compagnie expert')
 		finally:
 			reset_current_tenant_alias(token)
 
@@ -520,19 +519,18 @@ class AccountingSqlViewsTests(TestCase):
 			libelle='Compte compagnie modifiee',
 			no_total=self.compte.no_total,
 		)
-		company = Compagnie.objects.using(self.alias).create(
+		company = Client.objects.using(self.alias).create(
 			nom='Compagnie avant',
 			logo='images.png',
-			cap_ou_car=Compagnie.MODE_AUTRE,
 			created_by_non_expert=True,
 		)
 
 		request = RequestFactory().post('/facture/', {
 			'action': 'edit_company',
+			'company_type': 'client',
 			'company_id': str(company.pk),
 			'company-nom': 'Compagnie apres',
 			'company-logo': 'images.png',
-			'company-cap_ou_car': Compagnie.MODE_CAP,
 			'company-comptes': [str(other_account.pk)],
 		})
 		request.user = user
@@ -548,7 +546,6 @@ class AccountingSqlViewsTests(TestCase):
 
 		self.assertEqual(response.status_code, 302)
 		self.assertEqual(company.nom, 'Compagnie apres')
-		self.assertEqual(company.cap_ou_car, Compagnie.MODE_CAP)
 		self.assertTrue(company.created_by_non_expert)
 		self.assertEqual(company_account_ids, [other_account.pk])
 
@@ -571,7 +568,8 @@ class AccountingSqlViewsTests(TestCase):
 		before_count = Tr_desc.objects.using(self.alias).count()
 		request = RequestFactory().post('/facture/', {
 			'action': 'add_tr_desc',
-			'selected_company_id': str(self.detail.tr_desc.compagnie_id),
+			'selected_company_id': str(self.detail.tr_desc.client_id),
+			'selected_company_type': 'client',
 			'editing_tr_desc_id': '',
 			'facture_total': '100.00',
 			'trdesc-date': '2026-07-31',
@@ -609,12 +607,12 @@ class AccountingSqlViewsTests(TestCase):
 			no_ej='EJ-REL-1',
 			date=date(2026, 7, 30),
 			desc_ctb='Ecriture de releve',
-			compagnie=self.detail.tr_desc.compagnie,
+			client=self.detail.tr_desc.client,
 			source=releve_source,
 		)
 
 		invoice_ids = list(
-			_company_invoices_queryset(self.detail.tr_desc.compagnie)
+			_company_invoices_queryset(self.detail.tr_desc.client, 'client')
 			.using(self.alias)
 			.values_list('id', flat=True)
 		)
@@ -626,7 +624,8 @@ class AccountingSqlViewsTests(TestCase):
 		transaction_id = self.detail.tr_desc_id
 		request = RequestFactory().post('/facture/', {
 			'action': 'delete_tr_desc',
-			'selected_company_id': str(self.detail.tr_desc.compagnie_id),
+			'selected_company_id': str(self.detail.tr_desc.client_id),
+			'selected_company_type': 'client',
 			'editing_tr_desc_id': str(transaction_id),
 		})
 
@@ -641,13 +640,13 @@ class AccountingSqlViewsTests(TestCase):
 		self.assertFalse(Tr_detail.objects.using(self.alias).filter(pk=self.detail.pk).exists())
 
 	def test_delete_invoice_rejects_mismatched_company(self):
-		other_company = Compagnie.objects.using(self.alias).create(
+		other_company = Fournisseur.objects.using(self.alias).create(
 			nom='Autre compagnie',
-			cap_ou_car=Compagnie.MODE_CAP,
 		)
 		request = RequestFactory().post('/facture/', {
 			'action': 'delete_tr_desc',
 			'selected_company_id': str(other_company.pk),
+			'selected_company_type': 'fournisseur',
 			'editing_tr_desc_id': str(self.detail.tr_desc_id),
 		})
 
@@ -671,7 +670,8 @@ class AccountingSqlViewsTests(TestCase):
 		Tr_detail.objects.using(self.alias).filter(pk=self.detail.pk).update(rapport_taxes=report)
 		request = RequestFactory().post('/facture/', {
 			'action': 'delete_tr_desc',
-			'selected_company_id': str(self.detail.tr_desc.compagnie_id),
+			'selected_company_id': str(self.detail.tr_desc.client_id),
+			'selected_company_type': 'client',
 			'editing_tr_desc_id': str(self.detail.tr_desc_id),
 		})
 
@@ -712,7 +712,7 @@ class AccountingSqlViewsTests(TestCase):
 			no_ej='EJ-TAX-1',
 			date=date(2026, 7, 15),
 			desc_ctb='Facture avec taxes',
-			compagnie=self.detail.tr_desc.compagnie,
+			client=self.detail.tr_desc.client,
 			source=self.detail.tr_desc.source,
 		)
 		for account_name, amount in (

@@ -8,7 +8,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
 
-from facture.models import Compagnie, Tr_desc
+from facture.models import Fournisseur, Tr_desc
 from tenancy.db_context import reset_current_tenant_alias, set_current_tenant_alias
 
 from .models import Compte, Setting, Total
@@ -47,9 +47,8 @@ class TransactionsPageTests(TestCase):
 			cap=self.cap,
 			car=self.car,
 		)
-		self.company = Compagnie.objects.using(self.alias).create(
+		self.company = Fournisseur.objects.using(self.alias).create(
 			nom='Compagnie test CAP',
-			cap_ou_car=Compagnie.MODE_CAP,
 		)
 		self.user = get_user_model().objects.create_superuser(
 			username='expert_transactions',
@@ -95,7 +94,7 @@ class TransactionsPageTests(TestCase):
 				)
 
 	def test_cap_account_accepts_selected_company(self):
-		request = self._build_request(str(self.company.pk))
+		request = self._build_request(f'fournisseur:{self.company.pk}')
 
 		token = set_current_tenant_alias(self.alias)
 		try:
@@ -105,6 +104,6 @@ class TransactionsPageTests(TestCase):
 
 		transaction = Tr_desc.objects.using(self.alias).get()
 		self.assertEqual(response.status_code, 302)
-		self.assertEqual(transaction.compagnie_id, self.company.pk)
+		self.assertEqual(transaction.fournisseur_id, self.company.pk)
 
 # Create your tests here.
