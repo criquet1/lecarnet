@@ -14,3 +14,7 @@ MONTH_LABELS_FR = {
 }
 
 MONTH_CHOICES_FR = [(str(month), label) for month, label in MONTH_LABELS_FR.items()]
+
+MODE_CAP = 'CAP'
+MODE_CAR = 'CAR'
+MODE_AUTRE = 'AUTRE'

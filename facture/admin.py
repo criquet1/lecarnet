@@ -1,5 +1,5 @@
 from django.contrib import admin
-from facture.models import Client, Compagnie, Facture, Fournisseur, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
+from facture.models import Client, Facture, Fournisseur, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
 from compte.models import Setting
 from import_export.admin import ExportMixin, ImportExportModelAdmin
 
@@ -8,21 +8,6 @@ class SettingAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('id', 'nom', 'email', 'phone', 'adresse', 'ville', 'code_postal', 'pays')
     list_filter = ('nom',)
 
-
-class CompagnieAdmin(ImportExportModelAdmin,admin.ModelAdmin):
-    list_display = ('id', 'nom', 'logo', 'get_cap_ou_car', 'get_comptes')
-    list_filter = ('nom',)
-    list_editable = ('nom',)
-
-    def get_cap_ou_car(self, obj):
-        return obj.cap_ou_car or ''
-
-    get_cap_ou_car.short_description = 'CAP/CAR'
-    
-    def get_comptes(self, obj):
-        return ", ".join([compte.libelle for compte in obj.comptes.all()])
-    
-    get_comptes.short_description = 'Comptes'
 
 class TrDescAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('id', 'no_ej', 'date', 'transaction_releve', 'desc_ctb', 'source')
@@ -110,7 +95,6 @@ class FactureAdmin(ExportMixin, admin.ModelAdmin):
 
 admin.site.register(Facture, FactureAdmin)
 admin.site.register(TransactionListe, TransactionListeAdmin)
-admin.site.register(Compagnie, CompagnieAdmin)
 admin.site.register(Client)
 admin.site.register(Fournisseur)
 admin.site.register(Setting, SettingAdmin)

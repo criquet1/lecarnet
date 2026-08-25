@@ -7,7 +7,7 @@ from django.utils.connection import ConnectionDoesNotExist
 from facture.constants import MONTH_LABELS_FR
 from facture.working_period import get_working_period
 from compte.models import Setting
-from .models import Cheque, Client, Compagnie, Fournisseur
+from .models import Cheque, Client, Fournisseur
 
 
 def _add_months(source_date, months):
@@ -94,7 +94,7 @@ def site_settings(request):
     }
 
 
-from .models import Cheque, Compagnie
+from .models import Cheque
 
 
 def compagnies_actives(request):

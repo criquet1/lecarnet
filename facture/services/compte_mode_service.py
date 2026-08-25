@@ -5,12 +5,12 @@ from types import SimpleNamespace
 
 from facture.models import (
     Client,
-    Compagnie,
     CompagnieSoldeDepart,
     Fournisseur,
     Tr_desc,
     Tr_detail,
 )
+from facture.constants import MODE_CAP, MODE_CAR
 from facture.helpers.money import money
 
 from facture.helpers.dates import closing_date_label
@@ -23,10 +23,10 @@ from facture.services.ledger_sql import (
 
 
 def build_compte_mode_context(mode, settings_instance):
-    if mode not in {Compagnie.MODE_CAP, Compagnie.MODE_CAR}:
+    if mode not in {MODE_CAP, MODE_CAR}:
         raise ValueError("Mode invalide pour compte mode")
 
-    is_cap = mode == Compagnie.MODE_CAP
+    is_cap = mode == MODE_CAP
     compte_id = settings_instance.cap_id if (settings_instance and is_cap) else settings_instance.car_id if settings_instance else None
     entity_model = Fournisseur if is_cap else Client
     compagnies = entity_model.objects.order_by('nom')

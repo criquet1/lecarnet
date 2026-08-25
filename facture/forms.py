@@ -4,24 +4,9 @@ from django import forms
 from django.forms import formset_factory
 
 from .constants import MONTH_CHOICES_FR
-from .models import Cheque, Compagnie, Tr_desc, Client, Fournisseur
+from .models import Cheque, Tr_desc, Client, Fournisseur
 from compte.models import Setting
 from .utils import get_available_logos
-
-
-class CompagnieForm(forms.ModelForm):
-    logo = forms.ChoiceField(label="Logo", required=True)
-
-    class Meta:
-        model = Compagnie
-        fields = ['nom', 'logo', 'comptes', 'cap_ou_car', 'active']
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        logo_files = get_available_logos()
-
-        self.fields['logo'].choices = [(name, name) for name in logo_files]
-        self.fields['logo'].help_text = "Fichier pris depuis static/images/logos"
 
 
 class ClientForm(forms.ModelForm):

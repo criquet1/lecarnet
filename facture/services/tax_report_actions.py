@@ -7,7 +7,8 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from facture.helpers.money import money
-from facture.models import Compagnie, RapportTaxes, Tr_desc, Tr_detail, Source
+from facture.models import RapportTaxes, Tr_desc, Tr_detail, Source
+from facture.constants import MODE_CAP
 from facture.utils import (
     ensure_tax_authority_companies,
     tax_target_mode_from_setting,
@@ -26,7 +27,7 @@ def transmit_report(report, settings_instance, next_no_ej):
     (Fournisseur si mode CAP, Client si mode CAR). Retourne (posted_count, mode_label).
     Leve ValueError si la configuration est incomplete."""
     tax_mode = tax_target_mode_from_setting(settings_instance)
-    is_cap = tax_mode == Compagnie.MODE_CAP
+    is_cap = tax_mode == MODE_CAP
     mode_label = "CAP" if is_cap else "CAR"
     target_compte = settings_instance.cap if is_cap else settings_instance.car
 

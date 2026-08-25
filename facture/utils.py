@@ -11,8 +11,9 @@ from django.core.exceptions import PermissionDenied
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils.connection import ConnectionDoesNotExist
 
-from facture.models import Compagnie, Client, Fournisseur
+from facture.models import Client, Fournisseur
 from compte.models import Setting
+from facture.constants import MODE_CAP, MODE_CAR, MODE_AUTRE
 
 
 TAX_AUTHORITY_COMPANY_TPS = 'Revenu Canada TPS'
@@ -123,14 +124,14 @@ def get_setting(*select_related_fields):
 
 def tax_target_mode_from_setting(settings_instance):
 	if not settings_instance or settings_instance.taxes_mode == Setting.TAX_MODE_RECLAMER:
-		return Compagnie.MODE_CAR
-	return Compagnie.MODE_CAP
+		return MODE_CAR
+	return MODE_CAP
 
 
 def ensure_tax_authority_companies(settings_instance=None):
 	settings_instance = settings_instance or get_setting()
 	target_mode = tax_target_mode_from_setting(settings_instance)
-	model_class = Fournisseur if target_mode == Compagnie.MODE_CAP else Client
+	model_class = Fournisseur if target_mode == MODE_CAP else Client
 
 	tax_entities = {}
 	for company_name in TAX_AUTHORITY_COMPANY_NAMES:

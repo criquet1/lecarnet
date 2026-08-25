@@ -18,7 +18,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.connection import ConnectionDoesNotExist
 from django.utils import timezone
 from django.utils.html import format_html
-from facture.models import Client, Compagnie, CompagnieSoldeDepart, CompteReleve, Fournisseur, SoldeFin, Source, Tr_desc, Tr_detail
+from facture.models import Client, CompagnieSoldeDepart, CompteReleve, Fournisseur, SoldeFin, Source, Tr_desc, Tr_detail
 from facture.utils import ensure_tax_authority_companies, expert_required, get_settings, parse_decimal, read_csv_rows
 from tenancy.models import ClientDatabase, Societe, UserClientAccess, UserSocieteAccess
 from tenancy.services import mark_user_must_change_password, set_active_client_on_session, sync_user_client_accesses, user_must_change_password

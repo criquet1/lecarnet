@@ -1,6 +1,6 @@
 import calendar
 from decimal import Decimal
-from facture.models import Compagnie, Facture, Releve, CompteReleve
+from facture.models import Client, Facture, Fournisseur, Releve, CompteReleve
 from facture.working_period import get_working_period
 
 
@@ -14,13 +14,17 @@ def compute_dashboard_data(request):
     mois_liste = [(i, calendar.month_name[i]) for i in range(1, 13)]
     annees = list(range(annee - 5, annee + 2))
 
-    nb_compagnies = Compagnie.objects.filter(active=True).count()
+    noms_compagnies_actives = list(
+        Client.objects.filter(active=True).values_list('nom', flat=True)
+    ) + list(
+        Fournisseur.objects.filter(active=True).values_list('nom', flat=True)
+    )
+    nb_compagnies = len(noms_compagnies_actives)
 
     factures_mois = Facture.objects.filter(date__month=mois, date__year=annee)
     nb_factures = factures_mois.values('no_ej').distinct().count()
 
-    compagnies_actives = Compagnie.objects.filter(active=True).values_list("nom", flat=True)
-    compagnies_avec_facture = factures_mois.filter(compagnie__in=compagnies_actives).values("compagnie").distinct().count()
+    compagnies_avec_facture = factures_mois.filter(compagnie__in=noms_compagnies_actives).values("compagnie").distinct().count()
     compagnies_sans_facture = nb_compagnies - compagnies_avec_facture
 
     if compagnies_sans_facture == 0:

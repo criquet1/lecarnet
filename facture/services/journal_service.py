@@ -1,7 +1,7 @@
 from decimal import Decimal
 import re
 from types import SimpleNamespace
-from facture.models import TransactionListe, Compagnie, Client, Compte, Fournisseur
+from facture.models import TransactionListe, Client, Compte, Fournisseur
 from facture.utils import get_setting
 from facture.helpers.dates import closing_date_label
 

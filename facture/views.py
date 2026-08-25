@@ -19,10 +19,10 @@ import json
 from io import TextIOWrapper
 import chardet
 from datetime import date, datetime, timedelta
-from facture.constants import MONTH_LABELS_FR
-from facture.models import Cheque, Compagnie, Client, Fournisseur, Tr_desc, Tr_detail, Source, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, Facture, SoldeFin, TransactionListe
+from facture.constants import MONTH_LABELS_FR, MODE_CAP, MODE_CAR
+from facture.models import Cheque, Client, Fournisseur, Tr_desc, Tr_detail, Source, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, Facture, SoldeFin, TransactionListe
 from compte.models import Setting
-from facture.forms import ChequeForm, CompagnieForm, ClientForm, FournisseurForm, TrDescForm, TrDetailFormSet
+from facture.forms import ChequeForm, ClientForm, FournisseurForm, TrDescForm, TrDetailFormSet
 from facture.services.tax_report_enrich import enrich_report_with_calculations
 from facture.services.tax_report_actions import remove_line_from_report, transmit_report, undo_transmit_report
 from facture.working_period import (
@@ -1046,7 +1046,7 @@ def balance_de_verification(request):
 @xframe_options_sameorigin
 def compte_a_payer(request):
     settings_instance = get_setting()
-    context = build_compte_mode_context(Compagnie.MODE_CAP, settings_instance)
+    context = build_compte_mode_context(MODE_CAP, settings_instance)
     context['title'] = "Comptes à payer"
     return render(request, "rapports/compte_mode.html", context)
 
@@ -1055,7 +1055,7 @@ def compte_a_payer(request):
 @xframe_options_sameorigin
 def compte_a_recevoir(request):
     settings_instance = get_setting()
-    context = build_compte_mode_context(Compagnie.MODE_CAR, settings_instance)
+    context = build_compte_mode_context(MODE_CAR, settings_instance)
     context['title'] = "Comptes à recevoir"
     return render(request, "rapports/compte_mode.html", context)
 

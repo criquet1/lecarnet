@@ -17,7 +17,7 @@ from django.urls import resolve, reverse
 from django.utils import timezone
 
 from compte.models import Compte, SoldeAuxLivres, Total
-from facture.models import Client, Compagnie, CompteReleve, Facture, Fournisseur, RapportTaxes, Releve, SoldeFin, Source, TransactionListe, Tr_desc, Tr_detail
+from facture.models import Client, CompteReleve, Facture, Fournisseur, RapportTaxes, Releve, SoldeFin, Source, TransactionListe, Tr_desc, Tr_detail
 from facture.templatetags.facture_extras import accounting_amount
 from facture.views import _company_invoices_queryset, administration, dashboard, facture, grand_livre, journal_general, rapport_de_taxes, releve_bancaire, releve_ecriture_similaire, update_working_period
 from facture.working_period import set_working_period
