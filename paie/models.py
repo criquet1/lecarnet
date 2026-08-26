@@ -98,7 +98,11 @@ class Employe(models.Model):
                 verse=Coalesce(Sum('vacances_payees'), Decimal('0.00')),
             )
         )
-        return result['accumule'] - result['verse']
+        solde_depart = Decimal('0.00')
+        if hasattr(self, 'solde_vacances_depart'):
+            solde_depart = self.solde_vacances_depart.montant
+
+        return solde_depart + result['accumule'] - result['verse']
 
     @property
     def taux_horaire_defaut(self):
@@ -775,6 +779,22 @@ class Paie(models.Model):
 
     def __str__(self):
         return f'Paie de {self.employe} - {self.periode}'
+
+
+class SoldeVacancesDepart(models.Model):
+    employe = models.OneToOneField(
+        Employe,
+        on_delete=models.CASCADE,
+        related_name='solde_vacances_depart',
+    )
+    montant = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+
+    class Meta:
+        verbose_name = "Solde de départ vacances"
+        verbose_name_plural = "Soldes de départ vacances"
+
+    def __str__(self):
+        return f"{self.employe} - {self.montant}"
 
 
 @receiver(post_save, sender=ParametresTauxPaie)

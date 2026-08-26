@@ -1,6 +1,6 @@
 from django.contrib import admin
 from import_export.admin import ExportMixin, ImportExportModelAdmin
-from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie, PaieJournalLigne
+from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie, PaieJournalLigne, SoldeVacancesDepart
 
 
 @admin.register(FrequencePaie)
@@ -60,3 +60,6 @@ class PaieJournalLigneAdmin(ExportMixin, admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+admin.site.register(SoldeVacancesDepart)
