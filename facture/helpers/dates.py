@@ -42,3 +42,14 @@ def prochaine_date_fin_exercice(reference_date, settings_instance=None):
         candidate = date(annee, closing_month, jour_ajuste)
 
     return candidate
+
+
+def exercice_pour_working_period(working_period):
+    from compte.models import ExerciceFinancier
+    from datetime import date
+
+    reference_date = date(working_period['year'], working_period['month'], 1)
+    return ExerciceFinancier.objects.filter(
+        date_debut__lte=reference_date,
+        date_fin__gte=reference_date,
+    ).order_by('-date_debut').first()

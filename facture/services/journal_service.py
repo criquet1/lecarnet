@@ -8,13 +8,20 @@ from facture.helpers.dates import closing_date_label
 
 
 
-def build_journal_context():
+def build_journal_context(exercice=None):
     entries_by_no_ej = {}
     total_debit = Decimal('0')
     total_credit = Decimal('0')
 
+    transactions_qs = TransactionListe.objects.all()
+    if exercice:
+        transactions_qs = transactions_qs.filter(
+            date__gte=exercice.date_debut,
+            date__lte=exercice.date_fin,
+        )
+
     # Regrouper les lignes par numéro EJ
-    for row in TransactionListe.objects.all():
+    for row in transactions_qs:
         entry_key = (row.no_ej, row.date)
         entry = entries_by_no_ej.setdefault(entry_key, SimpleNamespace(
             no_ej=row.no_ej,
@@ -48,10 +55,9 @@ def build_journal_context():
 
     # Label de fin d'année
     settings_instance = get_setting()
-    report_date = max((entry.date for entry in journal_entries if entry.date), default=None)
+    report_date = exercice.date_fin if exercice else max((entry.date for entry in journal_entries if entry.date), default=None)
     report_year_label = closing_date_label(report_date, settings_instance)
 
-    # Données pour le formulaire
     # Données pour le formulaire
     compagnies = sorted(
         [{'type': 'client', 'obj': c, 'key': f'client:{c.pk}'} for c in Client.objects.filter(active=True)] +

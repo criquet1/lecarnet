@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
-from django.db import transaction, connections, DatabaseError
+from django.db import connection, transaction, connections, DatabaseError
 from django.db.models import Prefetch, Q, Subquery, Sum, Value, DecimalField, F
 from django.db.models.functions import Coalesce, ExtractMonth, ExtractYear
 from django.utils import timezone
@@ -26,7 +26,7 @@ from compte.models import Setting
 from facture.forms import ChequeForm, ClientForm, FournisseurForm, TrDescForm, TrDetailFormSet
 from facture.services.tax_report_enrich import enrich_report_with_calculations
 from facture.services.tax_report_actions import remove_line_from_report, transmit_report, undo_transmit_report
-from facture.helpers.dates import prochaine_date_fin_exercice
+from facture.helpers.dates import exercice_pour_working_period, prochaine_date_fin_exercice
 from facture.working_period import (
     COOKIE_MAX_AGE,
     get_working_period,
@@ -69,11 +69,24 @@ def _money(value):
     return (value or Decimal('0')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
-def _solde_depart_par_compte():
-    return {
+def _solde_depart_par_compte(exercice=None):
+    base = {
         row['compte_id']: (row['solde_depart'] or Decimal('0'))
         for row in SoldeAuxLivres.objects.values('compte_id', 'solde_depart')
     }
+    if not exercice:
+        return base
+
+    mouvements_avant = (
+        Tr_detail.objects
+        .filter(tr_desc__date__lt=exercice.date_debut)
+        .values('compte_id')
+        .annotate(total=Sum('montant'))
+    )
+    for row in mouvements_avant:
+        base[row['compte_id']] = base.get(row['compte_id'], Decimal('0')) + (row['total'] or Decimal('0'))
+
+    return base
 
 
 def _coerce_decimal(value):
@@ -84,17 +97,32 @@ def _coerce_decimal(value):
     return Decimal(str(value))
 
 
-def _fetch_balance_rows():
+from tenancy.db_context import get_current_tenant_alias
+from django.db import connections
+
+def _fetch_balance_rows(exercice):
+    alias = get_current_tenant_alias() or 'default'
+    with connections[alias].cursor() as cursor:
+        cursor.execute("SELECT * FROM solde_fin_pour_exercice(%s::bigint)", [exercice.id])
+        columns = [col[0] for col in cursor.description]
+        rows_raw = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    comptes = {c.pk: c for c in Compte.objects.all()}
+
     rows = []
-    for solde in SoldeFin.objects.select_related('compte_numero'):
-        solde_final = _coerce_decimal(solde.solde_final)
-        if solde_final == Decimal('0') and solde.solde_depart == Decimal('0'):
+    for raw in rows_raw:
+        compte = comptes.get(raw['compte_numero'])
+        if not compte:
+            continue
+        solde_final = _coerce_decimal(raw['solde_final'])
+        solde_depart = _coerce_decimal(raw['solde_depart'])
+        if solde_final == Decimal('0') and solde_depart == Decimal('0'):
             continue
         rows.append({
-            'compte': solde.compte_numero,
+            'compte': compte,
             'debit': solde_final if solde_final >= 0 else Decimal('0'),
             'credit': abs(solde_final) if solde_final < 0 else Decimal('0'),
-            'solde_depart': _coerce_decimal(solde.solde_depart),
+            'solde_depart': solde_depart,
         })
 
     total_debit = sum((row['debit'] for row in rows), Decimal('0'))
@@ -415,15 +443,19 @@ def administration(request):
 
 @xframe_options_sameorigin
 def journal_general(request):
-    context = build_journal_context()
+    working_period = get_working_period(request)
+    exercice = exercice_pour_working_period(working_period)
+    context = build_journal_context(exercice)
     return render(request, "rapports/journal_general.html", context)
 
 
 @xframe_options_sameorigin
 def grand_livre(request):
     settings_instance = get_setting()
-    solde_depart_par_compte = _solde_depart_par_compte()
-    report_date = Tr_desc.objects.order_by('-date').values_list('date', flat=True).first()
+    working_period = get_working_period(request)
+    exercice = exercice_pour_working_period(working_period)
+    solde_depart_par_compte = _solde_depart_par_compte(exercice)
+    report_date = exercice.date_fin if exercice else Tr_desc.objects.order_by('-date').values_list('date', flat=True).first()
     report_year_label = _closing_date_label(report_date, settings_instance)
     try:
         with transaction.atomic(using=ledger_db_alias()):
@@ -439,7 +471,13 @@ def grand_livre(request):
             'tr_desc__client',
             'tr_desc__fournisseur',
             'tr_desc__source'
-        ).order_by('compte_id', 'tr_desc__date', 'tr_desc_id', 'id')
+        )
+        if exercice:
+            details = details.filter(
+                tr_desc__date__gte=exercice.date_debut,
+                tr_desc__date__lte=exercice.date_fin,
+            )
+        details = details.order_by('compte_id', 'tr_desc__date', 'tr_desc_id', 'id')
 
         comptes = []
         grand_total_debit = Decimal('0')
@@ -1069,9 +1107,22 @@ def facture(request):
 @xframe_options_sameorigin
 def balance_de_verification(request):
     settings_instance = get_setting()
-    report_date = Tr_desc.objects.order_by('-date').values_list('date', flat=True).first()
+    working_period = get_working_period(request)
+    exercice = exercice_pour_working_period(working_period)
+
+    if not exercice:
+        return render(request, "rapports/balance_de_verification.html", {
+            'title': "Balance de vérification",
+            'rows': [],
+            'total_debit': Decimal('0'),
+            'total_credit': Decimal('0'),
+            'is_balanced': True,
+            'report_year_label': "Aucun exercice financier configuré pour cette période.",
+        })
+
+    report_date = exercice.date_fin
     report_year_label = _closing_date_label(report_date, settings_instance)
-    rows, total_debit, total_credit = _fetch_balance_rows()
+    rows, total_debit, total_credit = _fetch_balance_rows(exercice)
 
     is_balanced = total_debit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) == total_credit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
