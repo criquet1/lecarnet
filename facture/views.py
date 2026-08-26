@@ -11,6 +11,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from calendar import monthrange
+from compte.models import ExerciceFinancier
 import calendar
 from types import SimpleNamespace
 import re
@@ -25,6 +26,7 @@ from compte.models import Setting
 from facture.forms import ChequeForm, ClientForm, FournisseurForm, TrDescForm, TrDetailFormSet
 from facture.services.tax_report_enrich import enrich_report_with_calculations
 from facture.services.tax_report_actions import remove_line_from_report, transmit_report, undo_transmit_report
+from facture.helpers.dates import prochaine_date_fin_exercice
 from facture.working_period import (
     COOKIE_MAX_AGE,
     get_working_period,
@@ -353,6 +355,30 @@ def index(request):
 @require_POST
 def update_working_period(request):
     period_value = save_working_period(request, request.POST.get('period'))
+
+    if period_value:
+        year, month = (int(part) for part in period_value.split('-'))
+        reference_date = date(year, month, 1)
+
+        if not ExerciceFinancier.objects.filter(
+            date_debut__lte=reference_date,
+            date_fin__gte=reference_date,
+        ).exists():
+            settings_instance = get_setting()
+            dernier_exercice = ExerciceFinancier.objects.order_by('-date_fin').first()
+
+            while dernier_exercice and not ExerciceFinancier.objects.filter(
+                date_debut__lte=reference_date,
+                date_fin__gte=reference_date,
+            ).exists():
+                nouvelle_date_fin = prochaine_date_fin_exercice(
+                    dernier_exercice.date_fin + timedelta(days=1),
+                    settings_instance,
+                )
+                dernier_exercice = ExerciceFinancier.creer_exercice_suivant(
+                    dernier_exercice, nouvelle_date_fin
+                )
+
     next_url = request.POST.get('next') or '/dashboard/'
     if not url_has_allowed_host_and_scheme(
         next_url,
@@ -483,16 +509,17 @@ def grand_livre(request):
             grand_total_debit += debit
             grand_total_credit += credit
 
-            current_entries.append({
-                'date': detail.tr_desc.date,
-                'no_ej': detail.tr_desc.no_ej,
-                'compagnie': detail.tr_desc.client or detail.tr_desc.fournisseur,
-                'description': detail.tr_desc.desc_ctb,
-                'source': detail.tr_desc.source,
-                'debit': debit,
-                'credit': credit,
-                'solde': solde,
-            })
+            if not (detail.tr_desc.source and detail.tr_desc.source.nom == 'Cloture exercice'):
+                current_entries.append({
+                    'date': detail.tr_desc.date,
+                    'no_ej': detail.tr_desc.no_ej,
+                    'compagnie': detail.tr_desc.client or detail.tr_desc.fournisseur,
+                    'description': detail.tr_desc.desc_ctb,
+                    'source': detail.tr_desc.source,
+                    'debit': debit,
+                    'credit': credit,
+                    'solde': solde,
+                })
 
         if current_compte_id is not None:
             comptes.append({
@@ -559,8 +586,23 @@ def grand_livre(request):
     })
 
 
-def _next_no_ej():
-    last_tr_desc = Tr_desc.objects.order_by('-id').first()
+def _next_no_ej(reference_date):
+    exercice = ExerciceFinancier.objects.filter(
+        date_debut__lte=reference_date,
+        date_fin__gte=reference_date,
+    ).order_by('-date_debut').first()
+
+    if not exercice:
+        raise ValueError(
+            f"Aucun exercice financier ne couvre la date {reference_date}. "
+            "Change la periode de travail pour creer le nouvel exercice avant d'inscrire cette ecriture."
+        )
+
+    last_tr_desc = Tr_desc.objects.filter(
+        date__gte=exercice.date_debut,
+        date__lte=exercice.date_fin,
+    ).order_by('-id').first()
+
     if not last_tr_desc:
         return "EJ1"
 
@@ -944,7 +986,7 @@ def facture(request):
                         tr_desc.client = selected_company
                         tr_desc.fournisseur = None
                     if not tr_desc.no_ej:
-                        tr_desc.no_ej = _next_no_ej()
+                        tr_desc.no_ej = _next_no_ej(tr_desc.date)
                     if not tr_desc.source_id:
                         tr_desc.source = source_facture
                     tr_desc.save()
@@ -1005,7 +1047,7 @@ def facture(request):
         'cards': cards,
         'tr_desc_form': tr_desc_form,
         'tr_detail_formset': tr_detail_formset,
-        'next_no_ej': _next_no_ej(),
+        'next_no_ej': _next_no_ej(date(working_period['year'], working_period['month'], 1)),
         'open_tr_modal': open_tr_modal,
         'selected_company_id': selected_company_id,
         'selected_company_name': selected_company_name,
@@ -1838,7 +1880,7 @@ def releve_bancaire(request):
                                 source_releve, _ = Source.objects.get_or_create(nom=source_nom[:15])
                                 tr_desc = tr_desc_form.save(commit=False)
                                 if not tr_desc.no_ej:
-                                    tr_desc.no_ej = _next_no_ej()
+                                    tr_desc.no_ej = _next_no_ej(tr_desc.date)
                                 tr_desc.desc_releve = tr_desc.desc_releve or releve.desc_releve or ''
                                 tr_desc.source = source_releve
                                 if selected_compagnie_type == 'fournisseur':
@@ -2122,7 +2164,7 @@ def creer_cheque(request):
         source_cheque, _ = Source.objects.get_or_create(nom=f"Ch # {no_cheque}")
 
         tr_desc_kwargs = {
-            'no_ej': _next_no_ej(),
+            'no_ej': _next_no_ej(form.cleaned_data['date_emission']),
             'date': form.cleaned_data['date_emission'],
             'desc_ctb': form.cleaned_data['description'],
             'source': source_cheque,

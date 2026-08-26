@@ -1,5 +1,6 @@
 from calendar import monthrange
 from facture.constants import MONTH_LABELS_FR
+from datetime import date
 
 def closing_date_label(reference_date, settings_instance=None):
     if not reference_date:
@@ -20,3 +21,24 @@ def closing_date_label(reference_date, settings_instance=None):
     closing_day = min(closing_day, monthrange(closing_year, closing_month)[1])
     month_label = MONTH_LABELS_FR[closing_month].lower()
     return f"Pour l'année au {closing_day} {month_label} {closing_year}"
+
+
+def prochaine_date_fin_exercice(reference_date, settings_instance=None):
+    closing_month = 12
+    closing_day = 31
+    if settings_instance:
+        if settings_instance.fin_annee_mois:
+            closing_month = settings_instance.fin_annee_mois
+        if settings_instance.fin_annee_jour:
+            closing_day = settings_instance.fin_annee_jour
+
+    annee = reference_date.year
+    jour_ajuste = min(closing_day, monthrange(annee, closing_month)[1])
+    candidate = date(annee, closing_month, jour_ajuste)
+
+    if candidate < reference_date:
+        annee += 1
+        jour_ajuste = min(closing_day, monthrange(annee, closing_month)[1])
+        candidate = date(annee, closing_month, jour_ajuste)
+
+    return candidate

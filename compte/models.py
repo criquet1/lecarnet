@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
 from paie.models import FrequencePaie
+from datetime import timedelta
 
 def validate_4_digits(value):
     if not (1000 <= value <= 9999):
@@ -250,6 +251,14 @@ class Setting(models.Model):
         blank=True,
         related_name='settings_benefices_marginaux',
     )
+    compte_bnr = models.ForeignKey(
+        Compte,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='settings_bnr',
+        verbose_name="Compte Bénéfices non répartis",
+    )
     comptes_paie_autres = models.JSONField(
         blank=True,
         default=list,
@@ -258,3 +267,36 @@ class Setting(models.Model):
 
     def __str__(self):
         return self.nom
+
+
+class ExerciceFinancier(models.Model):
+    date_debut = models.DateField()
+    date_fin = models.DateField()
+    est_audite = models.BooleanField(
+        default=False,
+        verbose_name="Audité et signé",
+        help_text="Coché une fois l'audit accepté et signé — l'exercice est alors clos officiellement.",
+    )
+    cloture_le = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Exercice financier"
+        verbose_name_plural = "Exercices financiers"
+        ordering = ['-date_debut']
+
+    @classmethod
+    def creer_a_partir_de_la_date_fin(cls, date_fin, alias=None):
+        lendemain = date_fin + timedelta(days=1)
+        date_debut = lendemain.replace(year=lendemain.year - 1)
+        manager = cls.objects.using(alias) if alias else cls.objects
+        return manager.create(date_debut=date_debut, date_fin=date_fin)
+
+    @classmethod
+    def creer_exercice_suivant(cls, exercice_precedent, date_fin, alias=None):
+        date_debut = exercice_precedent.date_fin + timedelta(days=1)
+        manager = cls.objects.using(alias) if alias else cls.objects
+        return manager.create(date_debut=date_debut, date_fin=date_fin)
+
+    def __str__(self):
+        return f"Exercice {self.date_debut} au {self.date_fin}"
+

@@ -19,12 +19,14 @@ from django.utils.connection import ConnectionDoesNotExist
 from django.utils import timezone
 from django.utils.html import format_html
 from facture.models import Client, CompagnieSoldeDepart, CompteReleve, Fournisseur, SoldeFin, Source, Tr_desc, Tr_detail
+from facture.views import _next_no_ej
 from facture.utils import ensure_tax_authority_companies, expert_required, get_settings, parse_decimal, read_csv_rows
 from tenancy.models import ClientDatabase, Societe, UserClientAccess, UserSocieteAccess
 from tenancy.services import mark_user_must_change_password, set_active_client_on_session, sync_user_client_accesses, user_must_change_password
 
 from .forms import CompteCsvImportForm, CompteForm, CreerTenantForm, SettingForm
 from .models import Compte, SoldeAuxLivres, Total
+
 
 
 logger = logging.getLogger(__name__)
@@ -752,18 +754,6 @@ def feuille_de_travail_page(request):
 	})
 
 
-def _next_no_ej_transactions():
-	last_tr_desc = Tr_desc.objects.order_by('-id').first()
-	if not last_tr_desc:
-		return 'EJ1'
-
-	match = re.match(r'^EJ(\d+)$', last_tr_desc.no_ej or '')
-	if not match:
-		return 'EJ1'
-
-	return f"EJ{int(match.group(1)) + 1}"
-
-
 def _parse_compte_numero(raw_value):
 	value = (raw_value or '').strip()
 	if not value:
@@ -957,7 +947,7 @@ def transactions_page(request):
 					source, _ = Source.objects.get_or_create(nom=source_name[:15])
 
 					tr_desc_kwargs = {
-						'no_ej': _next_no_ej_transactions(),
+						'no_ej': _next_no_ej(date_value),
 						'date': date_value,
 						'desc_releve': description,
 						'desc_ctb': description[:40],

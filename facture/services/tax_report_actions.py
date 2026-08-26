@@ -88,7 +88,7 @@ def transmit_report(report, settings_instance, next_no_ej):
                 continue
 
             tr_desc_kwargs = {
-                'no_ej': next_no_ej(),
+                'no_ej': next_no_ej(report_date),
                 'date': report_date,
                 'desc_ctb': f"Rapport de taxes {tax_name} {report.annee}-{report.mois:02d}",
                 'source': source_rapport,

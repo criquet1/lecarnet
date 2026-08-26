@@ -15,7 +15,8 @@ def build_journal_context():
 
     # Regrouper les lignes par numéro EJ
     for row in TransactionListe.objects.all():
-        entry = entries_by_no_ej.setdefault(row.no_ej, SimpleNamespace(
+        entry_key = (row.no_ej, row.date)
+        entry = entries_by_no_ej.setdefault(entry_key, SimpleNamespace(
             no_ej=row.no_ej,
             date=row.date,
             description=row.description,
