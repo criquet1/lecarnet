@@ -1,3 +1,5 @@
+from pyexpat.errors import messages
+
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.core.exceptions import ValidationError
@@ -26,7 +28,7 @@ from compte.models import Setting
 from facture.forms import ChequeForm, ClientForm, FournisseurForm, TrDescForm, TrDetailFormSet
 from facture.services.tax_report_enrich import enrich_report_with_calculations
 from facture.services.tax_report_actions import remove_line_from_report, transmit_report, undo_transmit_report
-from facture.helpers.dates import exercice_pour_working_period, prochaine_date_fin_exercice
+from facture.helpers.dates import exercice_pour_working_period, prochaine_date_fin_exercice, verifier_exercice_modifiable
 from facture.working_period import (
     COOKIE_MAX_AGE,
     get_working_period,
@@ -46,7 +48,7 @@ from facture.utils import (
 from compte.models import Compte, SoldeAuxLivres
 
 
-
+from django.contrib import messages
 
 from facture.services.dashboard_service import compute_dashboard_data
 from facture.services.journal_service import build_journal_context
@@ -438,6 +440,26 @@ def dashboard(request):
 def administration(request):
     return render(request, "administration/index.html", {
         "title": "Administration",
+    })
+
+
+@expert_required
+def exercices_financiers_page(request):
+    if request.method == 'POST':
+        exercices_audites_ids = set(request.POST.getlist('audite'))
+        for exercice in ExerciceFinancier.objects.all():
+            nouvelle_valeur = str(exercice.id) in exercices_audites_ids
+            if exercice.est_audite != nouvelle_valeur:
+                exercice.est_audite = nouvelle_valeur
+                exercice.cloture_le = timezone.now() if nouvelle_valeur else None
+                exercice.save(update_fields=['est_audite', 'cloture_le'])
+        messages.success(request, "Les exercices financiers ont été mis à jour.")
+        return redirect('exercices_financiers')
+
+    exercices = ExerciceFinancier.objects.all().order_by('-date_debut')
+    return render(request, "administration/exercices_financiers.html", {
+        "title": "Exercices financiers",
+        "exercices": exercices,
     })
 
 
@@ -1023,6 +1045,13 @@ def facture(request):
                     else:
                         tr_desc.client = selected_company
                         tr_desc.fournisseur = None
+                    print("TYPE DE REQUEST:", type(request))
+                    try:
+                        verifier_exercice_modifiable(tr_desc.date)
+                    except ValueError as exc:
+                        messages.error(request, str(exc))
+                        return redirect('facture')
+
                     if not tr_desc.no_ej:
                         tr_desc.no_ej = _next_no_ej(tr_desc.date)
                     if not tr_desc.source_id:
@@ -1900,7 +1929,16 @@ def releve_bancaire(request):
 
                         montant_releve = abs(releve.depot) if depot_present else abs(releve.retrait)
                         total_contrepartie = sum((montant for _, montant in detail_rows), Decimal('0'))
-                        if company_is_required and selected_compagnie is None:
+                        try:
+                            verifier_exercice_modifiable(releve.date)
+                            exercice_error = None
+                        except ValueError as exc:
+                            exercice_error = str(exc)
+
+                        if exercice_error:
+                            errors.append(exercice_error)
+                            return_open = True
+                        elif company_is_required and selected_compagnie is None:
                             return_open = True
                         elif total_contrepartie != montant_releve:
                             errors.append(
@@ -2213,6 +2251,11 @@ def creer_cheque(request):
     with transaction.atomic():
         no_cheque = form.cleaned_data['no_cheque']
         source_cheque, _ = Source.objects.get_or_create(nom=f"Ch # {no_cheque}")
+
+        try:
+            verifier_exercice_modifiable(form.cleaned_data['date_emission'])
+        except ValueError as exc:
+            return JsonResponse({'error': str(exc)}, status=400)
 
         tr_desc_kwargs = {
             'no_ej': _next_no_ej(form.cleaned_data['date_emission']),

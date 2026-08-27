@@ -18,6 +18,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.connection import ConnectionDoesNotExist
 from django.utils import timezone
 from django.utils.html import format_html
+from facture.helpers.dates import verifier_exercice_modifiable
 from facture.models import Client, CompagnieSoldeDepart, CompteReleve, Fournisseur, SoldeFin, Source, Tr_desc, Tr_detail
 from facture.views import _next_no_ej
 from facture.utils import ensure_tax_authority_companies, expert_required, get_settings, parse_decimal, read_csv_rows
@@ -943,6 +944,7 @@ def transactions_page(request):
 				return _render_transactions_page()
 
 			try:
+				verifier_exercice_modifiable(date_value)
 				with transaction.atomic():
 					source, _ = Source.objects.get_or_create(nom=source_name[:15])
 
@@ -973,6 +975,9 @@ def transactions_page(request):
 					'Impossible de sauvegarder: la base client active n\'est pas initialisee. '
 					'Executez les migrations tenant puis reessayez.'
 				)
+				return _render_transactions_page()
+			except ValueError as exc:
+				messages.error(request, str(exc))
 				return _render_transactions_page()
 			except Exception:
 				logger.exception('Echec sauvegarde transaction: erreur non prevue.')

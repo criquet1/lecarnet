@@ -1,0 +1,43 @@
+{% extends "layouts/app_base.html" %}
+{% load static %}
+
+<!-- {% block title %}Exercices financiers{% endblock %} -->
+
+{% block page_title %}Exercices financiers{% endblock %}
+
+{% block page_subtitle %}
+    Coche un exercice audité et signé pour le verrouiller. Décoche-le pour permettre une correction.
+{% endblock %}
+
+{% block content %}
+<div class="report-group">
+    <form method="post">
+        {% csrf_token %}
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>Exercice</th>
+                    <th>Date de début</th>
+                    <th>Date de fin</th>
+                    <th>Audité et verrouillé</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for exercice in exercices %}
+                <tr>
+                    <td>{{ exercice.date_debut|date:"Y" }}</td>
+                    <td>{{ exercice.date_debut }}</td>
+                    <td>{{ exercice.date_fin }}</td>
+                    <td>
+                        <input type="checkbox" name="audite" value="{{ exercice.id }}" {% if exercice.est_audite %}checked{% endif %}>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="text-muted">Aucun exercice financier.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="submit" class="btn btn-primary">Enregistrer</button>
+    </form>
+</div>
+{% endblock %}  

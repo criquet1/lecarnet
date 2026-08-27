@@ -25,10 +25,12 @@ urlpatterns = [
     path('cheques/creer/', login_required(views.creer_cheque), name='creer_cheque'),
     path('cheques/', login_required(views.cheques), name='cheques'),
     path('administration/', views.administration, name='administration'),
+    path('exercices-financiers/', login_required(views.exercices_financiers_page), name='exercices_financiers'),
     path('journal-general/', login_required(views.journal_general), name='journal_general'),
     path('grand-livre/', login_required(views.grand_livre), name='grand_livre'),
     path('balance-de-verification/', login_required(views.balance_de_verification), name='balance_de_verification'),
     path('compte-a-payer/', login_required(views.compte_a_payer), name='compte_a_payer'),
     path('compte-a-recevoir/', login_required(views.compte_a_recevoir), name='compte_a_recevoir'),
     path('rapport-de-taxes/', login_required(views.rapport_de_taxes), name='rapport_de_taxes'),
+    
 ]

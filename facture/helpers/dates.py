@@ -53,3 +53,21 @@ def exercice_pour_working_period(working_period):
         date_debut__lte=reference_date,
         date_fin__gte=reference_date,
     ).order_by('-date_debut').first()
+
+
+def exercice_pour_date(date_cible):
+    from compte.models import ExerciceFinancier
+
+    return ExerciceFinancier.objects.filter(
+        date_debut__lte=date_cible,
+        date_fin__gte=date_cible,
+    ).order_by('-date_debut').first()
+
+
+def verifier_exercice_modifiable(date_cible):
+    exercice = exercice_pour_date(date_cible)
+    if exercice and exercice.est_audite:
+        raise ValueError(
+            f"L'exercice se terminant le {exercice.date_fin} est audité et verrouillé. "
+            "Annule l'audit de cet exercice avant d'y ajouter ou modifier une écriture."
+        )

@@ -20,6 +20,7 @@
     <div class="section-tabs" role="tablist">
         <a href="?tab=configuration" class="section-tab" data-tab-btn="configuration" role="tab">Configuration</a>
         <a href="?tab=acces" class="section-tab" data-tab-btn="acces" role="tab">Utilisateurs et accès</a>
+        <a href="?tab=exercices" class="section-tab" data-tab-btn="exercices" role="tab">Exercices financiers</a>
         {% if request.user.is_superuser %}
         <a href="?tab=avancee" class="section-tab" data-tab-btn="avancee" role="tab">Administration avancée</a>
         {% endif %}
@@ -104,6 +105,18 @@
                 <span class="report-item-copy">
                     <strong>Administration Django</strong>
                     <small>Accéder aux données techniques de l'application.</small>
+                </span>
+                <i class="bi bi-chevron-right report-item-arrow"></i>
+            </a>
+        </div>
+    </section>
+    <section class="report-group" aria-label="Exercices financiers" data-tab-panel="exercices">
+        <div class="report-list">
+            <a class="report-item" href="{% url 'exercices_financiers' %}">
+                <span class="report-item-icon"><i class="bi bi-calendar-check"></i></span>
+                <span class="report-item-copy">
+                    <strong>Gérer les exercices financiers</strong>
+                    <small>Verrouiller ou déverrouiller un exercice audité.</small>
                 </span>
                 <i class="bi bi-chevron-right report-item-arrow"></i>
             </a>

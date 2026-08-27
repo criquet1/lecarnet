@@ -6,6 +6,7 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 
+from facture.helpers.dates import verifier_exercice_modifiable
 from facture.helpers.money import money
 from facture.models import RapportTaxes, Tr_desc, Tr_detail, Source
 from facture.constants import MODE_CAP
@@ -60,6 +61,7 @@ def transmit_report(report, settings_instance, next_no_ej):
         raise ValueError("Impossible de preparer les entites fiscales TPS/TVQ.")
 
     report_date = date(report.annee, report.mois, monthrange(report.annee, report.mois)[1])
+    verifier_exercice_modifiable(report_date)
     source_rapport, _ = Source.objects.get_or_create(nom='Rapport de taxes')
     posted_count = 0
 
