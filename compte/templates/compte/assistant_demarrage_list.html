@@ -1,0 +1,45 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-9">
+
+        <h2 class="fw-bold mb-3">Assistant de démarrage</h2>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="alert alert-info">
+            Choisissez un client ci-dessous pour continuer sa mise en route, ou
+            <a href="{% url 'creer_tenant' %}">créez un nouveau tenant</a> pour démarrer un nouveau client.
+        </div>
+
+        {% if not rows %}
+            <p class="text-muted">Aucun client pour le moment.</p>
+        {% else %}
+        <div class="list-group shadow-sm">
+            {% for row in rows %}
+            <a href="{% url 'assistant_demarrage' client_id=row.client.id %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="fw-semibold">{{ row.client.name }}</div>
+                    {% if row.client.societe %}<div class="small text-muted">{{ row.client.societe.name }}</div>{% endif %}
+                </div>
+                {% if not row.alias_ok %}
+                    <span class="badge bg-warning text-dark">Non connecté</span>
+                {% elif row.complete %}
+                    <span class="badge bg-success">Prêt</span>
+                {% else %}
+                    <span class="badge bg-secondary">{{ row.steps_done }} / {{ row.steps_total }} étapes</span>
+                {% endif %}
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

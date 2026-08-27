@@ -7,7 +7,7 @@
 
 {% block content %}
 
-
+{% include 'compte/includes/onboarding_banner.html' %}
 
 {% if messages %}
     {% for message in messages %}
@@ -18,6 +18,7 @@
 
 <form method="post" class="row g-4">
     {% csrf_token %}
+    {% if onboarding_client %}<input type="hidden" name="onboarding" value="{{ onboarding_client.id }}">{% endif %}
     {{ form.non_field_errors }}
 
     <!-- Groupe: Identité du site -->
@@ -165,7 +166,7 @@
                         <th><label for="{{ form.taxes_mode.id_for_label }}">Traitement général des taxes</label></th>
                         <td>
                             {{ form.taxes_mode }}{{ form.taxes_mode.errors }}
-                            <div class="form-text">À réclamer =&gt; CAR. À payer =&gt; CAP.</div>
+                            <div class="form-text">À réclamer =&gt; CAR. À payer =&gt; CAP. Ni l'un ni l'autre si le client ne fait pas de rapport de taxes</div>
                         </td>
                     </tr>
                     <tr>

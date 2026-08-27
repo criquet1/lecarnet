@@ -2,21 +2,33 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block body %}
+{% block content %}
 <div class="row g-4">
-    <div class="col-12">
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags|default:'info' }} mb-0" role="alert">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    </div>
 
     <div class="col-12">
         <div class="card shadow-sm">
             <div class="card-body">
-                <h1 class="h4 mb-1">Gestion des utilisateurs</h1>
-                <p class="text-muted mb-0">Societe active: <strong>{{ managed_societe.name }}</strong></p>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <div>
+                        <h1 class="h4 mb-1">Gestion des utilisateurs</h1>
+                        <p class="text-muted mb-0">Societe active: <strong>{{ managed_societe.name }}</strong></p>
+                    </div>
+
+                    {% if can_switch_societe and all_societes|length > 1 %}
+                        <form method="post" class="d-flex align-items-center gap-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="switch_societe">
+                            <label for="switch-societe" class="form-label mb-0 text-muted small">Changer de societe</label>
+                            <select id="switch-societe" name="societe_id" class="form-select form-select-sm" onchange="this.form.requestSubmit()">
+                                {% for societe in all_societes %}
+                                    <option value="{{ societe.id }}"{% if societe.id == managed_societe.id %} selected{% endif %}>
+                                        {{ societe.name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </form>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>

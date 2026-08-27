@@ -1,0 +1,11 @@
+{% if onboarding_client %}
+<div class="alert alert-primary d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4" role="alert">
+    <div>
+        <strong>Assistant de démarrage — {{ onboarding_client.name }}</strong>
+        <div class="small mb-0">Terminez cette étape, puis revenez à l'assistant pour continuer.</div>
+    </div>
+    <a href="{% url 'assistant_demarrage' client_id=onboarding_client.id %}" class="btn btn-sm btn-primary">
+        Retour à l'assistant
+    </a>
+</div>
+{% endif %}

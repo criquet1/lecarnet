@@ -82,9 +82,11 @@ class SoldeAuxLivres(models.Model):
 class Setting(models.Model):
     TAX_MODE_RECLAMER = 'RECLAMER'
     TAX_MODE_PAYER = 'PAYER'
+    TAX_MODE_AUCUN = 'AUCUN'
     TAX_MODE_CHOICES = [
         (TAX_MODE_RECLAMER, 'Les taxes sont generalement a reclamer'),
         (TAX_MODE_PAYER, 'Les taxes sont generalement a payer'),
+        (TAX_MODE_AUCUN, "Ni l'un ni l'autre"),
     ]
 
     nom = models.CharField(max_length=60, blank=False, null=False)

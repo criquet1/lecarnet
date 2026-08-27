@@ -92,6 +92,10 @@
         Gérer les compagnies
     </button>
     <div class="collapse mt-3" id="gestionCompagnies">
+        <p class="text-muted small">
+            Une compagnie occasionnelle (facturée seulement 1 ou 2 fois par année, par exemple) n'a pas besoin d'apparaître en carte sur la page d'accueil :
+            décoche « Afficher sur la page d'accueil » en la modifiant, puis clique sur son nom ci-dessous pour lui créer une facture.
+        </p>
         <table class="table table-sm table-striped">
             <thead>
                 <tr>
@@ -105,7 +109,21 @@
             <tbody>
                 {% for item in gestion_compagnies %}
                 <tr>
-                    <td>{{ item.obj.nom }}</td>
+                    <td>
+                        <button type="button" class="btn btn-link p-0 text-start text-decoration-underline" data-bs-toggle="modal" data-bs-target="#invoiceModal"
+                            data-company-id="{{ item.obj.id }}"
+                            data-company-type="{{ item.type }}"
+                            data-company-name="{{ item.obj.nom|escape }}"
+                            data-company-mode="{% if item.type == 'fournisseur' %}CAP{% else %}CAR{% endif %}"
+                            data-company-created-by-non-expert="{{ item.obj.created_by_non_expert|yesno:'1,0' }}"
+                            data-company-active="{{ item.obj.active|yesno:'1,0' }}"
+                            data-company-logo="{% if item.obj.logo %}{% static 'images/logos/'|add:item.obj.logo %}{% endif %}"
+                            data-company-logo-name="{{ item.obj.logo|escape }}"
+                            data-company-accounts="{% for compte in item.obj.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}"
+                            title="Créer une facture pour {{ item.obj.nom|escape }}">
+                            {{ item.obj.nom }}
+                        </button>
+                    </td>
                     <td>{% if item.type == 'fournisseur' %}Fournisseur{% else %}Client{% endif %}</td>
                     <td>{% if item.obj.active %}<span class="badge bg-success">Actif</span>{% else %}<span class="badge bg-secondary">Inactif</span>{% endif %}</td>
                     <td>{% if item.obj.afficher_card %}<span class="badge bg-info text-dark">Oui</span>{% else %}<span class="badge bg-light text-dark">Non</span>{% endif %}</td>

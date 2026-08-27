@@ -1,0 +1,63 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-8">
+
+        <h2 class="fw-bold mb-1">Assistant de démarrage</h2>
+        <p class="text-muted mb-4">Client : <strong>{{ client.name }}</strong></p>
+
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
+        {% if all_done %}
+            <div class="alert alert-success">
+                <h5 class="alert-heading mb-2">🎉 {{ client.name }} est prêt !</h5>
+                <p class="mb-3">Toutes les étapes essentielles sont complétées. Vous pouvez commencer à travailler dans ce dossier.</p>
+                <a href="{% url 'accueil' %}" class="btn btn-success">Aller à l'accueil</a>
+                <a href="{% url 'manage_societe_users' %}" class="btn btn-outline-success">Ajouter un utilisateur</a>
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                Suivez les étapes ci-dessous dans l'ordre. Une fois une étape terminée, vous serez ramené ici automatiquement (ou cliquez sur « Retour à l'assistant »).
+            </div>
+        {% endif %}
+
+        <div class="list-group shadow-sm mb-4">
+            <div class="list-group-item d-flex align-items-center gap-3">
+                <span class="badge bg-success rounded-pill fs-6">✓</span>
+                <div class="flex-grow-1">
+                    <div class="fw-semibold">Création du tenant</div>
+                    <div class="small text-muted">La base de données du client a été créée.</div>
+                </div>
+            </div>
+
+            {% for step in steps %}
+            <div class="list-group-item d-flex align-items-center gap-3 {% if step.done %}list-group-item-light{% elif step == next_step %}border-primary{% endif %}">
+                {% if step.done %}
+                    <span class="badge bg-success rounded-pill fs-6">✓</span>
+                {% else %}
+                    <span class="badge bg-secondary rounded-pill fs-6">{{ forloop.counter }}</span>
+                {% endif %}
+                <div class="flex-grow-1">
+                    <div class="fw-semibold">{{ step.title }}</div>
+                    <div class="small text-muted">{{ step.description }}</div>
+                </div>
+                {% if alias_ok %}
+                <a href="{{ step.url }}" class="btn btn-sm {% if step.done %}btn-outline-secondary{% else %}btn-primary{% endif %}">
+                    {% if step.done %}Revoir{% else %}{{ step.action_label }}{% endif %}
+                </a>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <a href="{% url 'assistant_demarrage_list' %}" class="btn btn-outline-secondary">← Voir tous les clients</a>
+    </div>
+</div>
+{% endblock %}

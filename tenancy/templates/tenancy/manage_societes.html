@@ -2,15 +2,8 @@
 
 {% block title %}{{ title }}{% endblock %}
 
-{% block body %}
+{% block content %}
 <div class="row g-4">
-    <div class="col-12">
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags|default:'info' }} mb-0" role="alert">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    </div>
 
     <div class="col-12 col-lg-5">
         <div class="card shadow-sm">
@@ -167,10 +160,16 @@
                         {{ user_assign_form.is_default.errors }}
                     </div>
                     <div class="col-12">
-                        <div class="form-check">
+                        <div class="form-check mb-1">
                             {{ user_assign_form.is_expert }}
                             <label class="form-check-label" for="{{ user_assign_form.is_expert.id_for_label }}">Role Expert (coche = attribuer, decoche = retirer)</label>
                         </div>
+                        <p class="form-text text-warning mb-3">
+                            Attention: cette case n'est jamais pre-cochee. Si l'utilisateur est deja Expert et que
+                            vous laissez la case decochee, son role Expert sera retire en enregistrant ce formulaire.
+                            Verifiez son statut actuel dans le tableau "Affectations utilisateurs / societes" ci-dessous
+                            avant de soumettre.
+                        </p>
                         {{ user_assign_form.is_expert.errors }}
                     </div>
                     <div class="col-12">
@@ -235,6 +234,7 @@
                                     <th>Utilisateur</th>
                                     <th>Societe</th>
                                     <th>Defaut</th>
+                                    <th>Role Expert</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -245,6 +245,13 @@
                                         <td>
                                             {% if access.is_default %}
                                                 <span class="badge text-bg-primary">Oui</span>
+                                            {% else %}
+                                                <span class="text-muted">Non</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if access.is_expert %}
+                                                <span class="badge text-bg-success">Oui</span>
                                             {% else %}
                                                 <span class="text-muted">Non</span>
                                             {% endif %}

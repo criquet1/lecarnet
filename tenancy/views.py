@@ -126,7 +126,20 @@ def manage_societes(request):
             messages.error(request, 'Action inconnue.')
 
     societes = societes_qs
-    user_societe_accesses = UserSocieteAccess.objects.select_related('user', 'societe').order_by('user__username', 'societe__name', 'id')
+    user_societe_accesses = list(
+        UserSocieteAccess.objects.select_related('user', 'societe').order_by('user__username', 'societe__name', 'id')
+    )
+    # Le role Expert est un groupe Django global (pas lie a une societe precise);
+    # on l'affiche ici pour que ce tableau reste la source de verite visible
+    # avant de resoumettre le formulaire "Ajouter un utilisateur existant", dont
+    # la case Role Expert n'est jamais pre-cochee et ecrase silencieusement le
+    # role si elle est laissee decochee.
+    expert_user_ids = set(
+        Group.objects.filter(name='expert', user__in=[a.user_id for a in user_societe_accesses]).values_list('user__id', flat=True)
+    )
+    for access in user_societe_accesses:
+        access.is_expert = access.user_id in expert_user_ids
+
     return render(request, 'tenancy/manage_societes.html', {
         'title': 'Gestion des societes',
         'societe_form': societe_form,
@@ -145,16 +158,26 @@ def manage_societe_users(request):
         messages.error(request, 'Acces reserve aux experts.')
         return redirect('accueil')
 
-    societe_access = UserSocieteAccess.objects.select_related('societe').filter(
-        user=request.user,
-        societe__is_active=True,
-    ).order_by('-is_default', 'societe__name', 'id').first()
+    all_societes_qs = Societe.objects.filter(is_active=True).order_by('name', 'id')
 
-    if not societe_access:
-        messages.error(request, 'Aucune societe active n est assignee a votre utilisateur.')
-        return redirect('accueil')
+    managed_societe = None
+    if request.user.is_superuser:
+        override_id = request.session.get('active_societe_id')
+        if override_id:
+            managed_societe = all_societes_qs.filter(pk=override_id).first()
 
-    managed_societe = societe_access.societe
+    if not managed_societe:
+        societe_access = UserSocieteAccess.objects.select_related('societe').filter(
+            user=request.user,
+            societe__is_active=True,
+        ).order_by('-is_default', 'societe__name', 'id').first()
+
+        if not societe_access:
+            messages.error(request, 'Aucune societe active n est assignee a votre utilisateur.')
+            return redirect('accueil')
+
+        managed_societe = societe_access.societe
+
     user_model = get_user_model()
 
     societe_user_accesses_qs = UserSocieteAccess.objects.select_related('user').filter(
@@ -174,6 +197,20 @@ def manage_societe_users(request):
 
     if request.method == 'POST':
         action = (request.POST.get('action') or '').strip()
+
+        if action == 'switch_societe':
+            if not request.user.is_superuser:
+                messages.error(request, 'Seul un superuser peut changer de societe active.')
+                return redirect('manage_societe_users')
+
+            target_societe = all_societes_qs.filter(pk=request.POST.get('societe_id')).first()
+            if not target_societe:
+                messages.error(request, 'Societe introuvable.')
+            else:
+                request.session['active_societe_id'] = target_societe.id
+                messages.success(request, f'Societe active: {target_societe.name}')
+
+            return redirect('manage_societe_users')
 
         if action == 'create_societe_user':
             create_user_form = ExpertSocieteUserCreateForm(request.POST, tenants_qs=tenants_qs.filter(is_active=True))
@@ -320,6 +357,8 @@ def manage_societe_users(request):
     return render(request, 'tenancy/manage_societe_users.html', {
         'title': 'Gestion des utilisateurs',
         'managed_societe': managed_societe,
+        'can_switch_societe': request.user.is_superuser,
+        'all_societes': all_societes_qs if request.user.is_superuser else [],
         'create_user_form': create_user_form,
         'assign_tenant_form': assign_tenant_form,
         'societe_users': societe_users,

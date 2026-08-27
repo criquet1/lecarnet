@@ -68,7 +68,9 @@
         <form method="post"
               action="{% url 'update_working_period' %}"
               class="topbar-period-form"
-              data-storage-key="working_period_{{ working_period.tenant_key }}">
+              data-storage-key="working_period_{{ working_period.tenant_key }}"
+              data-current-year="{{ working_period.year }}"
+              data-current-month="{{ working_period.month }}">
 
             {% csrf_token %}
 
@@ -77,25 +79,38 @@
                 name="next"
                 value="{{ request.get_full_path }}">
 
-            <label for="working-period"
-                   class="topbar-period-label">
-                <i class="bi bi-calendar3"></i>
-                <span>Période</span>
-            </label>
-
             <input
                 id="working-period"
-                type="month"
+                type="hidden"
                 name="period"
-                value="{{ working_period.value }}"
-                class="form-control form-control-sm topbar-period-input">
-            <button
-                type="submit"
-                class="topbar-period-submit"
-                title="Appliquer">
+                value="{{ working_period.value }}">
 
-                <i class="bi bi-check-lg"></i>
-            </button>
+            <div class="topbar-period-label">
+                <i class="bi bi-calendar3"></i>
+                <span>Période</span>
+            </div>
+
+            <div class="topbar-period-switcher" role="group" aria-label="Changer de période">
+                <button
+                    type="button"
+                    class="topbar-period-nav"
+                    data-period-step="-1"
+                    title="Mois précédent"
+                    aria-label="Mois précédent">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+
+                <span class="topbar-period-current">{{ working_period.label }}</span>
+
+                <button
+                    type="button"
+                    class="topbar-period-nav"
+                    data-period-step="1"
+                    title="Mois suivant"
+                    aria-label="Mois suivant">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
         </form>
 
         <div class="topbar-user">
@@ -177,14 +192,44 @@
 
     const form = document.querySelector('.topbar-period-form');
     const input = document.getElementById('working-period');
+    const label = form ? form.querySelector('.topbar-period-current') : null;
 
     if (!form || !input)
         return;
 
     localStorage.setItem(form.dataset.storageKey, input.value);
-    input.addEventListener('change', function () {
-        localStorage.setItem(form.dataset.storageKey, input.value);
-        form.requestSubmit();
+
+    const MOIS_FR = [
+        'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+        'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+    ];
+
+    form.querySelectorAll('.topbar-period-nav').forEach(function (button) {
+        button.addEventListener('click', function () {
+            let year = parseInt(form.dataset.currentYear, 10);
+            let month = parseInt(form.dataset.currentMonth, 10);
+            const step = parseInt(button.dataset.periodStep, 10);
+
+            month += step;
+            if (month < 1) {
+                month = 12;
+                year -= 1;
+            } else if (month > 12) {
+                month = 1;
+                year += 1;
+            }
+
+            form.dataset.currentYear = year;
+            form.dataset.currentMonth = month;
+
+            const value = year + '-' + String(month).padStart(2, '0');
+            input.value = value;
+            if (label)
+                label.textContent = MOIS_FR[month - 1] + ' ' + year;
+
+            localStorage.setItem(form.dataset.storageKey, value);
+            form.requestSubmit();
+        });
     });
 })();
 </script>

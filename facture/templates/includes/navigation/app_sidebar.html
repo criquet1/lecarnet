@@ -65,10 +65,10 @@
             {% if can_switch_tenant %}
             <!-- Administration -->
             <a href="{% url 'administration' %}"
-                class="sidebar-link{% if current_url in 'administration,settings,compte,totaux,creer_tenant,manage_societe_users,manage_societes,paie_parametres_taux' %} active{% endif %} sidebar-link-admin"
+                class="sidebar-link{% if current_url in 'administration,settings,compte,totaux,creer_tenant,assistant_demarrage,assistant_demarrage_list,manage_societe_users,manage_societes,paie_parametres_taux' %} active{% endif %} sidebar-link-admin"
                      data-tooltip="Administration"
                      aria-label="Administration"
-                     {% if current_url in 'administration,settings,compte,totaux,creer_tenant,manage_societe_users,manage_societes,paie_parametres_taux' %}aria-current="page"{% endif %}>
+                     {% if current_url in 'administration,settings,compte,totaux,creer_tenant,assistant_demarrage,assistant_demarrage_list,manage_societe_users,manage_societes,paie_parametres_taux' %}aria-current="page"{% endif %}>
 
                   <i class="bi bi-gear-fill"></i>
 

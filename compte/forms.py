@@ -84,6 +84,8 @@ class SettingForm(forms.ModelForm):
             'pays',
             'phone',
             'email',
+            'numero_entreprise_federal',
+            'numero_identification_quebec',
             'fin_annee_jour',
             'fin_annee_mois',
             'car',
@@ -118,6 +120,8 @@ class SettingForm(forms.ModelForm):
             'pays': forms.TextInput(attrs={'class': 'form-control'}),
             'phone': forms.TextInput(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'numero_entreprise_federal': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: 123456789RP0001'}),
+            'numero_identification_quebec': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: 1234567890RS0001'}),
             'frequence_paie': forms.Select(attrs={'class': 'form-select'}),
             'date_debut_periode_paie_annee': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'date_premier_paiement_paie_annee': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
@@ -254,16 +258,22 @@ class CreerTenantForm(forms.Form):
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'lecarnet_client_delta'}),
     )
     username = forms.CharField(
-        label='Nom d utilisateur',
+        label='Nom d utilisateur (optionnel)',
         max_length=150,
-        help_text='Compte cree automatiquement dans la base centrale.',
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'utilisateur.client'}),
+        required=False,
+        help_text=(
+            'Laisse vide si tu veux simplement commencer a travailler dans ce tenant avec ton propre compte: '
+            'tu y as deja acces automatiquement. Remplis ce champ seulement si tu veux creer tout de suite '
+            'un compte pour quelqu un d autre (tu pourras toujours en ajouter plus tard depuis Gestion des societes).'
+        ),
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'utilisateur.client', 'autocomplete': 'off'}),
     )
     temp_password = forms.CharField(
-        label='Mot de passe temporaire',
+        label='Mot de passe temporaire (optionnel)',
         min_length=8,
-        help_text='Ce mot de passe sera exige au premier login, puis l utilisateur devra le modifier.',
-        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Mot de passe temporaire'}),
+        required=False,
+        help_text='Requis seulement si un nom d utilisateur est indique ci-dessus.',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Mot de passe temporaire', 'autocomplete': 'new-password'}),
     )
 
     def __init__(self, *args, **kwargs):
@@ -312,11 +322,26 @@ class CreerTenantForm(forms.Form):
     def clean_username(self):
         value = (self.cleaned_data.get('username') or '').strip().lower()
         if not value:
-            raise forms.ValidationError('Le nom d utilisateur est requis.')
+            return value
 
         user_model = get_user_model()
         if user_model.objects.filter(username__iexact=value).exists():
             raise forms.ValidationError('Ce nom d utilisateur existe deja.')
 
         return value
+
+    def clean(self):
+        cleaned_data = super().clean()
+        username = cleaned_data.get('username')
+        temp_password = cleaned_data.get('temp_password')
+
+        # Les deux champs sont optionnels, mais s'ils sont utilises, ils vont
+        # forcement ensemble: un nom d'utilisateur sans mot de passe (ou
+        # l'inverse) ne permettrait a personne de se connecter.
+        if username and not temp_password:
+            self.add_error('temp_password', 'Indique un mot de passe temporaire pour ce nouvel utilisateur.')
+        if temp_password and not username:
+            self.add_error('username', 'Indique un nom d utilisateur pour ce mot de passe.')
+
+        return cleaned_data
 

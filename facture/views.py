@@ -132,6 +132,167 @@ def _fetch_balance_rows(exercice):
     return rows, total_debit, total_credit
 
 
+def _fetch_resultat_rows(exercice):
+    """Regroupe les comptes de resultat (numero >= 4000) en Revenus et Depenses
+    pour l'etat de revenus et depenses, en suivant le meme modele SQL que
+    la balance de verification (fonction solde_fin_pour_exercice)."""
+    alias = get_current_tenant_alias() or 'default'
+    with connections[alias].cursor() as cursor:
+        cursor.execute("SELECT * FROM solde_fin_pour_exercice(%s::bigint)", [exercice.id])
+        columns = [col[0] for col in cursor.description]
+        rows_raw = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    comptes = {
+        c.pk: c for c in Compte.objects.select_related('no_total').filter(numero__gte=4000)
+    }
+
+    revenus_par_categorie = {}
+    depenses_par_categorie = {}
+    total_revenus = Decimal('0')
+    total_depenses = Decimal('0')
+
+    for raw in rows_raw:
+        compte = comptes.get(raw['compte_numero'])
+        if not compte:
+            continue
+
+        solde_final = _coerce_decimal(raw['solde_final'])
+        if solde_final == Decimal('0'):
+            continue
+
+        categorie = compte.no_total.desc if compte.no_total_id else "Autres"
+
+        if solde_final < 0:
+            # Solde crediteur : compte de revenu.
+            montant = abs(solde_final)
+            groupe = revenus_par_categorie.setdefault(
+                categorie, {'comptes': [], 'sous_total': Decimal('0')}
+            )
+            groupe['comptes'].append({'compte': compte, 'montant': montant})
+            groupe['sous_total'] += montant
+            total_revenus += montant
+        else:
+            # Solde debiteur : compte de depense.
+            montant = solde_final
+            groupe = depenses_par_categorie.setdefault(
+                categorie, {'comptes': [], 'sous_total': Decimal('0')}
+            )
+            groupe['comptes'].append({'compte': compte, 'montant': montant})
+            groupe['sous_total'] += montant
+            total_depenses += montant
+
+    resultat_net = total_revenus - total_depenses
+
+    return {
+        'revenus': revenus_par_categorie,
+        'depenses': depenses_par_categorie,
+        'total_revenus': total_revenus,
+        'total_depenses': total_depenses,
+        'resultat_net': resultat_net,
+    }
+
+
+
+def _fetch_bilan_rows(exercice):
+    """Regroupe les comptes de bilan (numero entre 1000 et 3999) en Actif
+    (1000-1999), Passif (2000-2999) et Avoir (3000-3999) pour le Bilan, en
+    suivant le meme modele SQL que la balance de verification (fonction
+    solde_fin_pour_exercice). Le solde est cumulatif depuis l'ouverture (pas
+    seulement la periode), comme pour la balance de verification."""
+    alias = get_current_tenant_alias() or 'default'
+    with connections[alias].cursor() as cursor:
+        cursor.execute("SELECT * FROM solde_fin_pour_exercice(%s::bigint)", [exercice.id])
+        columns = [col[0] for col in cursor.description]
+        rows_raw = [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    comptes = {
+        c.pk: c for c in Compte.objects.select_related('no_total').filter(numero__gte=1000, numero__lte=3999)
+    }
+
+    actif_par_categorie = {}
+    passif_par_categorie = {}
+    avoir_par_categorie = {}
+    total_actif = Decimal('0')
+    total_passif = Decimal('0')
+    total_avoir = Decimal('0')
+
+    for raw in rows_raw:
+        compte = comptes.get(raw['compte_numero'])
+        if not compte:
+            continue
+
+        solde_final = _coerce_decimal(raw['solde_final'])
+        if solde_final == Decimal('0'):
+            continue
+
+        categorie = compte.no_total.desc if compte.no_total_id else "Autres"
+        numero = compte.numero
+
+        if 1000 <= numero <= 1999:
+            # Actif : solde normalement debiteur.
+            montant = solde_final
+            section = actif_par_categorie
+        elif 2000 <= numero <= 2999:
+            # Passif : solde normalement crediteur, affiche en positif.
+            montant = -solde_final
+            section = passif_par_categorie
+        else:
+            # Avoir (3000-3999) : solde normalement crediteur, affiche en positif.
+            montant = -solde_final
+            section = avoir_par_categorie
+
+        groupe = section.setdefault(
+            categorie, {'comptes': [], 'sous_total': Decimal('0')}
+        )
+        groupe['comptes'].append({'compte': compte, 'montant': montant})
+        groupe['sous_total'] += montant
+
+        if 1000 <= numero <= 1999:
+            total_actif += montant
+        elif 2000 <= numero <= 2999:
+            total_passif += montant
+        else:
+            total_avoir += montant
+
+    # Le BNR (benefices non repartis) au compte 3000-3999 ne contient que le
+    # resultat des exercices deja clotures (voir clore_exercice). Tant que
+    # l'exercice en cours n'est pas audite, son resultat net (revenus moins
+    # depenses, comptes >= 4000) n'a pas encore ete verse au compte BNR : on
+    # l'ajoute donc ici comme benefice (ou perte) non affecte de l'exercice en
+    # cours, pour que le bilan reste equilibre avant la cloture officielle.
+    if not exercice.est_audite:
+        resultat_exercice = _fetch_resultat_rows(exercice)
+        resultat_net_exercice = resultat_exercice['resultat_net']
+        if resultat_net_exercice != Decimal('0'):
+            categorie = "Bénéfices non répartis - résultat de l'exercice en cours (non audité)"
+            pseudo_compte = SimpleNamespace(
+                numero='',
+                libelle="Résultat net de l'exercice en cours",
+            )
+            groupe = avoir_par_categorie.setdefault(
+                categorie, {'comptes': [], 'sous_total': Decimal('0')}
+            )
+            groupe['comptes'].append({'compte': pseudo_compte, 'montant': resultat_net_exercice})
+            groupe['sous_total'] += resultat_net_exercice
+            total_avoir += resultat_net_exercice
+
+    total_passif_avoir = total_passif + total_avoir
+
+    is_balanced = total_actif.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP) == total_passif_avoir.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+    return {
+        'actif': actif_par_categorie,
+        'passif': passif_par_categorie,
+        'avoir': avoir_par_categorie,
+        'total_actif': total_actif,
+        'total_passif': total_passif,
+        'total_avoir': total_avoir,
+        'total_passif_avoir': total_passif_avoir,
+        'is_balanced': is_balanced,
+    }
+
+
+
 def _fetch_grand_livre_from_sql_view():
     db_alias = ledger_db_alias()
     solde_depart_par_compte = _solde_depart_par_compte()
@@ -761,23 +922,26 @@ def facture(request):
 
     clients = Client.objects.prefetch_related(
         Prefetch('tr_desc', queryset=_company_invoices_queryset())
-    ).filter(active=True).order_by('nom')
+    ).order_by('nom')
     fournisseurs = Fournisseur.objects.prefetch_related(
         Prefetch('tr_desc', queryset=_company_invoices_queryset())
-    ).filter(active=True).order_by('nom')
+    ).order_by('nom')
 
     cards = sorted(
         [
-            {'type': 'client', 'obj': c} for c in clients.filter(afficher_card=True)
+            {'type': 'client', 'obj': c} for c in clients.filter(active=True, afficher_card=True)
         ] + [
-            {'type': 'fournisseur', 'obj': f} for f in fournisseurs.filter(afficher_card=True)
+            {'type': 'fournisseur', 'obj': f} for f in fournisseurs.filter(active=True, afficher_card=True)
         ],
         key=lambda item: item['obj'].nom.lower()
     )
 
+    # Compagnies occasionnelles (afficher_card=False) : elles ne s'affichent pas en carte
+    # sur la page d'accueil pour ne pas encombrer la vue, mais restent facturables via
+    # "Gerer les compagnies" plus bas -- d'ou l'utilisation de la liste complete ici.
     gestion_compagnies = sorted(
-        [{'type': 'client', 'obj': c} for c in Client.objects.all()] +
-        [{'type': 'fournisseur', 'obj': f} for f in Fournisseur.objects.all()],
+        [{'type': 'client', 'obj': c} for c in clients] +
+        [{'type': 'fournisseur', 'obj': f} for f in fournisseurs],
         key=lambda item: item['obj'].nom.lower()
     )
 
@@ -795,7 +959,10 @@ def facture(request):
 
     companies_comptes = {}
     companies_factures = {}
-    for item in cards:
+    # Utilise gestion_compagnies (toutes les compagnies) plutot que cards
+    # pour que les compagnies occasionnelles restent facturables meme si elles
+    # ne sont pas affichees en carte sur la page d'accueil.
+    for item in gestion_compagnies:
         compagnie = item['obj']
         item_type = item['type']
         company_key = f"{item_type}:{compagnie.pk}"
@@ -1161,6 +1328,76 @@ def balance_de_verification(request):
         'total_debit': total_debit,
         'total_credit': total_credit,
         'is_balanced': is_balanced,
+        'report_year_label': report_year_label,
+    })
+
+
+@xframe_options_sameorigin
+def etat_revenus_depenses(request):
+    settings_instance = get_setting()
+    working_period = get_working_period(request)
+    exercice = exercice_pour_working_period(working_period)
+
+    if not exercice:
+        return render(request, "rapports/etat_revenus_depenses.html", {
+            'title': "État des résultats",
+            'revenus': {},
+            'depenses': {},
+            'total_revenus': Decimal('0'),
+            'total_depenses': Decimal('0'),
+            'resultat_net': Decimal('0'),
+            'report_year_label': "Aucun exercice financier configuré pour cette période.",
+        })
+
+    report_date = exercice.date_fin
+    report_year_label = _closing_date_label(report_date, settings_instance)
+    resultat = _fetch_resultat_rows(exercice)
+
+    return render(request, "rapports/etat_revenus_depenses.html", {
+        'title': "État des résultats",
+        'revenus': resultat['revenus'],
+        'depenses': resultat['depenses'],
+        'total_revenus': resultat['total_revenus'],
+        'total_depenses': resultat['total_depenses'],
+        'resultat_net': resultat['resultat_net'],
+        'report_year_label': report_year_label,
+    })
+
+
+@xframe_options_sameorigin
+def bilan(request):
+    settings_instance = get_setting()
+    working_period = get_working_period(request)
+    exercice = exercice_pour_working_period(working_period)
+
+    if not exercice:
+        return render(request, "rapports/bilan.html", {
+            'title': "Bilan",
+            'actif': {},
+            'passif': {},
+            'avoir': {},
+            'total_actif': Decimal('0'),
+            'total_passif': Decimal('0'),
+            'total_avoir': Decimal('0'),
+            'total_passif_avoir': Decimal('0'),
+            'is_balanced': True,
+            'report_year_label': "Aucun exercice financier configuré pour cette période.",
+        })
+
+    report_date = exercice.date_fin
+    report_year_label = _closing_date_label(report_date, settings_instance)
+    bilan_data = _fetch_bilan_rows(exercice)
+
+    return render(request, "rapports/bilan.html", {
+        'title': "Bilan",
+        'actif': bilan_data['actif'],
+        'passif': bilan_data['passif'],
+        'avoir': bilan_data['avoir'],
+        'total_actif': bilan_data['total_actif'],
+        'total_passif': bilan_data['total_passif'],
+        'total_avoir': bilan_data['total_avoir'],
+        'total_passif_avoir': bilan_data['total_passif_avoir'],
+        'is_balanced': bilan_data['is_balanced'],
         'report_year_label': report_year_label,
     })
 

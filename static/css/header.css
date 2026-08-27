@@ -202,40 +202,61 @@
     color:#4b5563;
 }
 
-.topbar-period-input{
+.topbar-period-switcher{
 
-    width:145px;
+    display:flex;
+    align-items:center;
+
+    gap:2px;
+
+    border:1px solid #cfd6e2;
+    border-radius:8px;
+
+    background:#fff;
+
+    padding:2px;
 }
 
-.topbar-period-submit{
+.topbar-period-current{
 
-    width:32px;
-    height:32px;
+    min-width:110px;
+
+    text-align:center;
+
+    font-size:.9rem;
+    font-weight:600;
+
+    color:#1f2937;
+
+    white-space:nowrap;
+}
+
+.topbar-period-nav{
+
+    width:28px;
+    height:28px;
 
     display:grid;
     place-items:center;
 
     padding:0;
 
-    border:1px solid #cfd6e2;
-
-    border-radius:8px;
+    border:none;
+    border-radius:6px;
 
     color:#245fd6;
 
-    background:#fff;
+    background:transparent;
 
     transition:.2s;
 }
 
-.topbar-period-submit:hover,
-.topbar-period-submit:focus-visible{
+.topbar-period-nav:hover,
+.topbar-period-nav:focus-visible{
 
     color:#fff;
 
     background:#245fd6;
-
-    border-color:#245fd6;
 }
 
 /*=====================================================
@@ -318,9 +339,11 @@
         display:none;
     }
 
-    .topbar-period-input{
+    .topbar-period-current{
 
-        width:132px;
+        min-width:88px;
+
+        font-size:.82rem;
     }
 
     .topbar-tenant-select{

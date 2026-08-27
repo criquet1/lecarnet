@@ -1,0 +1,112 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}
+    {% if report_year_label %}{{ report_year_label }}{% else %}Synthèse des revenus et des dépenses de l’année financière.{% endif %}
+{% endblock %}
+
+{% block page_actions %}
+    {% include "includes/components/print_button.html" %}
+{% endblock %}
+
+{% block content %}
+
+{% include "includes/navigation/reports_tabs.html" %}
+
+<div class="mx-auto w-100" style="max-width: 840px;">
+
+<div class="table-responsive">
+    <table class="table table-sm table-striped align-middle mb-0">
+        <thead>
+            <tr>
+                <th colspan="2">Revenus</th>
+                <th class="text-end">Montant</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for categorie, groupe in revenus.items %}
+                {% for ligne in groupe.comptes %}
+                    <tr>
+                        <td>{{ ligne.compte.numero }}</td>
+                        <td>{{ ligne.compte.libelle }}</td>
+                        <td class="text-end">{{ ligne.montant|floatformat:2 }}</td>
+                    </tr>
+                {% endfor %}
+                {% if revenus|length > 1 %}
+                    <tr class="table-light">
+                        <th colspan="2" class="text-end">Sous-total {{ categorie }}</th>
+                        <th class="text-end">{{ groupe.sous_total|floatformat:2 }}</th>
+                    </tr>
+                {% endif %}
+            {% empty %}
+                <tr>
+                    <td colspan="3" class="text-muted">Aucun revenu pour cette période.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <th colspan="2" class="text-end">Total des revenus</th>
+                <th class="text-end">{{ total_revenus|floatformat:2 }}</th>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+<div class="table-responsive mt-4">
+    <table class="table table-sm table-striped align-middle mb-0">
+        <thead>
+            <tr>
+                <th colspan="2">Dépenses</th>
+                <th class="text-end">Montant</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for categorie, groupe in depenses.items %}
+                {% for ligne in groupe.comptes %}
+                    <tr>
+                        <td>{{ ligne.compte.numero }}</td>
+                        <td>{{ ligne.compte.libelle }}</td>
+                        <td class="text-end">{{ ligne.montant|floatformat:2 }}</td>
+                    </tr>
+                {% endfor %}
+                {% if depenses|length > 1 %}
+                    <tr class="table-light">
+                        <th colspan="2" class="text-end">Sous-total {{ categorie }}</th>
+                        <th class="text-end">{{ groupe.sous_total|floatformat:2 }}</th>
+                    </tr>
+                {% endif %}
+            {% empty %}
+                <tr>
+                    <td colspan="3" class="text-muted">Aucune dépense pour cette période.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <th colspan="2" class="text-end">Total des dépenses</th>
+                <th class="text-end">{{ total_depenses|floatformat:2 }}</th>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+<div class="table-responsive mt-4">
+    <table class="table table-sm align-middle mb-0">
+        <tfoot>
+            <tr>
+                <th class="text-end">{% if resultat_net >= 0 %}Bénéfice net{% else %}Perte nette{% endif %}</th>
+                <th class="text-end {% if resultat_net >= 0 %}text-success{% else %}text-danger{% endif %}">
+                    {{ resultat_net|floatformat:2 }}
+                </th>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+</div>
+
+{% endblock %}

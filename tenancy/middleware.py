@@ -66,6 +66,7 @@ class ActiveClientMiddleware:
 
         client_exempt_paths = set(password_exempt_paths)
         client_exempt_paths.add(reverse('creer_tenant'))
+        client_exempt_paths.add(reverse('assistant_demarrage_list'))
 
         if request.user.is_authenticated and user_must_change_password(request.user):
             if request.path not in password_exempt_paths and not request.path.startswith('/admin/'):

@@ -15,6 +15,15 @@ class ClientForm(forms.ModelForm):
     class Meta:
         model = Client
         fields = ['nom', 'logo', 'comptes', 'active', 'afficher_card']
+        labels = {
+            'afficher_card': "Afficher sur la page d'accueil",
+        }
+        help_texts = {
+            'afficher_card': (
+                "Decoche pour un client occasionnel (facture seulement 1 ou 2 fois par annee, par exemple) : "
+                "il n'apparaitra plus en carte, mais restera facturable depuis « Gerer les compagnies »."
+            ),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -30,6 +39,15 @@ class FournisseurForm(forms.ModelForm):
     class Meta:
         model = Fournisseur
         fields = ['nom', 'logo', 'comptes', 'active', 'afficher_card']
+        labels = {
+            'afficher_card': "Afficher sur la page d'accueil",
+        }
+        help_texts = {
+            'afficher_card': (
+                "Decoche pour un fournisseur occasionnel (facture recue seulement 1 ou 2 fois par annee, par exemple) : "
+                "il n'apparaitra plus en carte, mais restera facturable depuis « Gerer les compagnies »."
+            ),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

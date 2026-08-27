@@ -74,15 +74,23 @@
 
                 <hr>
 
+                <h6 class="mb-1">Ajouter un utilisateur des maintenant (optionnel)</h6>
+                <p class="form-text mt-0">
+                    Tu as deja acces a ce tenant avec ton propre compte des sa creation. Remplis les deux
+                    champs ci-dessous seulement si tu veux, en plus, creer tout de suite un compte pour
+                    quelqu'un d'autre. Sinon, laisse-les vides et ajoute des utilisateurs plus tard depuis
+                    "Gestion des societes".
+                </p>
+
                 <div class="mb-3">
-                    <label class="form-label" for="{{ form.username.id_for_label }}">Nom d utilisateur</label>
+                    <label class="form-label" for="{{ form.username.id_for_label }}">Nom d utilisateur (optionnel)</label>
                     {{ form.username }}
                     {% if form.username.help_text %}<div class="form-text">{{ form.username.help_text }}</div>{% endif %}
                     {{ form.username.errors }}
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label" for="{{ form.temp_password.id_for_label }}">Mot de passe temporaire</label>
+                    <label class="form-label" for="{{ form.temp_password.id_for_label }}">Mot de passe temporaire (optionnel)</label>
                     {{ form.temp_password }}
                     {% if form.temp_password.help_text %}<div class="form-text">{{ form.temp_password.help_text }}</div>{% endif %}
                     {{ form.temp_password.errors }}

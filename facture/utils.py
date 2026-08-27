@@ -125,19 +125,29 @@ def get_setting(*select_related_fields):
 def tax_target_mode_from_setting(settings_instance):
 	if not settings_instance or settings_instance.taxes_mode == Setting.TAX_MODE_RECLAMER:
 		return MODE_CAR
+	if settings_instance.taxes_mode == Setting.TAX_MODE_AUCUN:
+		return MODE_AUTRE
 	return MODE_CAP
 
 
 def ensure_tax_authority_companies(settings_instance=None):
 	settings_instance = settings_instance or get_setting()
 	target_mode = tax_target_mode_from_setting(settings_instance)
+
+	# Mode "ni l'un ni l'autre": cas rare ou la compagnie ne remet ni ne
+	# reclame de taxes de facon reguliere. On ne cree rien automatiquement;
+	# l'expert pourra creer Revenu Canada/Quebec manuellement si un cas
+	# particulier survient.
+	if target_mode == MODE_AUTRE:
+		return {}
+
 	model_class = Fournisseur if target_mode == MODE_CAP else Client
 
 	tax_entities = {}
 	for company_name in TAX_AUTHORITY_COMPANY_NAMES:
 		entity, _created = model_class.objects.get_or_create(
 			nom=company_name,
-			defaults={'logo': 'images.png'},
+			defaults={'logo': 'images.png', 'afficher_card': False},
 		)
 		tax_entities[company_name] = entity
 

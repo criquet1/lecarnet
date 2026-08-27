@@ -15,18 +15,20 @@ from django.db import DatabaseError, connections, transaction
 from django.db.utils import OperationalError, ProgrammingError
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils.connection import ConnectionDoesNotExist
 from django.utils import timezone
 from django.utils.html import format_html
-from facture.helpers.dates import verifier_exercice_modifiable
+from facture.helpers.dates import prochaine_date_fin_exercice, verifier_exercice_modifiable
 from facture.models import Client, CompagnieSoldeDepart, CompteReleve, Fournisseur, SoldeFin, Source, Tr_desc, Tr_detail
 from facture.views import _next_no_ej
 from facture.utils import ensure_tax_authority_companies, expert_required, get_settings, parse_decimal, read_csv_rows
+from tenancy.db_context import reset_current_tenant_alias, set_current_tenant_alias
 from tenancy.models import ClientDatabase, Societe, UserClientAccess, UserSocieteAccess
-from tenancy.services import mark_user_must_change_password, set_active_client_on_session, sync_user_client_accesses, user_must_change_password
+from tenancy.services import mark_user_must_change_password, resolve_database_alias, set_active_client_on_session, sync_user_client_accesses, user_must_change_password
 
 from .forms import CompteCsvImportForm, CompteForm, CreerTenantForm, SettingForm
-from .models import Compte, SoldeAuxLivres, Total
+from .models import Compte, ExerciceFinancier, Setting, SoldeAuxLivres, Total
 
 
 
@@ -378,6 +380,7 @@ def compte_page(request):
 		'soldes_par_compte': soldes_par_compte,
 		'total_solde_depart': total_solde_depart,
 		'comptes_releves': comptes_releves,
+		'onboarding_client': ClientDatabase.objects.filter(pk=(request.GET.get('onboarding') or '').strip()).first() if request.GET.get('onboarding') else None,
 	})
 
 
@@ -386,21 +389,30 @@ def settings_page(request):
 	from paie.models import FrequencePaie
 	_ensure_default_frequences_paie()
 	settings_instance = get_settings()
+	onboarding_client_id = (request.POST.get('onboarding') or request.GET.get('onboarding') or '').strip()
 
 	if request.method == 'POST':
 		form = SettingForm(request.POST, instance=settings_instance)
 		if form.is_valid():
 			settings_instance = form.save()
 			ensure_tax_authority_companies(settings_instance)
+			if onboarding_client_id:
+				messages.success(request, "Parametres enregistres. Passons a l'etape suivante.")
+				return redirect('assistant_demarrage', client_id=onboarding_client_id)
 			return redirect('settings')
 	else:
 		form = SettingForm(instance=settings_instance)
+
+	onboarding_client = None
+	if onboarding_client_id:
+		onboarding_client = ClientDatabase.objects.filter(pk=onboarding_client_id).first()
 
 	return render(request, 'compte/settings.html', {
 		'title': 'Paramètres',
 		'form': form,
 		'settings_instance': settings_instance,
 		'frequences_paie': FrequencePaie.objects.all(),
+		'onboarding_client': onboarding_client,
 	})
 
 
@@ -552,6 +564,168 @@ def _tenant_env_snippet(alias, db_config):
 	return json.dumps({alias: db_config}, indent=2, ensure_ascii=False)
 
 
+# --- Assistant de demarrage -------------------------------------------------
+#
+# Guide un utilisateur non-technique (ex: un comptable) a travers les etapes
+# necessaires pour qu'un tenant fraichement cree soit pret a l'emploi:
+# parametres de la compagnie, plan comptable, groupes de comptes. Chaque
+# etape est detectee automatiquement (pas d'etat separe a maintenir) et les
+# pages concernees redirigent ici une fois l'action terminee.
+
+ONBOARDING_STEPS = [
+	{
+		'key': 'compagnies_facturation',
+		'title': 'Compagnies (facturation)',
+		'description': 'Ajouter les clients et fournisseurs utilises pour la facturation.',
+		'url_name': 'facture',
+		'action_label': 'Ouvrir la facturation',
+	},
+	{
+		'key': 'plan_comptable',
+		'title': 'Plan comptable',
+		'description': 'Creer au moins un compte pour cette entreprise.',
+		'url_name': 'compte',
+		'action_label': 'Ouvrir le plan comptable',
+	},
+	{
+		'key': 'parametres',
+		'title': "Parametres de l'entreprise",
+		'description': "Coordonnees et comptes de reference (TPS/TVQ, CAP/CAR, compte cheques, frais de retard). Les parametres de paie sont optionnels.",
+		'url_name': 'settings',
+		'action_label': 'Remplir les parametres',
+	},
+	{
+		'key': 'groupes',
+		'title': 'Groupes de comptes',
+		'description': 'Creer au moins un groupe (total) utilise dans les etats financiers.',
+		'url_name': 'totaux',
+		'action_label': 'Ouvrir les groupes de comptes',
+	},
+]
+
+
+def _onboarding_status(client):
+	"""Calcule, pour un ClientDatabase donne, l'etat de chaque etape de l'assistant.
+
+	Se connecte temporairement a la base du tenant (via le contextvar utilise par
+	TenantDatabaseRouter) pour verifier ce qui existe deja, puis revient a l'etat
+	precedent. Retourne (steps, alias) ou steps est une liste de dicts enrichis
+	avec 'done', et alias est None si le tenant n'est pas connecte sur ce serveur.
+	"""
+	alias = resolve_database_alias(client.db_alias)
+	steps = [dict(step) for step in ONBOARDING_STEPS]
+
+	if not alias:
+		for step in steps:
+			step['done'] = False
+		return steps, None
+
+	token = set_current_tenant_alias(alias)
+	try:
+		settings_instance = Setting.objects.first()
+		# Les coordonnees de base ET les comptes de reference (TPS/TVQ, CAP/CAR,
+		# compte cheques, frais de retard) sont obligatoires pour considerer
+		# cette etape terminee. Les parametres/comptes de paie restent optionnels:
+		# toutes les compagnies ne font pas de paie.
+		parametres_done = bool(
+			settings_instance
+			and settings_instance.nom
+			and settings_instance.adresse
+			and settings_instance.ville
+			and settings_instance.code_postal
+			and settings_instance.pays
+			and settings_instance.phone
+			and settings_instance.email
+			and settings_instance.cap_id
+			and settings_instance.car_id
+			and settings_instance.compte_cheques_id
+			and settings_instance.compte_fr_retard_id
+			and settings_instance.compte_tps_percue_id
+			and settings_instance.compte_tps_payee_id
+			and settings_instance.compte_tvq_percue_id
+			and settings_instance.compte_tvq_payee_id
+		)
+		plan_comptable_done = Compte.objects.exists()
+		groupes_done = Total.objects.exists()
+		compagnies_facturation_done = Client.objects.exists() or Fournisseur.objects.exists()
+	finally:
+		reset_current_tenant_alias(token)
+
+	done_map = {
+		'parametres': parametres_done,
+		'plan_comptable': plan_comptable_done,
+		'groupes': groupes_done,
+		'compagnies_facturation': compagnies_facturation_done,
+	}
+	for step in steps:
+		step['done'] = done_map.get(step['key'], False)
+
+	return steps, alias
+
+
+@login_required
+@expert_required
+def assistant_demarrage_list_page(request):
+	clients = ClientDatabase.objects.select_related('societe').filter(is_active=True).order_by('name', 'id')
+	rows = []
+	for client in clients:
+		steps, alias = _onboarding_status(client)
+		rows.append({
+			'client': client,
+			'alias_ok': bool(alias),
+			'complete': alias is not None and all(step['done'] for step in steps),
+			'steps_done': sum(1 for step in steps if step['done']),
+			'steps_total': len(steps),
+		})
+
+	return render(request, 'compte/assistant_demarrage_list.html', {
+		'title': 'Assistant de demarrage',
+		'rows': rows,
+	})
+
+
+@login_required
+@expert_required
+def assistant_demarrage_page(request, client_id):
+	client = get_object_or_404(ClientDatabase.objects.select_related('societe'), pk=client_id)
+
+	if not (request.user.is_superuser or UserClientAccess.objects.filter(user=request.user, client=client).exists()):
+		messages.error(request, "Tu n as pas acces a ce tenant.")
+		return redirect('assistant_demarrage_list')
+
+	access, _ = UserClientAccess.objects.get_or_create(
+		user=request.user,
+		client=client,
+		defaults={'is_default': not UserClientAccess.objects.filter(user=request.user, is_default=True).exists()},
+	)
+	set_active_client_on_session(request, access)
+	sync_user_client_accesses(request.user)
+
+	steps, alias = _onboarding_status(client)
+
+	if alias is None:
+		messages.warning(
+			request,
+			f"Le tenant '{client.name}' n est pas encore connecte sur ce serveur. "
+			"Redemarre l application ou contacte le support technique.",
+		)
+
+	next_step = next((step for step in steps if not step['done']), None)
+	all_done = alias is not None and next_step is None
+
+	for step in steps:
+		step['url'] = f"{reverse(step['url_name'])}?onboarding={client.id}"
+
+	return render(request, 'compte/assistant_demarrage.html', {
+		'title': f"Assistant de demarrage - {client.name}",
+		'client': client,
+		'steps': steps,
+		'next_step': next_step,
+		'all_done': all_done,
+		'alias_ok': alias is not None,
+	})
+
+
 @login_required
 @expert_required
 def creer_tenant_page(request):
@@ -602,7 +776,6 @@ def creer_tenant_page(request):
 			elif alias_exists_in_db or alias_exists_in_settings:
 				form.add_error('db_alias', 'Cet alias est deja utilise.')
 			else:
-				tenant_user = None
 				db_config = None
 				physical_db_created = False
 				try:
@@ -611,46 +784,82 @@ def creer_tenant_page(request):
 					_create_physical_tenant_db(db_config)
 					physical_db_created = True
 					call_command('migrate', database=db_alias, interactive=False, verbosity=0)
+
+					# Cree tout de suite un exercice financier initial sur la base du
+					# tenant: sans lui, la moindre page de facturation/comptabilite
+					# plante des qu'elle touche une date, peu importe l'ordre dans
+					# lequel l'expert complete ensuite l'assistant de demarrage.
+					tenant_token = set_current_tenant_alias(db_alias)
+					try:
+						if not ExerciceFinancier.objects.using(db_alias).exists():
+							initial_settings = get_settings()
+							date_fin = prochaine_date_fin_exercice(date.today(), initial_settings)
+							ExerciceFinancier.creer_a_partir_de_la_date_fin(date_fin, alias=db_alias)
+					finally:
+						reset_current_tenant_alias(tenant_token)
+
+					# Toutes les ecritures dans la base centrale (utilisateur, tenant,
+					# acces) sont regroupees dans une seule transaction: si l'une
+					# d'elles echoue, elles sont TOUTES annulees automatiquement.
+					# Cela evite qu'un tenant "fantome" (ClientDatabase sans base
+					# physique valide, ou l'inverse) ne reste enregistre.
+					with transaction.atomic():
+						# Le nom d'utilisateur/mot de passe sont optionnels: l'expert qui
+						# cree le tenant y a deja acces automatiquement (voir plus bas),
+						# donc ce compte supplementaire n'est cree que si on le demande
+						# explicitement. Les autres utilisateurs pourront toujours etre
+						# ajoutes ensuite depuis "Gestion des societes".
+						tenant_user = None
+						if username and temp_password:
+							user_model = get_user_model()
+							tenant_user = user_model.objects.create_user(username=username, password=temp_password)
+
+						client = ClientDatabase.objects.create(
+							slug=slug,
+							name=name,
+							db_alias=db_alias,
+							societe=societe,
+							is_active=True,
+						)
+
+						UserSocieteAccess.objects.get_or_create(
+							user=request.user,
+							societe=societe,
+							defaults={'is_default': not UserSocieteAccess.objects.filter(user=request.user, is_default=True).exists()},
+						)
+
+						has_default = UserClientAccess.objects.filter(user=request.user, is_default=True).exists()
+						access, _ = UserClientAccess.objects.update_or_create(
+							user=request.user,
+							client=client,
+							defaults={'is_default': not has_default},
+						)
+
+						if tenant_user is not None:
+							UserSocieteAccess.objects.update_or_create(
+								user=tenant_user,
+								societe=societe,
+								defaults={'is_default': True},
+							)
+							UserClientAccess.objects.update_or_create(
+								user=tenant_user,
+								client=client,
+								defaults={'is_default': True},
+							)
+							UserClientAccess.objects.filter(user=tenant_user).exclude(client=client).delete()
+
+						set_active_client_on_session(request, access)
+						sync_user_client_accesses(request.user)
+
+					# On ne memorise la connexion sur disque qu'une fois la
+					# transaction ci-dessus confirmee: le fichier de config ne
+					# peut plus pointer vers un tenant qui n'a pas ete cree.
 					_persist_tenant_config(db_alias, db_config)
 
-					user_model = get_user_model()
-					tenant_user = user_model.objects.create_user(username=username, password=temp_password)
-
-					client = ClientDatabase.objects.create(
-						slug=slug,
-						name=name,
-						db_alias=db_alias,
-						societe=societe,
-						is_active=True,
-					)
-
-					UserSocieteAccess.objects.get_or_create(
-						user=request.user,
-						societe=societe,
-						defaults={'is_default': not UserSocieteAccess.objects.filter(user=request.user, is_default=True).exists()},
-					)
-					UserSocieteAccess.objects.update_or_create(
-						user=tenant_user,
-						societe=societe,
-						defaults={'is_default': True},
-					)
-
-					has_default = UserClientAccess.objects.filter(user=request.user, is_default=True).exists()
-					access, _ = UserClientAccess.objects.update_or_create(
-						user=request.user,
-						client=client,
-						defaults={'is_default': not has_default},
-					)
-					UserClientAccess.objects.update_or_create(
-						user=tenant_user,
-						client=client,
-						defaults={'is_default': True},
-					)
-					UserClientAccess.objects.filter(user=tenant_user).exclude(client=client).delete()
-					set_active_client_on_session(request, access)
-					sync_user_client_accesses(request.user)
-
-					messages.success(request, f"Le tenant '{name}' a ete cree et active. Utilisateur cree: {username}")
+					if tenant_user is not None:
+						messages.success(request, f"Le tenant '{name}' a ete cree et active. Utilisateur cree: {username}")
+					else:
+						messages.success(request, f"Le tenant '{name}' a ete cree et active. Tu peux deja y travailler avec ton propre compte.")
 					if (os.environ.get('TENANT_DATABASES_JSON') or '').strip():
 						snippet = _tenant_env_snippet(db_alias, db_config)
 						messages.warning(
@@ -665,13 +874,13 @@ def creer_tenant_page(request):
 								snippet=snippet,
 							),
 						)
-					return redirect('settings')
+					return redirect('assistant_demarrage', client_id=client.id)
 				except Exception as exc:
-					if tenant_user is not None:
-						try:
-							tenant_user.delete()
-						except Exception:
-							pass
+					# tenant_user / client / acces sont crees a l'interieur d'un
+					# bloc transaction.atomic(): en cas d'erreur, Django les a
+					# deja annules automatiquement. On ne nettoie ici que ce qui
+					# n'est PAS gere par la transaction (la base physique et
+					# l'alias enregistre en memoire).
 					_rollback_runtime_tenant_db(db_alias)
 					if physical_db_created and db_config is not None:
 						try:
@@ -741,12 +950,14 @@ def user_password_change_page(request):
 @expert_required
 def totaux_page(request):
 	rows, total_debit, total_credit, is_balanced = _fetch_totaux_rows()
+	onboarding_id = (request.GET.get('onboarding') or '').strip()
 	return render(request, 'compte/totaux.html', {
 		'title': 'Totaux',
 		'rows': rows,
 		'total_debit': total_debit,
 		'total_credit': total_credit,
 		'is_balanced': is_balanced,
+		'onboarding_client': ClientDatabase.objects.filter(pk=onboarding_id).first() if onboarding_id else None,
 	})
 @expert_required
 def feuille_de_travail_page(request):
