@@ -166,7 +166,7 @@ def manage_societe_users(request):
     tenants_qs = ClientDatabase.objects.filter(societe=managed_societe).order_by('name', 'id')
     tenant_ids = list(tenants_qs.values_list('id', flat=True))
 
-    create_user_form = ExpertSocieteUserCreateForm()
+    create_user_form = ExpertSocieteUserCreateForm(tenants_qs=tenants_qs.filter(is_active=True))
     assign_tenant_form = ExpertUserTenantAssignForm(
         users_qs=societe_users_qs.filter(is_active=True),
         tenants_qs=tenants_qs.filter(is_active=True),
@@ -176,9 +176,10 @@ def manage_societe_users(request):
         action = (request.POST.get('action') or '').strip()
 
         if action == 'create_societe_user':
-            create_user_form = ExpertSocieteUserCreateForm(request.POST)
+            create_user_form = ExpertSocieteUserCreateForm(request.POST, tenants_qs=tenants_qs.filter(is_active=True))
             if create_user_form.is_valid():
                 user = create_user_form.save(managed_societe)
+                sync_user_client_accesses(user)
                 expert_group, _ = Group.objects.get_or_create(name='expert')
                 if create_user_form.cleaned_data.get('is_expert'):
                     user.groups.add(expert_group)

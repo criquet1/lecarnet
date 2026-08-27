@@ -48,6 +48,11 @@
                         {% endif %}
                     </div>
                     <div class="col-12">
+                        <label class="form-label" for="{{ create_user_form.tenant.id_for_label }}">Tenant</label>
+                        {{ create_user_form.tenant }}
+                        {{ create_user_form.tenant.errors }}
+                    </div>
+                    <div class="col-12">
                         <div class="form-check">
                             {{ create_user_form.is_expert }}
                             <label class="form-check-label" for="{{ create_user_form.is_expert.id_for_label }}">Attribuer le role Expert</label>

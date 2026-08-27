@@ -36,6 +36,12 @@
 
         <div class="app-content">
 
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags|default:'info' }} mb-0" role="alert">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+
             {% if request.GET.embed != "1" %}
             {% block page_breadcrumb %}
                 {% include "includes/navigation/breadcrumb.html" %}

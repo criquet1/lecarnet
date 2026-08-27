@@ -196,12 +196,27 @@ class ExpertSocieteUserCreateForm(forms.Form):
         widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Mot de passe temporaire'}),
         help_text='L utilisateur devra changer ce mot de passe a la premiere connexion.',
     )
+    tenant = forms.ModelChoiceField(
+        label='Tenant',
+        queryset=ClientDatabase.objects.none(),
+        empty_label=None,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
     is_expert = forms.BooleanField(
         label='Role Expert',
         required=False,
         initial=False,
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
     )
+
+    def __init__(self, *args, **kwargs):
+        tenants_qs = kwargs.pop('tenants_qs', None)
+        super().__init__(*args, **kwargs)
+        if tenants_qs is None:
+            tenants_qs = ClientDatabase.objects.none()
+        self.fields['tenant'].queryset = tenants_qs
+        if tenants_qs.count() == 1:
+            self.fields['tenant'].initial = tenants_qs.first().pk
 
     def clean_username(self):
         username = (self.cleaned_data.get('username') or '').strip().lower()
@@ -225,6 +240,12 @@ class ExpertSocieteUserCreateForm(forms.Form):
         UserSocieteAccess.objects.update_or_create(
             user=user,
             societe=societe,
+            defaults={'is_default': True},
+        )
+
+        UserClientAccess.objects.update_or_create(
+            user=user,
+            client=self.cleaned_data['tenant'],
             defaults={'is_default': True},
         )
 
