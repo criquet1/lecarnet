@@ -20,7 +20,6 @@ import re
 import csv
 import json
 from io import TextIOWrapper
-import chardet
 from datetime import date, datetime, timedelta
 from facture.constants import MONTH_LABELS_FR, MODE_CAP, MODE_CAR
 from facture.models import Cheque, Client, Fournisseur, Tr_desc, Tr_detail, Source, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, Facture, SoldeFin, TransactionListe
@@ -1959,8 +1958,20 @@ def _import_releve_csv(csv_file):
 
     raw_data = csv_file.file.read(5000)
     csv_file.file.seek(0)
-    detected = chardet.detect(raw_data)
-    encoding = detected.get('encoding', 'utf-8') or 'utf-8'
+    # Les releves Desjardins sont soit en ASCII pur, soit en Windows-1252
+    # (jamais autre chose). On essaie utf-8 d'abord (au cas ou), puis on se
+    # rabat sur cp1252 qui est le format reel utilise par Desjardins.
+    # On evite chardet.detect() qui devine parfois a tort du Windows-1250
+    # (Europe centrale), ce qui corrompt les caracteres accentues
+    # (ex: 'e' devient 'c caron').
+    encoding = 'cp1252'
+    for candidate in ('utf-8', 'cp1252'):
+        try:
+            raw_data.decode(candidate)
+            encoding = candidate
+            break
+        except UnicodeDecodeError:
+            continue
 
     text_file = TextIOWrapper(csv_file.file, encoding=encoding)
     sample = text_file.read(1024)
