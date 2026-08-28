@@ -129,6 +129,17 @@ class Setting(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(12)],
         verbose_name="Mois de fin d'exercice",
     )
+    fin_annee_jour_semaine = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(0), MaxValueValidator(6)],
+        verbose_name="Jour de semaine de fin d'exercice",
+        help_text=(
+            "Optionnel. Si rempli, l'exercice se termine le jour de semaine choisi "
+            "le plus proche du jour/mois ci-dessus (ex.: le samedi le plus proche du "
+            "30 septembre), plutôt qu'à la date fixe. 0=lundi ... 6=dimanche."
+        ),
+    )
 
     # Ajout de related_name uniques pour éviter le conflit
     car = models.ForeignKey(Compte, on_delete=models.SET_NULL, null=True, blank=True, related_name='settings_car')
@@ -286,16 +297,30 @@ class ExerciceFinancier(models.Model):
         verbose_name_plural = "Exercices financiers"
         ordering = ['-date_debut']
 
+    DUREE_MAX_JOURS = 371  # 53 semaines — limite imposée par l'ARC pour un exercice financier.
+
+    @staticmethod
+    def _verifier_duree_maximale(date_debut, date_fin):
+        duree = (date_fin - date_debut).days + 1
+        if duree > ExerciceFinancier.DUREE_MAX_JOURS:
+            raise ValueError(
+                f"Un exercice financier ne peut pas dépasser {ExerciceFinancier.DUREE_MAX_JOURS} jours "
+                f"(53 semaines) selon les règles de l'ARC. L'exercice du {date_debut} au {date_fin} "
+                f"compte {duree} jours."
+            )
+
     @classmethod
     def creer_a_partir_de_la_date_fin(cls, date_fin, alias=None):
         lendemain = date_fin + timedelta(days=1)
         date_debut = lendemain.replace(year=lendemain.year - 1)
+        cls._verifier_duree_maximale(date_debut, date_fin)
         manager = cls.objects.using(alias) if alias else cls.objects
         return manager.create(date_debut=date_debut, date_fin=date_fin)
 
     @classmethod
     def creer_exercice_suivant(cls, exercice_precedent, date_fin, alias=None):
         date_debut = exercice_precedent.date_fin + timedelta(days=1)
+        cls._verifier_duree_maximale(date_debut, date_fin)
         manager = cls.objects.using(alias) if alias else cls.objects
         return manager.create(date_debut=date_debut, date_fin=date_fin)
 

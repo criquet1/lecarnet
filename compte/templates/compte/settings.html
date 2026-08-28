@@ -105,6 +105,13 @@
                             <div class="form-text">La date complète est récurrente: seul le jour et le mois sont saisis.</div>
                         </td>
                     </tr>
+                    <tr>
+                        <th><label for="{{ form.fin_annee_jour_semaine.id_for_label }}">Jour de semaine de fin d'exercice</label></th>
+                        <td>
+                            {{ form.fin_annee_jour_semaine }}{{ form.fin_annee_jour_semaine.errors }}
+                            <div class="form-text">{{ form.fin_annee_jour_semaine.help_text }}</div>
+                        </td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -354,6 +361,40 @@ function syncPaieAutresField() {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+    // Limite les jours proposés selon le mois choisi, pour empêcher une date
+    // de fin d'exercice illogique (ex.: 31 septembre). Doit rester cohérent
+    // avec la validation serveur dans SettingForm.clean() (compte/forms.py).
+    (function () {
+        const moisSelect = document.getElementById('id_fin_annee_mois');
+        const jourSelect = document.getElementById('id_fin_annee_jour');
+        if (!moisSelect || !jourSelect) {
+            return;
+        }
+
+        const joursParMois = {1: 31, 2: 28, 3: 31, 4: 30, 5: 31, 6: 30, 7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31};
+
+        function ajusterJoursDisponibles() {
+            const mois = parseInt(moisSelect.value, 10);
+            const maxJour = joursParMois[mois] || 31;
+            const valeurActuelle = jourSelect.value;
+
+            Array.prototype.forEach.call(jourSelect.options, function (option) {
+                if (!option.value) {
+                    return;
+                }
+                const jour = parseInt(option.value, 10);
+                option.disabled = Boolean(mois) && jour > maxJour;
+            });
+
+            if (mois && valeurActuelle && parseInt(valeurActuelle, 10) > maxJour) {
+                jourSelect.value = String(maxJour);
+            }
+        }
+
+        moisSelect.addEventListener('change', ajusterJoursDisponibles);
+        ajusterJoursDisponibles();
+    })();
+
     const addButton = document.getElementById('btn-ajouter-compte-paie');
     const hiddenField = document.getElementById('id_comptes_paie_autres');
 

@@ -1,9 +1,11 @@
+import calendar
 import re
 from decimal import Decimal, InvalidOperation
 from django import forms
 from django.contrib.auth import get_user_model
 
 from compte.models import Setting
+from facture.constants import WEEKDAY_CHOICES_FR
 from facture.utils import get_available_logos
 from tenancy.models import Societe
 
@@ -52,6 +54,9 @@ class SettingForm(forms.ModelForm):
     logo = forms.ChoiceField(label="Logo", required=True)
     fin_annee_jour = forms.TypedChoiceField(label="Jour", required=False, coerce=int, empty_value=None)
     fin_annee_mois = forms.TypedChoiceField(label="Mois", required=False, coerce=int, empty_value=None)
+    fin_annee_jour_semaine = forms.TypedChoiceField(
+        label="Jour de semaine (optionnel)", required=False, coerce=int, empty_value=None
+    )
     taux_cnesst_employeur = forms.CharField(required=False)
     taux_fss_employeur = forms.DecimalField(required=False, decimal_places=5, max_digits=7)
     comptes_paie_autres = forms.CharField(required=False, widget=forms.HiddenInput())
@@ -88,6 +93,7 @@ class SettingForm(forms.ModelForm):
             'numero_identification_quebec',
             'fin_annee_jour',
             'fin_annee_mois',
+            'fin_annee_jour_semaine',
             'car',
             'cap',
             'compte_cheques',
@@ -152,8 +158,16 @@ class SettingForm(forms.ModelForm):
         self.fields['logo'].help_text = "Fichier pris depuis static/images/logos"
         self.fields['fin_annee_jour'].choices = [('', '--')] + self.DAY_CHOICES
         self.fields['fin_annee_mois'].choices = [('', '--')] + self.MONTH_CHOICES
+        self.fields['fin_annee_jour_semaine'].choices = [('', "-- Date fixe --")] + WEEKDAY_CHOICES_FR
         self.fields['fin_annee_jour'].widget.attrs.update({'class': 'form-select'})
         self.fields['fin_annee_mois'].widget.attrs.update({'class': 'form-select'})
+        self.fields['fin_annee_jour_semaine'].widget.attrs.update({'class': 'form-select'})
+        self.fields['fin_annee_jour_semaine'].help_text = (
+            "Si choisi, l'exercice se termine ce jour de semaine, le plus proche du "
+            "jour/mois ci-dessus (ex.: le samedi le plus proche du 30 septembre) — "
+            "une pratique courante pour les entreprises constituées en société. "
+            "Laisser sur « Date fixe » sinon."
+        )
         self.fields['taux_cnesst_employeur'].widget.attrs.update({
             'class': 'form-control',
             'placeholder': 'Ex.: 1,54',
@@ -216,6 +230,23 @@ class SettingForm(forms.ModelForm):
                 f"Comptes introuvables: {', '.join(missing_ids)}"
             )
         return unique_ids
+
+    def clean(self):
+        cleaned_data = super().clean()
+        jour = cleaned_data.get('fin_annee_jour')
+        mois = cleaned_data.get('fin_annee_mois')
+        if jour and mois:
+            # Année de référence non bissextile: garantit que la date de fin
+            # d'exercice choisie existe chaque année (ex.: pas de 31 septembre,
+            # pas de 29 février puisqu'il ne récurre pas tous les ans).
+            max_jour = calendar.monthrange(2023, mois)[1]
+            if jour > max_jour:
+                mois_label = dict(self.MONTH_CHOICES).get(str(mois), mois)
+                self.add_error(
+                    'fin_annee_jour',
+                    f"{mois_label} ne compte que {max_jour} jours. Choisissez une date qui existe chaque année."
+                )
+        return cleaned_data
 
     def save(self, commit=True):
         instance = super().save(commit=False)
