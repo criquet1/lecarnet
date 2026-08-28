@@ -1,4 +1,5 @@
 {% extends "layouts/app_base.html" %}
+{% load facture_extras %}
 
 {% block title %} {{ title }} {% endblock %}
 
@@ -45,14 +46,14 @@
                     </div>
                     <div class="text-end">
                         <div class="small text-muted">Solde du compte {{ mode_code }}</div>
-                        <div class="font-monospace fw-semibold">{{ compte_solde_grand_livre|floatformat:2 }}</div>
+                        <div class="font-monospace fw-semibold">{{ compte_solde_grand_livre|accounting_amount }}</div>
                     </div>
                 </div>
                 <div class="mt-2 small {% if is_solde_coherent %}text-success{% else %}text-danger{% endif %}">
                     {% if is_solde_coherent %}
                         Le solde {{ mode_code }} correspond au total des soldes affichés.
                     {% else %}
-                        Écart détecté entre le total des soldes et le solde global {{ mode_code }} : {{ ecart_solde|floatformat:2 }}.
+                        Écart détecté entre le total des soldes et le solde global {{ mode_code }} : {{ ecart_solde|accounting_amount }}.
                     {% endif %}
                 </div>
             </div>
@@ -89,9 +90,9 @@
                                     <td class="text-nowrap">{{ row.date|date:"Y-m-d" }}</td>
                                     <td>{% if row.source %}{{ row.source.nom }}{% endif %}</td>
                                     <td class="text-wrap" style="word-break: break-word;">{{ row.description }}</td>
-                                    <td class="text-end text-nowrap font-monospace">{% if row.debit %}{{ row.debit|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end text-nowrap font-monospace">{% if row.credit %}{{ row.credit|floatformat:2 }}{% endif %}</td>
-                                    <td class="text-end text-nowrap font-monospace">{{ row.solde|floatformat:2 }}</td>
+                                    <td class="text-end text-nowrap font-monospace">{% if row.debit %}{{ row.debit|accounting_amount }}{% endif %}</td>
+                                    <td class="text-end text-nowrap font-monospace">{% if row.credit %}{{ row.credit|accounting_amount }}{% endif %}</td>
+                                    <td class="text-end text-nowrap font-monospace">{{ row.solde|accounting_amount }}</td>
                                 </tr>
                             {% empty %}
                                 <tr>
@@ -120,7 +121,7 @@
                     <tbody>
                         <tr>
                             <th colspan="5" class="text-end">Total des soldes</th>
-                            <th class="text-end text-nowrap font-monospace">{{ total_des_soldes|floatformat:2 }}</th>
+                            <th class="text-end text-nowrap font-monospace">{{ total_des_soldes|accounting_amount }}</th>
                         </tr>
                     </tbody>
                 </table>

@@ -117,8 +117,8 @@
                                     {% endif %}
                                 </td>
                                 <td>{% if row.source %}{% if row.source.nom == 'Rapport de taxes' %}Rapp de tx{% else %}{{ row.source.nom }}{% endif %}{% endif %}</td>
-                                <td class="text-end font-monospace">{% if row.debit %}{{ row.debit|floatformat:2 }}{% endif %}</td>
-                                <td class="text-end font-monospace">{% if row.credit %}{{ row.credit|floatformat:2 }}{% endif %}</td>
+                                <td class="text-end font-monospace">{% if row.debit %}{{ row.debit|montant }}{% endif %}</td>
+                                <td class="text-end font-monospace">{% if row.credit %}{{ row.credit|montant }}{% endif %}</td>
                                 <td class="text-end font-monospace">{{ row.solde|accounting_amount }}</td>
                             </tr>
                         {% empty %}
@@ -151,8 +151,8 @@
             <tbody>
                 <tr>
                     <th colspan="4" class="text-end">Totaux generaux</th>
-                    <th class="text-end font-monospace">{{ grand_total_debit|floatformat:2 }}</th>
-                    <th class="text-end font-monospace">{{ grand_total_credit|floatformat:2 }}</th>
+                    <th class="text-end font-monospace">{{ grand_total_debit|montant }}</th>
+                    <th class="text-end font-monospace">{{ grand_total_credit|montant }}</th>
                     <th class="text-end font-monospace">{{ grand_total_solde|accounting_amount }}</th>
                 </tr>
             </tbody>

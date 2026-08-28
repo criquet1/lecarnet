@@ -1,5 +1,6 @@
 {% extends "layouts/app_base.html" %}
 {% load static %}
+{% load facture_extras %}
 
 {% block page_css %}
 <link rel="stylesheet" href="{% static 'css/pages/taxes.css' %}">
@@ -51,18 +52,18 @@
 
     <div class="mb-3 pb-3 border-bottom">
         <span class="formulaire-label">101 - Fournitures</span>
-        <span class="formulaire-boite">{{ selected_report.montant_101|floatformat:2 }} $</span>
+        <span class="formulaire-boite">{{ selected_report.montant_101|montant }} $</span>
     </div>
 
     <table class="table-formulaire mb-0">
         <tr>
             <td>
                 <span class="formulaire-label">105 - TPS exigible</span>
-                <span class="formulaire-boite">{{ selected_report.formulaire.105|floatformat:2 }} $</span>
+                <span class="formulaire-boite">{{ selected_report.formulaire.105|montant }} $</span>
             </td>
             <td>
                 <span class="formulaire-label">108 - CTI</span>
-                <span class="formulaire-boite">{{ selected_report.formulaire.108|floatformat:2 }} $</span>
+                <span class="formulaire-boite">{{ selected_report.formulaire.108|montant }} $</span>
             </td>
         </tr>
         <tr>
@@ -71,11 +72,11 @@
         <tr>
             <td>
                 <span class="formulaire-label">205 - TVQ exigible</span>
-                <span class="formulaire-boite">{{ selected_report.formulaire.205|floatformat:2 }} $</span>
+                <span class="formulaire-boite">{{ selected_report.formulaire.205|montant }} $</span>
             </td>
             <td>
                 <span class="formulaire-label">208 - RTI</span>
-                <span class="formulaire-boite">{{ selected_report.formulaire.208|floatformat:2 }} $</span>
+                <span class="formulaire-boite">{{ selected_report.formulaire.208|montant }} $</span>
             </td>
         </tr>
         <tr>
@@ -84,11 +85,11 @@
         <tr>
             <td>
                 <span class="formulaire-label">113 - TPS nette</span>
-                <span class="formulaire-boite">{% if selected_report.formulaire.113 < 0 %}({{ selected_report.formulaire.113|floatformat:2|slice:"1:" }}){% else %}{{ selected_report.formulaire.113|floatformat:2 }}{% endif %} $</span>
+                <span class="formulaire-boite">{{ selected_report.formulaire.113|accounting_amount }} $</span>
             </td>
             <td>
                 <span class="formulaire-label">213 - TVQ nette</span>
-                <span class="formulaire-boite">{% if selected_report.formulaire.213 < 0 %}({{ selected_report.formulaire.213|floatformat:2|slice:"1:" }}){% else %}{{ selected_report.formulaire.213|floatformat:2 }}{% endif %} $</span>
+                <span class="formulaire-boite">{{ selected_report.formulaire.213|accounting_amount }} $</span>
             </td>
         </tr>
         <tr>
@@ -98,7 +99,7 @@
             <td></td>
             <td>
                 <span class="formulaire-label">300 - Solde {% if selected_report.solde_300 < 0 %}à payer{% else %}à réclamer{% endif %}</span>
-                <span class="formulaire-boite">{% if selected_report.solde_300 < 0 %}({{ selected_report.solde_300|floatformat:2|slice:"1:" }}){% else %}{{ selected_report.solde_300|floatformat:2 }}{% endif %} $</span>
+                <span class="formulaire-boite">{{ selected_report.solde_300|accounting_amount }} $</span>
             </td>
         </tr>
     </table>
@@ -168,16 +169,16 @@
                                 <td>{{ row.compagnie_nom }}</td>
                                 <td>{{ row.facture }}</td>
                                 <td class="montant">
-                                    {% if row.tps_percue is not None %}{{ row.tps_percue|floatformat:2 }}{% endif %}
+                                    {% if row.tps_percue is not None %}{{ row.tps_percue|montant }}{% endif %}
                                 </td>
                                 <td class="montant">
-                                    {% if row.tps_payee is not None %}{{ row.tps_payee|floatformat:2 }}{% endif %}
+                                    {% if row.tps_payee is not None %}{{ row.tps_payee|montant }}{% endif %}
                                 </td>
                                 <td class="montant">
-                                    {% if row.tvq_percue is not None %}{{ row.tvq_percue|floatformat:2 }}{% endif %}
+                                    {% if row.tvq_percue is not None %}{{ row.tvq_percue|montant }}{% endif %}
                                 </td>
                                 <td class="montant">
-                                    {% if row.tvq_payee is not None %}{{ row.tvq_payee|floatformat:2 }}{% endif %}
+                                    {% if row.tvq_payee is not None %}{{ row.tvq_payee|montant }}{% endif %}
                                 </td>
                             </tr>
                         {% empty %}
@@ -190,11 +191,7 @@
                         <tr>
                             <td colspan="3" class="text-end">TPS nette</td>
                             <td colspan="2" class="montant">
-                                {% if selected_report.tax_blocks.TPS.solde_a_reclamer < 0 %}
-                                    ({{ selected_report.tax_blocks.TPS.solde_a_reclamer|floatformat:2|slice:"1:" }})
-                                {% else %}
-                                    {{ selected_report.tax_blocks.TPS.solde_a_reclamer|floatformat:2 }}
-                                {% endif %}
+                                {{ selected_report.tax_blocks.TPS.solde_a_reclamer|accounting_amount }}
                             </td>
                             <td colspan="2"></td>
                         </tr>
@@ -202,11 +199,7 @@
                             <td colspan="3" class="text-end">TVQ nette</td>
                             <td colspan="2"></td>
                             <td colspan="2" class="montant">
-                                {% if selected_report.tax_blocks.TVQ.solde_a_reclamer < 0 %}
-                                    ({{ selected_report.tax_blocks.TVQ.solde_a_reclamer|floatformat:2|slice:"1:" }})
-                                {% else %}
-                                    {{ selected_report.tax_blocks.TVQ.solde_a_reclamer|floatformat:2 }}
-                                {% endif %}
+                                {{ selected_report.tax_blocks.TVQ.solde_a_reclamer|accounting_amount }}
                             </td>
                         </tr>
                         <tr>
@@ -214,11 +207,7 @@
                                 {% if selected_report.formulaire.300 < 0 %}Total à payer{% else %}Total à réclamer{% endif %}
                             </td>
                             <td colspan="4" class="montant">
-                                {% if selected_report.formulaire.300 < 0 %}
-                                    ({{ selected_report.formulaire.300|floatformat:2|slice:"1:" }})
-                                {% else %}
-                                    {{ selected_report.formulaire.300|floatformat:2 }}
-                                {% endif %}
+                                {{ selected_report.formulaire.300|accounting_amount }}
                             </td>
                         </tr>
                     </tfoot>

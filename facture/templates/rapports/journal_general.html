@@ -1,5 +1,6 @@
 {% extends "layouts/app_base.html" %}
 {% load static %}
+{% load facture_extras %}
 
 {% block title %} {{ title }} {% endblock %}
 
@@ -69,13 +70,13 @@
 
             <td class="text-end text-nowrap font-monospace">
                 {% if detail.debit %}
-                    {{ detail.debit|floatformat:2 }}
+                    {{ detail.debit|montant }}
                 {% endif %}
             </td>
 
             <td class="text-end text-nowrap font-monospace">
                 {% if detail.credit %}
-                    {{ detail.credit|floatformat:2 }}
+                    {{ detail.credit|montant }}
                 {% endif %}
             </td>
         </tr>
@@ -103,8 +104,8 @@
             <tbody>
                 <tr>
                     <th>Totaux généraux</th>
-                    <th class="text-end text-nowrap font-monospace">{{ total_debit|floatformat:2 }}</th>
-                    <th class="text-end text-nowrap font-monospace">{{ total_credit|floatformat:2 }}</th>
+                    <th class="text-end text-nowrap font-monospace">{{ total_debit|montant }}</th>
+                    <th class="text-end text-nowrap font-monospace">{{ total_credit|montant }}</th>
                 </tr>
             </tbody>
         </table>

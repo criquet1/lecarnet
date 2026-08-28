@@ -1,4 +1,5 @@
 {% extends "layouts/app_base.html" %}
+{% load facture_extras %}
 
 {% block title %} {{ title }} {% endblock %}
 
@@ -32,13 +33,13 @@
                     <tr>
                         <td>{{ ligne.compte.numero }}</td>
                         <td>{{ ligne.compte.libelle }}</td>
-                        <td class="text-end">{{ ligne.montant|floatformat:2 }}</td>
+                        <td class="text-end">{{ ligne.montant|accounting_amount }}</td>
                     </tr>
                 {% endfor %}
                 {% if revenus|length > 1 %}
                     <tr class="table-light">
                         <th colspan="2" class="text-end">Sous-total {{ categorie }}</th>
-                        <th class="text-end">{{ groupe.sous_total|floatformat:2 }}</th>
+                        <th class="text-end">{{ groupe.sous_total|accounting_amount }}</th>
                     </tr>
                 {% endif %}
             {% empty %}
@@ -50,7 +51,7 @@
         <tfoot>
             <tr>
                 <th colspan="2" class="text-end">Total des revenus</th>
-                <th class="text-end">{{ total_revenus|floatformat:2 }}</th>
+                <th class="text-end">{{ total_revenus|accounting_amount }}</th>
             </tr>
         </tfoot>
     </table>
@@ -70,13 +71,13 @@
                     <tr>
                         <td>{{ ligne.compte.numero }}</td>
                         <td>{{ ligne.compte.libelle }}</td>
-                        <td class="text-end">{{ ligne.montant|floatformat:2 }}</td>
+                        <td class="text-end">{{ ligne.montant|accounting_amount }}</td>
                     </tr>
                 {% endfor %}
                 {% if depenses|length > 1 %}
                     <tr class="table-light">
                         <th colspan="2" class="text-end">Sous-total {{ categorie }}</th>
-                        <th class="text-end">{{ groupe.sous_total|floatformat:2 }}</th>
+                        <th class="text-end">{{ groupe.sous_total|accounting_amount }}</th>
                     </tr>
                 {% endif %}
             {% empty %}
@@ -88,7 +89,7 @@
         <tfoot>
             <tr>
                 <th colspan="2" class="text-end">Total des dépenses</th>
-                <th class="text-end">{{ total_depenses|floatformat:2 }}</th>
+                <th class="text-end">{{ total_depenses|accounting_amount }}</th>
             </tr>
         </tfoot>
     </table>
@@ -100,7 +101,7 @@
             <tr>
                 <th class="text-end">{% if resultat_net >= 0 %}Bénéfice net{% else %}Perte nette{% endif %}</th>
                 <th class="text-end {% if resultat_net >= 0 %}text-success{% else %}text-danger{% endif %}">
-                    {{ resultat_net|floatformat:2 }}
+                    {{ resultat_net|accounting_amount }}
                 </th>
             </tr>
         </tfoot>

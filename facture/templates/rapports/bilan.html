@@ -1,4 +1,5 @@
 {% extends "layouts/app_base.html" %}
+{% load facture_extras %}
 
 {% block title %} {{ title }} {% endblock %}
 
@@ -32,13 +33,13 @@
                     <tr>
                         <td>{{ ligne.compte.numero }}</td>
                         <td>{{ ligne.compte.libelle }}</td>
-                        <td class="text-end">{{ ligne.montant|floatformat:2 }}</td>
+                        <td class="text-end">{{ ligne.montant|accounting_amount }}</td>
                     </tr>
                 {% endfor %}
                 {% if actif|length > 1 %}
                     <tr class="table-light">
                         <th colspan="2" class="text-end">Sous-total {{ categorie }}</th>
-                        <th class="text-end">{{ groupe.sous_total|floatformat:2 }}</th>
+                        <th class="text-end">{{ groupe.sous_total|accounting_amount }}</th>
                     </tr>
                 {% endif %}
             {% empty %}
@@ -50,7 +51,7 @@
         <tfoot>
             <tr>
                 <th colspan="2" class="text-end">Total de l'actif</th>
-                <th class="text-end">{{ total_actif|floatformat:2 }}</th>
+                <th class="text-end">{{ total_actif|accounting_amount }}</th>
             </tr>
         </tfoot>
     </table>
@@ -70,13 +71,13 @@
                     <tr>
                         <td>{{ ligne.compte.numero }}</td>
                         <td>{{ ligne.compte.libelle }}</td>
-                        <td class="text-end">{{ ligne.montant|floatformat:2 }}</td>
+                        <td class="text-end">{{ ligne.montant|accounting_amount }}</td>
                     </tr>
                 {% endfor %}
                 {% if passif|length > 1 %}
                     <tr class="table-light">
                         <th colspan="2" class="text-end">Sous-total {{ categorie }}</th>
-                        <th class="text-end">{{ groupe.sous_total|floatformat:2 }}</th>
+                        <th class="text-end">{{ groupe.sous_total|accounting_amount }}</th>
                     </tr>
                 {% endif %}
             {% empty %}
@@ -88,7 +89,7 @@
         <tfoot>
             <tr>
                 <th colspan="2" class="text-end">Total du passif</th>
-                <th class="text-end">{{ total_passif|floatformat:2 }}</th>
+                <th class="text-end">{{ total_passif|accounting_amount }}</th>
             </tr>
         </tfoot>
     </table>
@@ -108,13 +109,13 @@
                     <tr>
                         <td>{{ ligne.compte.numero }}</td>
                         <td>{{ ligne.compte.libelle }}</td>
-                        <td class="text-end">{{ ligne.montant|floatformat:2 }}</td>
+                        <td class="text-end">{{ ligne.montant|accounting_amount }}</td>
                     </tr>
                 {% endfor %}
                 {% if avoir|length > 1 %}
                     <tr class="table-light">
                         <th colspan="2" class="text-end">Sous-total {{ categorie }}</th>
-                        <th class="text-end">{{ groupe.sous_total|floatformat:2 }}</th>
+                        <th class="text-end">{{ groupe.sous_total|accounting_amount }}</th>
                     </tr>
                 {% endif %}
             {% empty %}
@@ -126,11 +127,11 @@
         <tfoot>
             <tr>
                 <th colspan="2" class="text-end">Total de l'avoir</th>
-                <th class="text-end">{{ total_avoir|floatformat:2 }}</th>
+                <th class="text-end">{{ total_avoir|accounting_amount }}</th>
             </tr>
             <tr>
                 <th colspan="2" class="text-end">Total du passif et de l'avoir</th>
-                <th class="text-end">{{ total_passif_avoir|floatformat:2 }}</th>
+                <th class="text-end">{{ total_passif_avoir|accounting_amount }}</th>
             </tr>
         </tfoot>
     </table>
