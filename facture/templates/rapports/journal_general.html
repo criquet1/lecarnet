@@ -47,15 +47,9 @@
                         {% if entry.compagnie %}{{ entry.compagnie }}{% if entry.description %} - {% endif %}{% endif %}{{ entry.description|default:"" }}
                     {% endif %}
                 </span>
-                <span class="ms-auto text-end d-flex align-items-center gap-3">
-                    <span><strong>Source :</strong> {{ entry.source|default:"" }}</span>
-                    {% if entry.tr_desc_id and can_edit_journal %}
-                        <form method="post" action="{% url 'transaction_delete' entry.tr_desc_id %}" class="no-print m-0"
-                              onsubmit="return confirm('Supprimer définitivement l\'écriture {{ entry.no_ej }} ?');">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-sm btn-link text-danger p-0" title="Supprimer cette écriture">Supprimer</button>
-                        </form>
-                    {% endif %}
+                <span class="ms-auto text-end">
+                    <strong>Source :</strong>
+                    {{ entry.source|default:"" }}
                 </span>
             </div>
 
