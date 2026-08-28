@@ -279,7 +279,7 @@ def compte_page(request):
 		if compte_comptable_id:
 			compte_comptable = Compte.objects.filter(pk=compte_comptable_id).first()
 			if not compte_comptable:
-				return JsonResponse({'ok': False, 'error': 'Compte comptable introuvable.'}, status=404)
+				return JsonResponse({'ok': False, 'error': 'Compte de grand livre introuvable.'}, status=404)
 
 		releve_account.compte_comptable = compte_comptable
 		releve_account.save(update_fields=['compte_comptable'])
@@ -1085,7 +1085,7 @@ def transactions_page(request):
 
 				compte_numero = _parse_compte_numero(compte_raw)
 				if not compte_numero:
-					messages.error(request, f'Ligne {idx + 1}: compte comptable invalide (format attendu: 1234).')
+					messages.error(request, f'Ligne {idx + 1}: compte de grand livre invalide (format attendu: 1234).')
 					return _render_transactions_page()
 
 				try:

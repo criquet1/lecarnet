@@ -1405,7 +1405,9 @@ def bilan(request):
 @xframe_options_sameorigin
 def compte_a_payer(request):
     settings_instance = get_setting()
-    context = build_compte_mode_context(MODE_CAP, settings_instance)
+    working_period = get_working_period(request)
+    exercice = exercice_pour_working_period(working_period)
+    context = build_compte_mode_context(MODE_CAP, settings_instance, exercice=exercice)
     context['title'] = "Comptes à payer"
     return render(request, "rapports/compte_mode.html", context)
 
@@ -1414,7 +1416,9 @@ def compte_a_payer(request):
 @xframe_options_sameorigin
 def compte_a_recevoir(request):
     settings_instance = get_setting()
-    context = build_compte_mode_context(MODE_CAR, settings_instance)
+    working_period = get_working_period(request)
+    exercice = exercice_pour_working_period(working_period)
+    context = build_compte_mode_context(MODE_CAR, settings_instance, exercice=exercice)
     context['title'] = "Comptes à recevoir"
     return render(request, "rapports/compte_mode.html", context)
 
@@ -2129,7 +2133,7 @@ def releve_bancaire(request):
 
                 if not compte_lie:
                     errors.append(
-                        "Aucun compte comptable lié au compte de relevé. Configure `compte_comptable` sur ce compte de relevé."
+                        "Aucun compte de grand livre lié au compte de relevé. Configure `compte_comptable` sur ce compte de relevé."
                     )
 
                 if not errors and tr_desc_form.is_valid() and tr_detail_formset.is_valid():

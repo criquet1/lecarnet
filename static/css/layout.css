@@ -108,6 +108,7 @@ body.embedded-report .app-content {
   .app-topbar,
   .page-actions,
   .site-footer,
+  .reports-tabs,
   .no-print {
     display: none !important;
   }

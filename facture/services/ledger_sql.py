@@ -18,6 +18,23 @@ def fetch_compte_solde(compte_id):
     )
 
 
+def fetch_compte_solde_pour_exercice(compte_id, exercice_id):
+    """Solde d'un compte pour un exercice donne, calcule de la meme facon
+    que le Grand livre (fonction SQL solde_fin_pour_exercice)."""
+    if not compte_id or not exercice_id:
+        return Decimal('0')
+
+    db_alias = ledger_db_alias()
+    with connections[db_alias].cursor() as cursor:
+        cursor.execute(
+            "SELECT solde_final FROM solde_fin_pour_exercice(%s::bigint) WHERE compte_numero = %s",
+            [exercice_id, compte_id],
+        )
+        row = cursor.fetchone()
+
+    return coerce_decimal(row[0]) if row else Decimal('0')
+
+
 def fetch_compte_mode_blocks_from_sql_view(mode, compte_id, compagnies):
     db_alias = ledger_db_alias()
     query = """

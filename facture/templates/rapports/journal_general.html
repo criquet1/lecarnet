@@ -36,9 +36,9 @@
     {% for entry in journal_entries %}
         <div class="border rounded p-3 mb-3">
             <div class="d-flex align-items-center gap-3 flex-wrap mb-2">
-                <span>{{ entry.no_ej }}</span>
-                <span>{{ entry.date|date:"Y-m-d" }}</span>
-                <span>
+                <span class="fw-bold">{{ entry.no_ej }}</span>
+                <span class="fw-bold">{{ entry.date|date:"Y-m-d" }}</span>
+                <span class="fw-bold">
                     {% if entry.compagnie %}{{ entry.compagnie }}{% if entry.description %} - {% endif %}{% endif %}{{ entry.description|default:"" }}
                 </span>
                 <span class="ms-auto text-end">
