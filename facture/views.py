@@ -629,6 +629,7 @@ def journal_general(request):
     working_period = get_working_period(request)
     exercice = exercice_pour_working_period(working_period)
     context = build_journal_context(exercice)
+    context['can_edit_journal'] = is_expert(request.user)
     return render(request, "rapports/journal_general.html", context)
 
 

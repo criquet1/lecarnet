@@ -1,7 +1,7 @@
 from decimal import Decimal
 import re
 from types import SimpleNamespace
-from facture.models import TransactionListe, Client, Compte, Fournisseur
+from facture.models import TransactionListe, Client, Compte, Fournisseur, Tr_desc
 from facture.utils import get_setting
 from facture.helpers.dates import closing_date_label
 
@@ -35,8 +35,16 @@ def build_journal_context(exercice=None):
         total_debit += row.debit or Decimal('0')
         total_credit += row.credit or Decimal('0')
 
+    # Associer l'id de l'écriture (Tr_desc) pour permettre l'édition/suppression
+    tr_desc_ids_by_no_ej = dict(
+        Tr_desc.objects.filter(no_ej__in={entry.no_ej for entry in entries_by_no_ej.values()})
+        .values_list('no_ej', 'id')
+    )
+
     # Trier les détails dans chaque écriture
     journal_entries = list(entries_by_no_ej.values())
+    for entry in journal_entries:
+        entry.tr_desc_id = tr_desc_ids_by_no_ej.get(entry.no_ej)
     for entry in journal_entries:
         entry.details.sort(key=lambda detail: (
             detail.credit > 0,

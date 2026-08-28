@@ -1,0 +1,180 @@
+{% extends "layouts/app_base.html" %}
+{% load static %}
+
+{% block title %} {{ title }} {% endblock %}
+
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}Écriture {{ tr_desc.no_ej }}{% endblock %}
+
+{% block content %}
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-info">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="mx-auto" style="max-width: 840px;">
+
+<form method="post" action="{% url 'transaction_edit' tr_desc.pk %}">
+    {% csrf_token %}
+
+    <table class="table table-bordered table-sm align-middle">
+        <tbody>
+            <tr>
+                <td>
+                    <input id="date_select" name="date_select" type="date"
+                           class="form-control form-control-sm" required
+                           value="{{ tr_desc.date|date:'Y-m-d' }}">
+                </td>
+
+                <td>
+                    <select id="compagnie" name="compagnie"
+                            class="form-select form-select-sm">
+                        <option value="">Aucune compagnie</option>
+                        {% for compagnie in compagnies %}
+                            <option value="{{ compagnie.key }}" {% if compagnie.key == existing_compagnie_key %}selected{% endif %}>
+                                {{ compagnie.obj.nom }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </td>
+
+                <td>
+                    <input id="description" name="description" type="text"
+                           class="form-control form-control-sm"
+                           placeholder="Description" value="{{ tr_desc.desc_releve }}">
+                </td>
+
+                <td>
+                    <input id="source" name="source" type="text"
+                           class="form-control form-control-sm"
+                           placeholder="Source ex: Facture, banque, paie"
+                           value="{{ tr_desc.source.nom|default:'' }}">
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <table class="table table-striped table-sm" id="line-items-table">
+        <thead>
+            <tr>
+                <th style="width: 40%;">Compte</th>
+                <th style="width: 30%;" class="text-end">Débit</th>
+                <th style="width: 30%;" class="text-end">Crédit</th>
+            </tr>
+        </thead>
+
+        <tbody id="line-items">
+            {% for line in line_items %}
+            <tr class="line-item">
+                <td>
+                    <select id="compte_{{ forloop.counter }}" name="comptes_comptables[]"
+                            class="form-select form-select-sm">
+                        <option value="" {% if not line.compte_numero %}selected disabled{% endif %}>Choisir un compte</option>
+                        {% for compte in comptes %}
+                            <option value="{{ compte.numero }}"
+                                    data-requires-company="{% if compte.pk == compte_cap_id or compte.pk == compte_car_id %}1{% else %}0{% endif %}"
+                                    {% if compte.numero == line.compte_numero %}selected{% endif %}>
+                                {{ compte.numero }} - {{ compte.libelle }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </td>
+
+                <td>
+                    <input id="debit_{{ forloop.counter }}" name="montant_debit[]" type="text"
+                           class="form-control form-control-sm text-end"
+                           placeholder="0.00" value="{{ line.debit }}">
+                </td>
+
+                <td>
+                    <input id="credit_{{ forloop.counter }}" name="montant_credit[]" type="text"
+                           class="form-control form-control-sm text-end"
+                           placeholder="0.00" value="{{ line.credit }}">
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="mt-3 d-flex gap-2 justify-content-between">
+        <div class="d-flex gap-2">
+            <button type="button" id="add-line" class="btn btn-outline-secondary btn-sm">
+                Ajouter une ligne
+            </button>
+
+            <button type="submit" id="save-transaction" class="btn btn-primary btn-sm">
+                Enregistrer les modifications
+            </button>
+
+            <a href="{% url 'journal_general' %}" class="btn btn-outline-secondary btn-sm">Annuler</a>
+        </div>
+    </div>
+</form>
+
+<form method="post" action="{% url 'transaction_delete' tr_desc.pk %}"
+      onsubmit="return confirm('Supprimer définitivement l\'écriture {{ tr_desc.no_ej }} ? Cette action est irréversible.');"
+      class="mt-2">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-outline-danger btn-sm">
+        Supprimer cette écriture
+    </button>
+</form>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const lineItems = document.getElementById("line-items");
+    const addLineButton = document.getElementById("add-line");
+    const companySelect = document.getElementById("compagnie");
+    const firstSelect = lineItems.querySelector('select[name="comptes_comptables[]"]');
+    const comptesOptionsHtml = firstSelect ? firstSelect.innerHTML : '';
+    let rowIndex = {{ line_items|length }};
+
+    function syncCompanyRequirement() {
+        const accountSelects = lineItems.querySelectorAll('select[name="comptes_comptables[]"]');
+        const companyRequired = Array.from(accountSelects).some(function (select) {
+            const option = select.options[select.selectedIndex];
+            return option && option.dataset.requiresCompany === "1";
+        });
+
+        companySelect.required = companyRequired;
+    }
+
+    lineItems.addEventListener("change", function (event) {
+        if (event.target.matches('select[name="comptes_comptables[]"]')) {
+            syncCompanyRequirement();
+        }
+    });
+
+    addLineButton.addEventListener("click", function () {
+        rowIndex += 1;
+
+        const row = document.createElement("tr");
+        row.className = "line-item";
+        row.innerHTML = [
+            '<td>',
+            '  <select id="compte_' + rowIndex + '" name="comptes_comptables[]" class="form-select form-select-sm">' + comptesOptionsHtml + '</select>',
+            '</td>',
+            '<td>',
+            '  <input id="debit_' + rowIndex + '" name="montant_debit[]" type="text" class="form-control form-control-sm text-end" placeholder="0.00">',
+            '</td>',
+            '<td>',
+            '  <input id="credit_' + rowIndex + '" name="montant_credit[]" type="text" class="form-control form-control-sm text-end" placeholder="0.00">',
+            '</td>'
+        ].join('');
+
+        lineItems.appendChild(row);
+        syncCompanyRequirement();
+    });
+
+    syncCompanyRequirement();
+})();
+</script>
+{% endblock %}

@@ -13,4 +13,6 @@ urlpatterns = [
     path('totaux/', views.totaux_page, name='totaux'),
     path('feuille-de-travail/', views.feuille_de_travail_page, name='feuille_de_travail'),
     path('transactions/', views.transactions_page, name='transactions'),
+    path('transactions/<int:pk>/modifier/', views.transaction_edit_page, name='transaction_edit'),
+    path('transactions/<int:pk>/supprimer/', views.transaction_delete, name='transaction_delete'),
 ]
