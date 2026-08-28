@@ -1250,8 +1250,8 @@ def transaction_edit_page(request, pk):
 			montant = detail.montant
 			lines.append({
 				'compte_numero': detail.compte_id,
-				'debit': -montant if montant < 0 else '',
-				'credit': montant if montant > 0 else '',
+				'debit': montant if montant > 0 else '',
+				'credit': -montant if montant < 0 else '',
 			})
 		return lines
 
@@ -1344,10 +1344,10 @@ def transaction_edit_page(request, pk):
 
 			if debit_amount > 0:
 				total_debit += debit_amount
-				montant = -debit_amount
+				montant = debit_amount
 			else:
 				total_credit += credit_amount
-				montant = credit_amount
+				montant = -credit_amount
 
 			lines.append({'compte': compte, 'montant': montant})
 
