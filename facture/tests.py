@@ -398,7 +398,7 @@ class AccountingSqlViewsTests(TestCase):
 
 		token = set_current_tenant_alias(self.alias)
 		try:
-			with patch('facture.views.render', side_effect=capture_render):
+			with patch('facture.views_releve_bancaire.render', side_effect=capture_render):
 				response = releve_bancaire(request)
 		finally:
 			reset_current_tenant_alias(token)
@@ -741,7 +741,7 @@ class AccountingSqlViewsTests(TestCase):
 
 		token = set_current_tenant_alias(self.alias)
 		try:
-			with patch('facture.views.render', return_value=HttpResponse('ok')):
+			with patch('facture.views_rapports.render', return_value=HttpResponse('ok')):
 				response = rapport_de_taxes(request)
 		finally:
 			reset_current_tenant_alias(token)
@@ -1066,7 +1066,7 @@ class AccountingSqlViewsTests(TestCase):
 
 		token = set_current_tenant_alias(self.alias)
 		try:
-			with patch('facture.views.render', side_effect=capture_render):
+			with patch('facture.views_releve_bancaire.render', side_effect=capture_render):
 				response = releve_bancaire(request)
 		finally:
 			reset_current_tenant_alias(token)
@@ -1094,8 +1094,8 @@ class AccountingSqlViewsTests(TestCase):
 
 		token = set_current_tenant_alias(self.alias)
 		try:
-			with patch('facture.views._fetch_grand_livre_from_sql_view', side_effect=DatabaseError):
-				with patch('facture.views.render', side_effect=capture_render):
+			with patch('facture.views_rapports._fetch_grand_livre_from_sql_view', side_effect=DatabaseError):
+				with patch('facture.views_rapports.render', side_effect=capture_render):
 					response = grand_livre(RequestFactory().get('/grand-livre/'))
 		finally:
 			reset_current_tenant_alias(token)

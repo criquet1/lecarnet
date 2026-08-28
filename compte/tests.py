@@ -80,7 +80,7 @@ class TransactionsPageTests(TestCase):
 
 				token = set_current_tenant_alias(self.alias)
 				try:
-					with patch('compte.views.render', return_value=HttpResponse('invalid')):
+					with patch('compte.views_transactions.render', return_value=HttpResponse('invalid')):
 						response = transactions_page(request)
 				finally:
 					reset_current_tenant_alias(token)
