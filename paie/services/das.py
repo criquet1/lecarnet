@@ -269,6 +269,9 @@ def calculer_impot_federal(
 
     # T4127 Etape 3 (employes du Quebec) : T3 = (R x A) - K1 - K2Q - K4.
     # K (constante de palier) est deja gere par calculer_impot_tranches (calcul progressif).
+    # Les regles generales d'arrondissement du T4127 ne prescrivent l'arrondi que pour
+    # le resultat final de la retenue par periode, pas pour les etapes intermediaires ;
+    # on garde donc la pleine precision decimale jusqu'a la toute fin.
     taux_credit_federal = Decimal(taux_credit_federal)
     valeur_credit_k1 = credit_base_fed * taux_credit_federal
 
@@ -282,7 +285,9 @@ def calculer_impot_federal(
         Decimal(gains_assurables_rqap) * Decimal(taux_rqap_credit_federal) * p,
         Decimal(max_rqap_credit_federal),
     )
-    valeur_credit_k2 = (credit_rrq_base_annuel + credit_ae_annuel + credit_rqap_annuel) * taux_credit_federal
+    valeur_credit_k2 = (
+        (credit_rrq_base_annuel + credit_ae_annuel + credit_rqap_annuel) * taux_credit_federal
+    )
 
     valeur_credit_k4 = min(
         Decimal(revenu_annuel_estime),
@@ -294,11 +299,14 @@ def calculer_impot_federal(
     impot_fed_annuel_net = _positive_or_zero(
         impot_fed_annuel_brut - valeur_credit_k1 - valeur_credit_k2 - valeur_credit_k4
     )
-    impot_fed_periode = arrondir_monnaie(impot_fed_annuel_net / Decimal(periodes_par_annee))
+    # T4127 etape 3 (employes du Quebec) : T1 = (T3 - (P x LCF)) - (0,165 x T3).
+    # L'abattement s'applique au montant ANNUEL (T3) avant la division par le nombre
+    # de periodes, et non au montant deja divise/arrondi par periode.
     if appliquer_abattement_federal_quebec:
-        impot_fed_periode = _positive_or_zero(
-            impot_fed_periode * (Decimal("1.00") - Decimal(abattement_federal_quebec))
+        impot_fed_annuel_net = _positive_or_zero(
+            impot_fed_annuel_net * (Decimal("1.00") - Decimal(abattement_federal_quebec))
         )
+    impot_fed_periode = impot_fed_annuel_net / Decimal(periodes_par_annee)
     return arrondir_monnaie(impot_fed_periode)
 
 

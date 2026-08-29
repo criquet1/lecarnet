@@ -3,6 +3,7 @@ from datetime import date as date_type
 from datetime import timedelta
 from decimal import Decimal
 from decimal import InvalidOperation
+from decimal import ROUND_HALF_UP
 import re
 
 from django import forms
@@ -73,7 +74,7 @@ class EmployeForm(forms.ModelForm):
         self.fields['taux_vacances'].help_text = 'Saisir un pourcentage (ex.: 4 pour 4 %).'
 
         if self.instance and self.instance.pk and self.instance.taux_vacances is not None:
-            display_value = (Decimal(self.instance.taux_vacances) * Decimal('100')).quantize(Decimal('0.01'))
+            display_value = (Decimal(self.instance.taux_vacances) * Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             self.initial['taux_vacances'] = str(display_value)
 
         if not self.instance.pk:
@@ -112,7 +113,7 @@ class EmployeForm(forms.ModelForm):
         if hourly_rate <= 0:
             raise forms.ValidationError('Le taux horaire doit etre superieur a zero.')
 
-        return str(hourly_rate.quantize(Decimal('0.01')))
+        return str(hourly_rate.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
 
     def clean_taux_vacances(self):
         raw_value = (self.cleaned_data.get('taux_vacances') or '').strip()
@@ -130,7 +131,7 @@ class EmployeForm(forms.ModelForm):
         if value_percent > Decimal('100'):
             raise forms.ValidationError('Le taux de vacances ne peut pas depasser 100 %.')
 
-        return (value_percent / Decimal('100')).quantize(Decimal('0.00001'))
+        return (value_percent / Decimal('100')).quantize(Decimal('0.00001'), rounding=ROUND_HALF_UP)
 
 
 class PaieForm(forms.ModelForm):
@@ -623,7 +624,7 @@ class PaieForm(forms.ModelForm):
         salaire_brut += heures_supp * taux_horaire * Paie.TAUX_HEURES_SUPP
         salaire_brut += self._decimal_or_zero(cleaned_data.get('vacances_payees'))
         taux_vacances = self._decimal_or_zero(employe.taux_vacances)
-        cleaned_data['vacances'] = (salaire_brut * taux_vacances).quantize(Decimal('0.01'))
+        cleaned_data['vacances'] = (salaire_brut * taux_vacances).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         # J n'est pas le credit personnel de base TP-1015.
         # On le laisse a zero par defaut, sauf saisie explicite future.
         cleaned_data['deduction_tp1015_j'] = Decimal('0.00')

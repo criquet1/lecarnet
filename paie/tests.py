@@ -63,13 +63,16 @@ class DASTestCase(SimpleTestCase):
 			)
 		)
 
+		# Valeurs de reference confirmees avec le calculateur officiel d'impot.net
+		# (https://www.impot.net/fr/entreprises/das/) pour 1000.00$/periode, aux 2
+		# semaines, seul, assujetti AE et RRQ, annee 2026.
 		self.assertEqual(resultat.rqap, Decimal('4.30'))
 		self.assertEqual(resultat.rrq, Decimal('54.52'))
 		self.assertEqual(resultat.ae, Decimal('13.00'))
 		self.assertEqual(resultat.impot_federal, Decimal('27.79'))
-		self.assertEqual(resultat.impot_provincial, Decimal('30.14'))
-		self.assertEqual(resultat.total_retenues, Decimal('129.75'))
-		self.assertEqual(resultat.salaire_net, Decimal('870.25'))
+		self.assertEqual(resultat.impot_provincial, Decimal('28.93'))
+		self.assertEqual(resultat.total_retenues, Decimal('128.54'))
+		self.assertEqual(resultat.salaire_net, Decimal('871.46'))
 
 	def test_rrq_apres_mga_applique_le_taux_supplementaire_2(self):
 		rrq = calculer_rrq(
@@ -144,7 +147,40 @@ class DASTestCase(SimpleTestCase):
 
 
 class PaieModelTestCase(TestCase):
+	def setUp(self):
+		Setting.objects.using('default').all().delete()
+		Setting.objects.using('default').create(
+			nom='Parametres test paie',
+			adresse='Adresse',
+			ville='Ville',
+			code_postal='A1A1A1',
+			pays='CA',
+			phone='000-000-0000',
+			email='test@example.com',
+			taux_fss_employeur=Decimal('0.02000'),
+			taux_cnesst_employeur=Decimal('0.02319'),
+		)
+
+	def _creer_parametres_taux_paie_defaut(self):
+		return ParametresTauxPaie.objects.using('default').create(
+			rrq_date_debut_effet=date(2026, 1, 1),
+			taux_rrq_employe=Decimal('6.30000'),
+			taux_rrq_supplementaire_2_employe=Decimal('4.00000'),
+			taux_rrq_employeur=Decimal('6.30000'),
+			exemption_base_rrq=Decimal('3500.00'),
+			max_assurable_rrq=Decimal('74600.00'),
+			max_supplementaire_rrq=Decimal('85200.00'),
+			rqap_date_debut_effet=date(2026, 1, 1),
+			taux_rqap_employe=Decimal('0.43000'),
+			taux_rqap_employeur=Decimal('0.60200'),
+			max_assurable_rqap=Decimal('103000.00'),
+			ae_date_debut_effet=date(2026, 1, 1),
+			taux_ae_employe=Decimal('1.30000'),
+			taux_ae_employeur=Decimal('1.82000'),
+			max_assurable_ae=Decimal('68900.00'),
+		)
 	def test_saisie_paie_redirige_vers_onglet_journal(self):
+		self._creer_parametres_taux_paie_defaut()
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.HEBDOMADAIRE,
 			nom='Hebdomadaire',
@@ -177,6 +213,7 @@ class PaieModelTestCase(TestCase):
 		self.assertEqual(response.url, f"{reverse('paie:paie_journal')}?employe={employe.pk}")
 
 	def test_saisie_paie_embarquee_redirige_vers_journal_embarque(self):
+		self._creer_parametres_taux_paie_defaut()
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.HEBDOMADAIRE,
 			nom='Hebdomadaire',
@@ -283,20 +320,20 @@ class PaieModelTestCase(TestCase):
 		)
 		ParametresTauxPaie.objects.using('default').create(
 			rrq_date_debut_effet=date(2026, 1, 1),
-			taux_rrq_employe=Decimal('0.06300'),
-			taux_rrq_supplementaire_2_employe=Decimal('0.04000'),
-			taux_rrq_employeur=Decimal('0.06300'),
+			taux_rrq_employe=Decimal('6.30000'),
+			taux_rrq_supplementaire_2_employe=Decimal('4.00000'),
+			taux_rrq_employeur=Decimal('6.30000'),
 			exemption_base_rrq=Decimal('3500.00'),
 			max_assurable_rrq=Decimal('74600.00'),
-			max_supplementaire_rrq=Decimal('85000.00'),
+			max_supplementaire_rrq=Decimal('85200.00'),
 			rqap_date_debut_effet=date(2026, 1, 1),
-			taux_rqap_employe=Decimal('0.00430'),
-			taux_rqap_employeur=Decimal('0.00692'),
-			max_assurable_rqap=Decimal('98700.00'),
+			taux_rqap_employe=Decimal('0.43000'),
+			taux_rqap_employeur=Decimal('0.60200'),
+			max_assurable_rqap=Decimal('103000.00'),
 			ae_date_debut_effet=date(2026, 1, 1),
-			taux_ae_employe=Decimal('0.01300'),
-			taux_ae_employeur=Decimal('0.01820'),
-			max_assurable_ae=Decimal('67500.00'),
+			taux_ae_employe=Decimal('1.30000'),
+			taux_ae_employeur=Decimal('1.82000'),
+			max_assurable_ae=Decimal('68900.00'),
 		)
 
 		employe = Employe.objects.create(
@@ -546,6 +583,7 @@ class PaieModelTestCase(TestCase):
 		self.assertEqual(totals['rrq_employeur'], paie.rrq)
 
 	def test_paie_utilise_les_donnees_employe_et_le_service_das(self):
+		self._creer_parametres_taux_paie_defaut()
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.AUX_2_SEMAINES,
 			nom='Aux 2 semaines',
@@ -572,10 +610,11 @@ class PaieModelTestCase(TestCase):
 
 		self.assertEqual(paie.taux_horaire, Decimal('25.00'))
 		self.assertEqual(paie.salaire_brut_periode, Decimal('1000.00'))
-		self.assertEqual(paie.total_retenues, Decimal('129.75'))
-		self.assertEqual(paie.salaire_net, Decimal('870.25'))
+		self.assertEqual(paie.total_retenues, Decimal('128.54'))
+		self.assertEqual(paie.salaire_net, Decimal('871.46'))
 
 	def test_paie_inclut_les_heures_supplementaires_a_temps_et_demi(self):
+		self._creer_parametres_taux_paie_defaut()
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.AUX_2_SEMAINES,
 			nom='Aux 2 semaines',
@@ -604,6 +643,7 @@ class PaieModelTestCase(TestCase):
 		self.assertEqual(paie.salaire_brut_periode, Decimal('860.00'))
 
 	def test_formulaire_paie_enregistre_heures_supp_et_vacances(self):
+		self._creer_parametres_taux_paie_defaut()
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.HEBDOMADAIRE,
 			nom='Hebdomadaire',
@@ -637,6 +677,7 @@ class PaieModelTestCase(TestCase):
 		self.assertEqual(paie.vacances, Decimal('34.40'))
 
 	def test_paie_cumule_les_retenues_des_paies_precedentes(self):
+		self._creer_parametres_taux_paie_defaut()
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.HEBDOMADAIRE,
 			nom='Hebdomadaire',
@@ -671,10 +712,11 @@ class PaieModelTestCase(TestCase):
 			heures_travaillees=Decimal('10.00'),
 		)
 
-		self.assertEqual(premiere_paie.rrq, Decimal('5111.56'))
+		self.assertEqual(premiere_paie.rrq, Decimal('5119.56'))
 		self.assertEqual(seconde_paie.rrq, Decimal('0.00'))
 
 	def test_cumuls_annuels_suivent_annee_de_date_paie(self):
+		self._creer_parametres_taux_paie_defaut()
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.HEBDOMADAIRE,
 			nom='Hebdomadaire',
@@ -711,10 +753,11 @@ class PaieModelTestCase(TestCase):
 			heures_travaillees=Decimal('10.00'),
 		)
 
-		self.assertEqual(premiere_paie.rrq, Decimal('5111.56'))
+		self.assertEqual(premiere_paie.rrq, Decimal('5119.56'))
 		self.assertEqual(seconde_paie.rrq, Decimal('0.00'))
 
 	def test_save_sans_modification_ne_recalcule_pas_les_montants(self):
+		self._creer_parametres_taux_paie_defaut()
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.AUX_2_SEMAINES,
 			nom='Aux 2 semaines',
@@ -745,6 +788,7 @@ class PaieModelTestCase(TestCase):
 		recalculer_mock.assert_not_called()
 
 	def test_save_avec_modification_recalcule_les_montants(self):
+		self._creer_parametres_taux_paie_defaut()
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.AUX_2_SEMAINES,
 			nom='Aux 2 semaines',
@@ -776,6 +820,7 @@ class PaieModelTestCase(TestCase):
 		recalculer_mock.assert_called_once()
 
 	def test_saisie_paie_utilise_la_prochaine_periode_disponible(self):
+		self._creer_parametres_taux_paie_defaut()
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.AUX_2_SEMAINES,
 			nom='Aux 2 semaines',
@@ -823,6 +868,7 @@ class PaieModelTestCase(TestCase):
 		self.assertEqual(paie.deduction_tp1016_j1, Decimal('0.00'))
 
 	def test_saisie_paie_force_j_et_j1_a_zero(self):
+		self._creer_parametres_taux_paie_defaut()
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.HEBDOMADAIRE,
 			nom='Hebdomadaire',
@@ -875,6 +921,7 @@ class PaieModelTestCase(TestCase):
 		self.assertIn('Aucune periode de paie disponible', erreur)
 
 	def test_prochaine_periode_projette_la_suivante_si_toutes_utilisees(self):
+		self._creer_parametres_taux_paie_defaut()
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.AUX_2_SEMAINES,
 			nom='Aux 2 semaines',
@@ -916,6 +963,7 @@ class PaieModelTestCase(TestCase):
 			nom='Aux 2 semaines',
 			nombre_periodes_par_annee=26,
 		)
+		Setting.objects.using('default').all().delete()
 		Setting.objects.create(
 			nom='Parametres test',
 			logo='images.png',
@@ -1050,6 +1098,36 @@ class PaieEcritureSalairePermissionTestCase(TestCase):
 	def setUp(self):
 		self.factory = RequestFactory()
 		self.user_model = get_user_model()
+
+		Setting.objects.using('default').all().delete()
+		Setting.objects.using('default').create(
+			nom='Parametres test paie',
+			adresse='Adresse',
+			ville='Ville',
+			code_postal='A1A1A1',
+			pays='CA',
+			phone='000-000-0000',
+			email='test@example.com',
+			taux_fss_employeur=Decimal('0.02000'),
+			taux_cnesst_employeur=Decimal('0.02319'),
+		)
+		ParametresTauxPaie.objects.using('default').create(
+			rrq_date_debut_effet=date(2026, 1, 1),
+			taux_rrq_employe=Decimal('6.30000'),
+			taux_rrq_supplementaire_2_employe=Decimal('4.00000'),
+			taux_rrq_employeur=Decimal('6.30000'),
+			exemption_base_rrq=Decimal('3500.00'),
+			max_assurable_rrq=Decimal('74600.00'),
+			max_supplementaire_rrq=Decimal('85200.00'),
+			rqap_date_debut_effet=date(2026, 1, 1),
+			taux_rqap_employe=Decimal('0.43000'),
+			taux_rqap_employeur=Decimal('0.60200'),
+			max_assurable_rqap=Decimal('103000.00'),
+			ae_date_debut_effet=date(2026, 1, 1),
+			taux_ae_employe=Decimal('1.30000'),
+			taux_ae_employeur=Decimal('1.82000'),
+			max_assurable_ae=Decimal('68900.00'),
+		)
 
 	def test_utilisateur_ordinaire_ne_peut_pas_creer_ecriture_salaire(self):
 		user = self.user_model.objects.create_user(username='employe-paie', password='pass1234')
@@ -1235,6 +1313,24 @@ class PaieEcritureSalaireTestCase(TestCase):
 			taux_cnesst_employeur=Decimal('0.02319'),
 		)
 
+		ParametresTauxPaie.objects.using('default').create(
+			rrq_date_debut_effet=date(2026, 1, 1),
+			taux_rrq_employe=Decimal('6.30000'),
+			taux_rrq_supplementaire_2_employe=Decimal('4.00000'),
+			taux_rrq_employeur=Decimal('6.30000'),
+			exemption_base_rrq=Decimal('3500.00'),
+			max_assurable_rrq=Decimal('74600.00'),
+			max_supplementaire_rrq=Decimal('85200.00'),
+			rqap_date_debut_effet=date(2026, 1, 1),
+			taux_rqap_employe=Decimal('0.43000'),
+			taux_rqap_employeur=Decimal('0.60200'),
+			max_assurable_rqap=Decimal('103000.00'),
+			ae_date_debut_effet=date(2026, 1, 1),
+			taux_ae_employe=Decimal('1.30000'),
+			taux_ae_employeur=Decimal('1.82000'),
+			max_assurable_ae=Decimal('68900.00'),
+		)
+
 		frequence = FrequencePaie.objects.create(
 			code=FrequencePaie.AUX_2_SEMAINES,
 			nom='Aux 2 semaines',
@@ -1244,7 +1340,7 @@ class PaieEcritureSalaireTestCase(TestCase):
 			nom='Tremblay',
 			prenom='Nina',
 			date_embauche='2026-01-01',
-			salH='0.00',
+			salH='25.00',
 			frequence_paie=frequence,
 		)
 		self.periode = PeriodePaie.objects.create(
@@ -1253,10 +1349,14 @@ class PaieEcritureSalaireTestCase(TestCase):
 			date_fin='2026-01-14',
 			date_paie='2026-01-16',
 		)
+		# Taux horaire et heures reels (et non 0.00) pour que recalculer() calcule
+		# aussi les cotisations employeur (rrq_employeur, rqap_employeur, etc.)
+		# a partir d'un salaire brut reel, plutot que de rester a 0.00.
 		paie = Paie.objects.create(
 			employe=employe,
 			periode=self.periode,
-			heures_travaillees=Decimal('0.00'),
+			heures_travaillees=Decimal('80.00'),
+			vacances_payees=Decimal('300.00'),
 		)
 		self.paie_id = paie.pk
 
@@ -1302,10 +1402,10 @@ class PaieEcritureSalaireTestCase(TestCase):
 		self.assertEqual(by_compte[self.compte_salaire.numero], Decimal('2000.00'))
 		self.assertEqual(by_compte[self.compte_vacances.numero], Decimal('112.00'))
 		self.assertEqual(by_compte[self.compte_vacances_a_payer.numero], Decimal('188.00'))
-		self.assertEqual(by_compte[self.compte_benefices.numero], Decimal('240.72'))
+		self.assertEqual(by_compte[self.compte_benefices.numero], Decimal('291.47'))
 		self.assertEqual(by_compte[self.compte_salaires_a_payer.numero], Decimal('-2022.84'))
-		self.assertEqual(by_compte[self.compte_das_fed.numero], Decimal('-127.34'))
-		self.assertEqual(by_compte[self.compte_das_prov.numero], Decimal('-390.54'))
+		self.assertEqual(by_compte[self.compte_das_fed.numero], Decimal('-129.20'))
+		self.assertEqual(by_compte[self.compte_das_prov.numero], Decimal('-439.43'))
 
 		total = sum((detail.montant for detail in details), Decimal('0.00'))
 		self.assertEqual(total, Decimal('0.00'))
