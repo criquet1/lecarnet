@@ -51,7 +51,16 @@ class CompteCsvImportForm(forms.Form):
 
 
 class SettingForm(forms.ModelForm):
-    logo = forms.ChoiceField(label="Logo", required=True)
+    logo = forms.ChoiceField(label="Logo generique", required=True)
+    logo_prive = forms.ImageField(
+        label="Logo prive (televerse)",
+        required=False,
+        help_text=(
+            "Facultatif. Si rempli, remplace le logo generique ci-dessus. Stocke dans la base "
+            "de donnees de ce tenant -- visible seulement par ses utilisateurs."
+        ),
+    )
+    logo_prive_effacer = forms.BooleanField(label="Retirer le logo prive actuel", required=False)
     fin_annee_jour = forms.TypedChoiceField(label="Jour", required=False, coerce=int, empty_value=None)
     fin_annee_mois = forms.TypedChoiceField(label="Mois", required=False, coerce=int, empty_value=None)
     fin_annee_jour_semaine = forms.TypedChoiceField(
@@ -156,6 +165,10 @@ class SettingForm(forms.ModelForm):
 
         self.fields['logo'].choices = [(name, name) for name in logo_files]
         self.fields['logo'].help_text = "Fichier pris depuis static/images/logos"
+        if self.instance and self.instance.pk and self.instance.logo_prive:
+            self.fields['logo_prive'].help_text += " Un logo prive est deja enregistre ; televerse un fichier pour le remplacer."
+        else:
+            self.fields.pop('logo_prive_effacer', None)
         self.fields['fin_annee_jour'].choices = [('', '--')] + self.DAY_CHOICES
         self.fields['fin_annee_mois'].choices = [('', '--')] + self.MONTH_CHOICES
         self.fields['fin_annee_jour_semaine'].choices = [('', "-- Date fixe --")] + WEEKDAY_CHOICES_FR
@@ -251,6 +264,13 @@ class SettingForm(forms.ModelForm):
     def save(self, commit=True):
         instance = super().save(commit=False)
         instance.comptes_paie_autres = self.cleaned_data.get('comptes_paie_autres', [])
+        uploaded = self.cleaned_data.get('logo_prive')
+        if uploaded:
+            instance.logo_prive = uploaded.read()
+            instance.logo_prive_type = getattr(uploaded, 'content_type', None) or 'image/png'
+        elif self.cleaned_data.get('logo_prive_effacer'):
+            instance.logo_prive = None
+            instance.logo_prive_type = None
         if commit:
             instance.save()
             self.save_m2m()

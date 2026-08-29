@@ -97,6 +97,18 @@ class Setting(models.Model):
         default='images.png',
         help_text="Nom du fichier logo dans static/images/logos (ex: images.png)."
     )
+    logo_prive = models.BinaryField(
+        blank=True,
+        null=True,
+        editable=True,
+        help_text="Logo prive televerse pour ce tenant, stocke dans sa base de donnees. Prioritaire sur le champ Logo ci-dessus si rempli."
+    )
+    logo_prive_type = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Type MIME du logo prive (ex: image/png), utilise pour le servir correctement."
+    )
     adresse = models.CharField(max_length=60, blank=False, null=False)
     ville = models.CharField(max_length=255, blank=False, null=False)
     code_postal = models.CharField(max_length=60, blank=False, null=False)
@@ -280,6 +292,17 @@ class Setting(models.Model):
 
     def __str__(self):
         return self.nom
+
+    @property
+    def logo_display_url(self):
+        """URL du logo a afficher : le logo prive televerse s'il existe
+        (sert via une vue dediee, car stocke en base plutot que sur disque),
+        sinon le logo generique choisi dans static/images/logos."""
+        if self.logo_prive:
+            from django.urls import reverse
+            return reverse('logo_prive_setting', args=[self.pk])
+        from django.templatetags.static import static
+        return static(f'images/logos/{self.logo}')
 
 
 class ExerciceFinancier(models.Model):

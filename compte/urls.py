@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path('', views.compte_page, name='compte'),
     path('settings/', views.settings_page, name='settings'),
+    path('logo-prive/<int:pk>/', views.logo_prive_setting, name='logo_prive_setting'),
     path('creer-tenant/', views.creer_tenant_page, name='creer_tenant'),
     path('assistant-demarrage/', views.assistant_demarrage_list_page, name='assistant_demarrage_list'),
     path('assistant-demarrage/<int:client_id>/', views.assistant_demarrage_page, name='assistant_demarrage'),

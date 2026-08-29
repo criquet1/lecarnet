@@ -16,7 +16,7 @@ from tenancy.models import ClientDatabase
 from tenancy.services import mark_user_must_change_password, user_must_change_password
 
 from .forms import CompteCsvImportForm, CompteForm, SettingForm
-from .models import Compte, SoldeAuxLivres, Total
+from .models import Compte, Setting, SoldeAuxLivres, Total
 
 from compte.views_tenant_setup import (
     assistant_demarrage_list_page,
@@ -383,6 +383,23 @@ def compte_page(request):
 	})
 
 
+@login_required
+def logo_prive_setting(request, pk):
+    """Sert le logo prive du Setting (image du tenant) stocke en base.
+
+    Comme pour logo_prive_client/logo_prive_fournisseur : le routeur
+    multi-tenant filtre automatiquement Setting.objects sur la base du
+    tenant actif, donc un utilisateur d'un autre tenant obtient un 404.
+    """
+    from django.http import Http404, HttpResponse
+    from django.shortcuts import get_object_or_404
+
+    setting = get_object_or_404(Setting, pk=pk)
+    if not setting.logo_prive:
+        raise Http404("Aucun logo prive pour ce tenant.")
+    return HttpResponse(bytes(setting.logo_prive), content_type=setting.logo_prive_type or 'image/png')
+
+
 @expert_required
 def settings_page(request):
 	from paie.models import FrequencePaie
@@ -391,7 +408,7 @@ def settings_page(request):
 	onboarding_client_id = (request.POST.get('onboarding') or request.GET.get('onboarding') or '').strip()
 
 	if request.method == 'POST':
-		form = SettingForm(request.POST, instance=settings_instance)
+		form = SettingForm(request.POST, request.FILES, instance=settings_instance)
 		if form.is_valid():
 			settings_instance = form.save()
 			ensure_tax_authority_companies(settings_instance)

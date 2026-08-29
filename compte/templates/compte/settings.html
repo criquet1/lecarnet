@@ -16,7 +16,7 @@
 {% endif %}
 
 
-<form method="post" class="row g-4">
+<form method="post" class="row g-4" enctype="multipart/form-data">
     {% csrf_token %}
     {% if onboarding_client %}<input type="hidden" name="onboarding" value="{{ onboarding_client.id }}">{% endif %}
     {{ form.non_field_errors }}
@@ -32,30 +32,48 @@
                         <td>{{ form.nom }}{{ form.nom.errors }}</td>
                     </tr>
                     <tr>
-                        <th><label for="{{ form.logo.id_for_label }}">Logo</label></th>
+                        <th><label for="{{ form.logo.id_for_label }}">Logo generique</label></th>
                         <td>
-                            <div class="row g-3">
-                                <div class="col-md-8">
-                                    <select class="form-select" id="{{ form.logo.id_for_label }}" name="logo" onchange="updateLogoPreview()">
-                                        <option value="">-- Choisir un logo --</option>
-                                        {% for value, label in form.logo.field.choices %}
-                                            {% if value %}
-                                                <option value="{{ value }}" {% if form.logo.value == value %}selected{% endif %}>{{ label }}</option>
-                                            {% endif %}
-                                        {% endfor %}
-                                    </select>
-                                    {% if form.logo.help_text %}<div class="form-text">{{ form.logo.help_text }}</div>{% endif %}
-                                    {{ form.logo.errors }}
+                            <select class="form-select" id="{{ form.logo.id_for_label }}" name="logo" onchange="updateLogoPreview()">
+                                <option value="">-- Choisir un logo --</option>
+                                {% for value, label in form.logo.field.choices %}
+                                    {% if value %}
+                                        <option value="{{ value }}" {% if form.logo.value == value %}selected{% endif %}>{{ label }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                            {% if form.logo.help_text %}<div class="form-text">{{ form.logo.help_text }}</div>{% endif %}
+                            {{ form.logo.errors }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="{{ form.logo_prive.id_for_label }}">Logo prive (televerse)</label></th>
+                        <td>
+                            {{ form.logo_prive }}
+                            {% if form.logo_prive.help_text %}<div class="form-text">{{ form.logo_prive.help_text }}</div>{% endif %}
+                            {{ form.logo_prive.errors }}
+                            {% if form.logo_prive_effacer %}
+                                <div class="form-check mt-2">
+                                    {{ form.logo_prive_effacer }}
+                                    <label class="form-check-label" for="{{ form.logo_prive_effacer.id_for_label }}">
+                                        {{ form.logo_prive_effacer.label }}
+                                    </label>
                                 </div>
-                                <div class="col-md-4">
-                                    <div id="logo_preview">
-                                        {% if form.logo.value %}
-                                            <img src="/static/images/logos/{{ form.logo.value }}" alt="Logo" class="img-thumbnail" style="max-width: 150px; max-height: 150px;">
-                                        {% else %}
-                                            <div class="text-muted">Aucun logo sélectionné</div>
-                                        {% endif %}
-                                    </div>
-                                </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Apercu</th>
+                        <td>
+                            <div id="logo_preview">
+                                {% if site_settings.logo_prive %}
+                                    <img src="{{ site_settings.logo_display_url }}" alt="Logo" class="img-thumbnail" style="max-width: 150px; max-height: 150px;">
+                                    <div class="form-text">Logo prive actif (remplace le logo generique).</div>
+                                {% elif form.logo.value %}
+                                    <img src="/static/images/logos/{{ form.logo.value }}" alt="Logo" class="img-thumbnail" style="max-width: 150px; max-height: 150px;">
+                                {% else %}
+                                    <div class="text-muted">Aucun logo sélectionné</div>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -312,10 +330,13 @@
 </form>
 
 <script>
-function updateLogoPreview() {
+var hasStoredLogoPrive = {% if site_settings.logo_prive %}true{% else %}false{% endif %};
+var storedLogoPriveUrl = {% if site_settings.logo_prive %}"{{ site_settings.logo_display_url }}"{% else %}""{% endif %};
+
+function showGenericLogoPreview() {
     const selectElement = document.getElementById('id_logo');
     const previewDiv = document.getElementById('logo_preview');
-    const selectedValue = selectElement.value;
+    const selectedValue = selectElement ? selectElement.value : '';
 
     if (selectedValue) {
         previewDiv.innerHTML = `<img src="/static/images/logos/${selectedValue}" alt="Logo" class="img-thumbnail" style="max-width: 150px; max-height: 150px;">`;
@@ -323,6 +344,54 @@ function updateLogoPreview() {
         previewDiv.innerHTML = '<div class="text-muted">Aucun logo sélectionné</div>';
     }
 }
+
+function updateLogoPreview() {
+    const previewDiv = document.getElementById('logo_preview');
+    const fileInput = document.getElementById('id_logo_prive');
+    const clearCheckbox = document.getElementById('id_logo_prive_effacer');
+
+    // Un nouveau fichier vient d'etre choisi : on l'affiche immediatement,
+    // avant meme l'enregistrement, puisque c'est lui qui sera utilise.
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function (event) {
+            previewDiv.innerHTML =
+                `<img src="${event.target.result}" alt="Logo prive" class="img-thumbnail" style="max-width: 150px; max-height: 150px;">` +
+                '<div class="form-text">Nouveau logo prive (sera enregistre).</div>';
+        };
+        reader.readAsDataURL(fileInput.files[0]);
+        return;
+    }
+
+    // Case "retirer le logo prive" cochee : apres enregistrement, c'est le
+    // logo generique qui redeviendra actif.
+    if (clearCheckbox && clearCheckbox.checked) {
+        showGenericLogoPreview();
+        return;
+    }
+
+    // Un logo prive est deja enregistre : il est prioritaire sur le
+    // generique, peu importe le choix fait dans la liste deroulante.
+    if (hasStoredLogoPrive) {
+        previewDiv.innerHTML =
+            `<img src="${storedLogoPriveUrl}" alt="Logo prive" class="img-thumbnail" style="max-width: 150px; max-height: 150px;">` +
+            '<div class="form-text">Logo prive actif (remplace le logo generique).</div>';
+        return;
+    }
+
+    showGenericLogoPreview();
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const filePrive = document.getElementById('id_logo_prive');
+    const effacerPrive = document.getElementById('id_logo_prive_effacer');
+    if (filePrive) {
+        filePrive.addEventListener('change', updateLogoPreview);
+    }
+    if (effacerPrive) {
+        effacerPrive.addEventListener('change', updateLogoPreview);
+    }
+});
 
 function addPaieAutreRow(selectedValue = '') {
     const tbody = document.getElementById('paie-tbody');
