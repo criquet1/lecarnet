@@ -6,11 +6,11 @@ from django.forms import formset_factory
 from .constants import MONTH_CHOICES_FR
 from .models import Cheque, Tr_desc, Client, Fournisseur
 from compte.models import Setting
-from .utils import get_available_logos
+from .utils import get_available_logos, is_expert
 
 
 class ClientForm(forms.ModelForm):
-    logo = forms.ChoiceField(label="Logo", required=True)
+    logo = forms.ChoiceField(label="Logo", required=False)
 
     class Meta:
         model = Client
@@ -25,16 +25,23 @@ class ClientForm(forms.ModelForm):
             ),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         logo_files = get_available_logos()
 
-        self.fields['logo'].choices = [(name, name) for name in logo_files]
-        self.fields['logo'].help_text = "Fichier pris depuis static/images/logos"
+        self.fields['logo'].choices = [('', 'Par defaut (images.png)')] + [(name, name) for name in logo_files]
+        self.fields['logo'].help_text = "Fichier pris depuis static/images/logos. Laisse vide pour images.png."
+        # Le choix de compte(s) n'est obligatoire que pour un utilisateur expert :
+        # un non-expert peut creer la compagnie sans le remplir, l'expert le
+        # completera lors de sa verification (voir le jaune sur la carte).
+        self.fields['comptes'].required = bool(user and is_expert(user))
+
+    def clean_logo(self):
+        return self.cleaned_data.get('logo') or 'images.png'
 
 
 class FournisseurForm(forms.ModelForm):
-    logo = forms.ChoiceField(label="Logo", required=True)
+    logo = forms.ChoiceField(label="Logo", required=False)
 
     class Meta:
         model = Fournisseur
@@ -49,12 +56,19 @@ class FournisseurForm(forms.ModelForm):
             ),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         logo_files = get_available_logos()
 
-        self.fields['logo'].choices = [(name, name) for name in logo_files]
-        self.fields['logo'].help_text = "Fichier pris depuis static/images/logos"
+        self.fields['logo'].choices = [('', 'Par defaut (images.png)')] + [(name, name) for name in logo_files]
+        self.fields['logo'].help_text = "Fichier pris depuis static/images/logos. Laisse vide pour images.png."
+        # Le choix de compte(s) n'est obligatoire que pour un utilisateur expert :
+        # un non-expert peut creer la compagnie sans le remplir, l'expert le
+        # completera lors de sa verification (voir le jaune sur la carte).
+        self.fields['comptes'].required = bool(user and is_expert(user))
+
+    def clean_logo(self):
+        return self.cleaned_data.get('logo') or 'images.png'
 
 
 class SettingForm(forms.ModelForm):

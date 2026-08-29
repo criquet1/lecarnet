@@ -260,6 +260,7 @@ def _serialize_invoice(tr):
         'noteDeCredit': bool(tr.note_de_credit),
         'total': f"{display_total:.2f}",
         'details': details,
+        'compteModifieParNonExpert': bool(tr.compte_modifie_par_non_expert),
     }
 
 
@@ -270,12 +271,78 @@ def _parse_facture_total(raw_value):
     return _money(value)
 
 
+def _migrer_compagnie_vers_autre_type(old_company, old_type, new_company):
+    """Deplace les factures, cheques et le solde de depart de old_company vers
+    new_company. Sert quand un expert corrige le type (Client <-> Fournisseur)
+    d'une compagnie qu'un non-expert a creee par erreur dans la mauvaise table.
+
+    Corrige aussi, sur les factures deplacees, le compte de contrepartie
+    (CAP/CAR) et les comptes de taxes (percues cote client, payees cote
+    fournisseur) pour que le journal general et le grand livre restent
+    coherents avec le nouveau type -- sinon les ecritures resteraient
+    comptabilisees sous l'ancien compte meme si la carte affiche le bon type.
+    """
+    old_type_field = old_type
+    new_type_field = 'fournisseur' if old_type == 'client' else 'client'
+
+    tr_desc_ids = list(
+        Tr_desc.objects.filter(**{old_type_field: old_company}).values_list('pk', flat=True)
+    )
+    if Tr_detail.objects.filter(
+        tr_desc_id__in=tr_desc_ids,
+        rapport_taxes__transmis_le__isnull=False,
+    ).exists():
+        raise ValidationError(
+            "Cette compagnie a des factures rattachees a un rapport de taxes deja "
+            "transmis. Le type ne peut pas etre corrige tant que ce rapport n'est "
+            "pas rouvert -- les ecritures deja transmises ne doivent pas bouger."
+        )
+
+    Tr_desc.objects.filter(**{old_type_field: old_company}).update(**{old_type_field: None, new_type_field: new_company})
+    Cheque.objects.filter(**{old_type_field: old_company}).update(**{old_type_field: None, new_type_field: new_company})
+    CompagnieSoldeDepart.objects.filter(**{old_type_field: old_company}).update(**{old_type_field: None, new_type_field: new_company})
+
+    # Le compte clients (CAR) est debiteur et le compte fournisseurs (CAP) est
+    # crediteur : les memes montants s'inscrivent avec un signe oppose selon le
+    # mode. Comme toutes les lignes changent de camp, on inverse le signe de
+    # chaque ligne de facture deplacee (y compris les lignes de taxes et le
+    # compte de contrepartie), pas seulement le numero de compte utilise.
+    Tr_detail.objects.filter(tr_desc_id__in=tr_desc_ids).update(montant=-F('montant'))
+
+    settings_instance = Setting.objects.first()
+    if settings_instance:
+        if old_type == 'fournisseur':
+            # fournisseur (CAP, taxes payees) -> client (CAR, taxes percues)
+            account_swaps = [
+                (settings_instance.cap_id, settings_instance.car_id),
+                (settings_instance.compte_tps_payee_id, settings_instance.compte_tps_percue_id),
+                (settings_instance.compte_tvq_payee_id, settings_instance.compte_tvq_percue_id),
+            ]
+        else:
+            # client (CAR, taxes percues) -> fournisseur (CAP, taxes payees)
+            account_swaps = [
+                (settings_instance.car_id, settings_instance.cap_id),
+                (settings_instance.compte_tps_percue_id, settings_instance.compte_tps_payee_id),
+                (settings_instance.compte_tvq_percue_id, settings_instance.compte_tvq_payee_id),
+            ]
+
+        for old_compte_id, new_compte_id in account_swaps:
+            if not old_compte_id or not new_compte_id:
+                continue
+            Tr_detail.objects.filter(**{
+                f'tr_desc__{new_type_field}': new_company,
+                'compte_id': old_compte_id,
+            }).update(compte_id=new_compte_id)
+
+    old_company.delete()
+
+
 def facture(request):
     title = "Facture"
     company_type = (request.POST.get('company_type') or 'client').strip().lower()
     company_form_class = FournisseurForm if company_type == 'fournisseur' else ClientForm
     company_model_class = Fournisseur if company_type == 'fournisseur' else Client
-    company_form = company_form_class(request.POST or None, prefix='company')
+    company_form = company_form_class(request.POST or None, prefix='company', user=request.user)
     settings_instance = Setting.objects.select_related(
         'compte_tps_percue',
         'compte_tps_payee',
@@ -414,7 +481,10 @@ def facture(request):
         action = request.POST.get('action')
 
         if action == 'add_company':
-            if company_form.is_valid():
+            raw_company_type = (request.POST.get('company_type') or '').strip().lower()
+            if raw_company_type not in ('client', 'fournisseur'):
+                company_form.add_error(None, "Choisis un type de compagnie (Client ou Fournisseur) avant d'enregistrer.")
+            elif company_form.is_valid():
                 company = company_form.save(commit=False)
                 company.created_by_non_expert = not is_expert(request.user)
                 company.save()
@@ -424,20 +494,58 @@ def facture(request):
 
         elif action == 'edit_company':
             company_id = (request.POST.get('company_id') or '').strip()
-            company = company_model_class.objects.filter(pk=company_id).first()
-            company_form = company_form_class(request.POST, prefix='company', instance=company)
+            existing_client = Client.objects.filter(pk=company_id).first()
+            existing_fournisseur = Fournisseur.objects.filter(pk=company_id).first()
+            current_company = existing_client or existing_fournisseur
+            current_type = 'client' if existing_client else ('fournisseur' if existing_fournisseur else '')
             company_modal_action = 'edit_company'
             editing_company_id = company_id
+            type_is_changing = bool(current_company) and current_type != company_type
 
-            if not company:
+            if not current_company:
+                company_form = company_form_class(request.POST, prefix='company', user=request.user)
                 company_form.add_error(None, "Compagnie introuvable.")
-            elif company_form.is_valid():
-                company = company_form.save(commit=False)
-                company.save()
-                company_form.save_m2m()
-                return redirect('facture')
+                open_company_modal = True
+            elif type_is_changing and not is_expert(request.user):
+                company_form = company_form_class(request.POST, prefix='company', user=request.user)
+                company_form.add_error(
+                    None,
+                    "Seul un compte expert peut corriger le type (Client / Fournisseur) d'une compagnie existante."
+                )
+                open_company_modal = True
+            else:
+                # Si le type ne change pas, on modifie l'enregistrement existant.
+                # S'il change, Client et Fournisseur etant deux tables separees,
+                # on cree un nouvel enregistrement dans l'autre table et on y
+                # deplace les factures, cheques et solde de depart avant de
+                # supprimer l'ancien (voir _migrer_compagnie_vers_autre_type).
+                company_form = company_form_class(
+                    request.POST,
+                    prefix='company',
+                    instance=(current_company if not type_is_changing else None),
+                    user=request.user,
+                )
 
-            open_company_modal = True
+                if company_form.is_valid():
+                    try:
+                        with transaction.atomic():
+                            new_company = company_form.save(commit=False)
+                            # Un expert qui enregistre est considere comme ayant
+                            # verifie la compagnie : le jaune "a faire verifier" disparait.
+                            if is_expert(request.user):
+                                new_company.created_by_non_expert = False
+                            new_company.save()
+                            company_form.save_m2m()
+
+                            if type_is_changing:
+                                _migrer_compagnie_vers_autre_type(current_company, current_type, new_company)
+                    except ValidationError as exc:
+                        company_form.add_error(None, exc.message if hasattr(exc, 'message') else str(exc))
+                        open_company_modal = True
+                    else:
+                        return redirect('facture')
+                else:
+                    open_company_modal = True
 
         elif action == 'delete_tr_desc':
             selected_company_id = request.POST.get('selected_company_id', '')
@@ -590,6 +698,28 @@ def facture(request):
                         tr_desc.no_ej = _next_no_ej(tr_desc.date)
                     if not tr_desc.source_id:
                         tr_desc.source = source_facture
+
+                    # Signale les factures ou un utilisateur non-expert a choisi un
+                    # compte different de celui propose par defaut pour la compagnie,
+                    # ou a ajoute une ligne de compte supplementaire (bouton "+ ligne"),
+                    # afin que le comptable puisse les reperer facilement (voir le
+                    # "check" jaune sur la carte de la compagnie).
+                    company_key = f"{selected_company_type}:{selected_company.pk}"
+                    comptes_attendus = companies_comptes.get(company_key, [])
+                    expected_compte_ids = {c['id'] for c in comptes_attendus}
+                    lignes_non_forcees = [
+                        (compte, montant) for compte, montant in detail_rows
+                        if not forced_compte or compte.pk != forced_compte.pk
+                    ]
+                    has_compte_inattendu = any(
+                        compte.pk not in expected_compte_ids
+                        for compte, _montant in lignes_non_forcees
+                    )
+                    has_ligne_ajoutee = len(lignes_non_forcees) > len(comptes_attendus)
+                    tr_desc.compte_modifie_par_non_expert = (
+                        (has_compte_inattendu or has_ligne_ajoutee) and not is_expert(request.user)
+                    )
+
                     tr_desc.save()
 
                     if editing_tr_desc:
@@ -664,6 +794,7 @@ def facture(request):
         'compte_tps_payee_id': settings_instance.compte_tps_payee_id if settings_instance and settings_instance.compte_tps_payee_id else 0,
         'compte_tvq_payee_id': settings_instance.compte_tvq_payee_id if settings_instance and settings_instance.compte_tvq_payee_id else 0,
         'compte_fr_retard_id': settings_instance.compte_fr_retard_id if settings_instance and settings_instance.compte_fr_retard_id else 0,
+        'is_expert_user': is_expert(request.user),
     })
 
 

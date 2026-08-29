@@ -18,6 +18,7 @@
 
 
 <input type="hidden" id="filter-period" value="{{ working_period.value }}">
+<input type="hidden" id="is-expert-user" value="{{ is_expert_user|yesno:'1,0' }}">
 <input type="hidden" id="open-company-modal" value="{{ open_company_modal|yesno:'1,0' }}">
 
 <!-- Modal compagnie -->
@@ -36,7 +37,8 @@
 
                     <div class="mb-3">
                         <label for="company_type" class="form-label">Type</label>
-                        <select name="company_type" id="company_type" class="form-select">
+                        <select name="company_type" id="company_type" class="form-select" required>
+                            <option value="" selected disabled>Choisir un type</option>
                             <option value="client">Client</option>
                             <option value="fournisseur">Fournisseur</option>
                         </select>
@@ -62,18 +64,21 @@
         {% for item in cards %}
             {% with compagnie=item.obj %}
             <div class="col-md-3">
-                <div class="card h-100" role="button" data-bs-toggle="modal" data-bs-target="#invoiceModal" data-company-id="{{ compagnie.id }}" data-company-type="{{ item.type }}" data-company-name="{{ compagnie.nom|escape }}" data-company-mode="{% if item.type == 'fournisseur' %}CAP{% else %}CAR{% endif %}" data-company-created-by-non-expert="{{ compagnie.created_by_non_expert|yesno:'1,0' }}" data-company-active="{{ compagnie.active|yesno:'1,0' }}" data-company-logo="{% if compagnie.logo %}{% static 'images/logos/'|add:compagnie.logo %}{% endif %}" data-company-logo-name="{{ compagnie.logo|escape }}" data-company-accounts="{% for compte in compagnie.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
+                <div class="card h-100{% if compagnie.created_by_non_expert %} border-warning border-2{% endif %}" role="button" data-bs-toggle="modal" data-bs-target="#invoiceModal" data-company-id="{{ compagnie.id }}" data-company-type="{{ item.type }}" data-company-name="{{ compagnie.nom|escape }}" data-company-mode="{% if item.type == 'fournisseur' %}CAP{% else %}CAR{% endif %}" data-company-created-by-non-expert="{{ compagnie.created_by_non_expert|yesno:'1,0' }}" data-company-active="{{ compagnie.active|yesno:'1,0' }}" data-company-logo="{% if compagnie.logo %}{% static 'images/logos/'|add:compagnie.logo %}{% endif %}" data-company-logo-name="{{ compagnie.logo|escape }}" data-company-accounts="{% for compte in compagnie.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
                     {% if compagnie.logo %}
                         <img src="{% static 'images/logos/'|add:compagnie.logo %}" class="company-logo" alt="Logo de {{ compagnie.nom }}" style="width:100px;height:100px;object-fit:contain;display:block;margin:0 auto 1rem;">
                     {% endif %}
                     <div class="card-body">
                         <h5 class="card-title">
-                            <span class="company-check text-success me-2" data-company-id="{{ compagnie.id }}" data-company-type="{{ item.type }}" style="display:none;"><i class="bi bi-check-circle-fill fs-4"></i></span>{{ compagnie.nom }}
+                            <span class="company-check me-2" data-company-id="{{ compagnie.id }}" data-company-type="{{ item.type }}" style="display:none;"><i class="bi bi-check-circle-fill fs-4"></i></span>{% if compagnie.created_by_non_expert %}<i class="bi bi-exclamation-triangle-fill text-warning me-1" title="Compagnie ajoutée sans l'aide d'un comptable : à faire vérifier." data-bs-toggle="tooltip"></i>{% endif %}{{ compagnie.nom }}
                         </h5>
                         {% if compagnie.active %}
                             <span class="badge bg-success">Active</span>
                         {% else %}
                             <span class="badge bg-secondary">Non active</span>
+                        {% endif %}
+                        {% if compagnie.created_by_non_expert %}
+                            <span class="badge bg-warning text-dark">À faire vérifier</span>
                         {% endif %}
                     </div>
                 </div>
@@ -121,7 +126,7 @@
                             data-company-logo-name="{{ item.obj.logo|escape }}"
                             data-company-accounts="{% for compte in item.obj.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}"
                             title="Créer une facture pour {{ item.obj.nom|escape }}">
-                            {{ item.obj.nom }}
+                            {% if item.obj.created_by_non_expert %}<i class="bi bi-exclamation-triangle-fill text-warning me-1" title="Compagnie ajoutée sans l'aide d'un comptable : à faire vérifier."></i>{% endif %}{{ item.obj.nom }}
                         </button>
                     </td>
                     <td>{% if item.type == 'fournisseur' %}Fournisseur{% else %}Client{% endif %}</td>
@@ -266,6 +271,8 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             var filterPeriod = document.getElementById('filter-period');
+            var isExpertUserInput = document.getElementById('is-expert-user');
+            var isExpertUser = !!(isExpertUserInput && isExpertUserInput.value === '1');
             var shouldOpenCompanyModal = document.getElementById('open-company-modal');
             var companyModal = document.getElementById('exampleModal');
             var companyForm = document.getElementById('company-form');
@@ -302,7 +309,7 @@
                     companyModeInput.value = isEdit ? trigger.getAttribute('data-company-mode') || '' : '';
                 }
                 if (companyTypeSelect) {
-                    companyTypeSelect.value = isEdit ? (trigger.getAttribute('data-company-type') || 'client') : 'client';
+                    companyTypeSelect.value = isEdit ? (trigger.getAttribute('data-company-type') || 'client') : '';
                 }
                 if (companyAccountsInput) {
                     var selectedAccountIds = isEdit
@@ -340,10 +347,22 @@
                     var companyType = checks[i].getAttribute('data-company-type') || 'client';
                     var companyKey = companyType + ':' + companyId;
                     var factures = companiesFactures[companyKey] || [];
-                    var hasFacture = factures.some(function (f) {
+                    var facturesDuMois = factures.filter(function (f) {
                         return f.date.substring(0, 7) === period;
                     });
+                    var hasFacture = facturesDuMois.length > 0;
+                    // Le check reste vert par defaut. S'il y a au moins une facture du mois
+                    // pour laquelle un utilisateur non-expert a change le compte propose,
+                    // le check passe en jaune pour signaler au comptable de la verifier.
+                    var aUnCompteAVerifier = facturesDuMois.some(function (f) {
+                        return !!f.compteModifieParNonExpert;
+                    });
 
+                    checks[i].classList.remove('text-success', 'text-warning');
+                    checks[i].classList.add(aUnCompteAVerifier ? 'text-warning' : 'text-success');
+                    checks[i].title = aUnCompteAVerifier
+                        ? 'Compte modifié par un utilisateur : à faire vérifier.'
+                        : '';
                     checks[i].style.display = hasFacture ? '' : 'none';
                 }
             }
@@ -821,12 +840,14 @@
 
                         if (select) {
                             fillCompteSelect(select, allComptes);
-                            select.style.display = 'none';
                             select.value = rowCompteId;
+                            // Un expert peut corriger le compte d'une ligne existante ;
+                            // pour un non-expert, il reste fige en texte simple.
+                            select.style.display = isExpertUser ? '' : 'none';
                         }
 
                         if (label && !label.textContent.trim()) {
-                            label.style.display = '';
+                            label.style.display = isExpertUser ? 'none' : '';
                             label.textContent = matchedDetail.compteLabel || '\u00a0';
                         }
 
@@ -1249,11 +1270,14 @@
                         if (rowConfig) {
                             input.value = rowConfig.id || '';
                             if (select) {
-                                select.style.display = 'none';
+                                // Un expert peut corriger le compte d'une ligne
+                                // preexistante ; pour un non-expert, il reste
+                                // fige en texte simple (voir aussi applyInvoiceDetailsToForm).
+                                select.style.display = isExpertUser ? '' : 'none';
                                 select.value = String(rowConfig.id || '');
                             }
                             if (label) {
-                                label.style.display = '';
+                                label.style.display = isExpertUser ? 'none' : '';
                                 label.textContent = rowConfig.label;
                             }
                         } else {

@@ -58,6 +58,10 @@ class Tr_desc(models.Model):
     desc_ctb = models.CharField(max_length=40, blank=True, null=True)
     note_de_credit = models.BooleanField(default=False)
     source = models.ForeignKey(Source, on_delete=models.CASCADE, related_name='tr_desc', blank=True, null=True)
+    compte_modifie_par_non_expert = models.BooleanField(
+        default=False,
+        help_text="Vrai si un utilisateur non-expert a choisi un compte different de celui propose par defaut pour cette facture.",
+    )
 
     class Meta:
         indexes = [
