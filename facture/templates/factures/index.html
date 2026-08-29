@@ -64,9 +64,9 @@
         {% for item in cards %}
             {% with compagnie=item.obj %}
             <div class="col-md-3">
-                <div class="card h-100{% if compagnie.created_by_non_expert %} border-warning border-2{% endif %}" role="button" data-bs-toggle="modal" data-bs-target="#invoiceModal" data-company-id="{{ compagnie.id }}" data-company-type="{{ item.type }}" data-company-name="{{ compagnie.nom|escape }}" data-company-mode="{% if item.type == 'fournisseur' %}CAP{% else %}CAR{% endif %}" data-company-created-by-non-expert="{{ compagnie.created_by_non_expert|yesno:'1,0' }}" data-company-active="{{ compagnie.active|yesno:'1,0' }}" data-company-logo="{% if compagnie.logo %}{% static 'images/logos/'|add:compagnie.logo %}{% endif %}" data-company-logo-name="{{ compagnie.logo|escape }}" data-company-accounts="{% for compte in compagnie.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
+                <div class="card h-100{% if compagnie.created_by_non_expert %} border-warning border-2{% endif %}" role="button" data-bs-toggle="modal" data-bs-target="#invoiceModal" data-company-id="{{ compagnie.id }}" data-company-type="{{ item.type }}" data-company-name="{{ compagnie.nom|escape }}" data-company-mode="{% if item.type == 'fournisseur' %}CAP{% else %}CAR{% endif %}" data-company-created-by-non-expert="{{ compagnie.created_by_non_expert|yesno:'1,0' }}" data-company-active="{{ compagnie.active|yesno:'1,0' }}" data-company-logo="{{ compagnie.logo_display_url }}" data-company-logo-name="{{ compagnie.logo|escape }}" data-company-accounts="{% for compte in compagnie.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
                     {% if compagnie.logo %}
-                        <img src="{% static 'images/logos/'|add:compagnie.logo %}" class="company-logo" alt="Logo de {{ compagnie.nom }}" style="width:100px;height:100px;object-fit:contain;display:block;margin:0 auto 1rem;">
+                        <img src="{{ compagnie.logo_display_url }}" class="company-logo" alt="Logo de {{ compagnie.nom }}" style="width:100px;height:100px;object-fit:contain;display:block;margin:0 auto 1rem;">
                     {% endif %}
                     <div class="card-body">
                         <h5 class="card-title">
@@ -122,7 +122,7 @@
                             data-company-mode="{% if item.type == 'fournisseur' %}CAP{% else %}CAR{% endif %}"
                             data-company-created-by-non-expert="{{ item.obj.created_by_non_expert|yesno:'1,0' }}"
                             data-company-active="{{ item.obj.active|yesno:'1,0' }}"
-                            data-company-logo="{% if item.obj.logo %}{% static 'images/logos/'|add:item.obj.logo %}{% endif %}"
+                            data-company-logo="{{ item.obj.logo_display_url }}"
                             data-company-logo-name="{{ item.obj.logo|escape }}"
                             data-company-accounts="{% for compte in item.obj.comptes.all %}{{ compte.id }}{% if not forloop.last %},{% endif %}{% endfor %}"
                             title="Créer une facture pour {{ item.obj.nom|escape }}">

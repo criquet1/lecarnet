@@ -14,6 +14,8 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.http import HttpResponse
 from django.urls import include, path
@@ -30,3 +32,9 @@ urlpatterns = [
     path('paie/', include('paie.urls')),
     path('', include('facture.urls')),
 ]
+
+if settings.DEBUG:
+    # En local seulement : sert les fichiers de media/ (logos prives, etc.).
+    # En production, whitenoise ne sert que static/ -- voir le chantier
+    # "logos par tenant" pour la vue protegee prevue pour la prod.
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -54,6 +54,15 @@ class Client(models.Model):
     def __str__(self):
         return self.nom
 
+    @property
+    def logo_display_url(self):
+        """URL du logo a afficher : le logo prive televerse s'il existe,
+        sinon le logo generique choisi dans static/images/logos."""
+        if self.logo_prive:
+            return self.logo_prive.url
+        from django.templatetags.static import static
+        return static(f'images/logos/{self.logo}')
+
 
 class Fournisseur(models.Model):
     nom = models.CharField(max_length=60, blank=False, null=False)
@@ -77,6 +86,15 @@ class Fournisseur(models.Model):
 
     def __str__(self):
         return self.nom
+
+    @property
+    def logo_display_url(self):
+        """URL du logo a afficher : le logo prive televerse s'il existe,
+        sinon le logo generique choisi dans static/images/logos."""
+        if self.logo_prive:
+            return self.logo_prive.url
+        from django.templatetags.static import static
+        return static(f'images/logos/{self.logo}')
 
 
 class Tr_desc(models.Model):

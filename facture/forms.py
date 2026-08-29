@@ -10,15 +10,20 @@ from .utils import get_available_logos, is_expert
 
 
 class ClientForm(forms.ModelForm):
-    logo = forms.ChoiceField(label="Logo", required=False)
+    logo = forms.ChoiceField(label="Logo generique", required=False)
 
     class Meta:
         model = Client
-        fields = ['nom', 'logo', 'comptes', 'active', 'afficher_card']
+        fields = ['nom', 'logo', 'logo_prive', 'comptes', 'active', 'afficher_card']
         labels = {
+            'logo_prive': "Logo prive (televerse)",
             'afficher_card': "Afficher sur la page d'accueil",
         }
         help_texts = {
+            'logo_prive': (
+                "Facultatif. Si rempli, remplace le logo generique ci-dessus. Visible seulement "
+                "par les utilisateurs de ce tenant."
+            ),
             'afficher_card': (
                 "Decoche pour un client occasionnel (facture seulement 1 ou 2 fois par annee, par exemple) : "
                 "il n'apparaitra plus en carte, mais restera facturable depuis « Gerer les compagnies »."
@@ -41,15 +46,20 @@ class ClientForm(forms.ModelForm):
 
 
 class FournisseurForm(forms.ModelForm):
-    logo = forms.ChoiceField(label="Logo", required=False)
+    logo = forms.ChoiceField(label="Logo generique", required=False)
 
     class Meta:
         model = Fournisseur
-        fields = ['nom', 'logo', 'comptes', 'active', 'afficher_card']
+        fields = ['nom', 'logo', 'logo_prive', 'comptes', 'active', 'afficher_card']
         labels = {
+            'logo_prive': "Logo prive (televerse)",
             'afficher_card': "Afficher sur la page d'accueil",
         }
         help_texts = {
+            'logo_prive': (
+                "Facultatif. Si rempli, remplace le logo generique ci-dessus. Visible seulement "
+                "par les utilisateurs de ce tenant."
+            ),
             'afficher_card': (
                 "Decoche pour un fournisseur occasionnel (facture recue seulement 1 ou 2 fois par annee, par exemple) : "
                 "il n'apparaitra plus en carte, mais restera facturable depuis « Gerer les compagnies »."

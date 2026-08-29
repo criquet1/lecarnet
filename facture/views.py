@@ -342,7 +342,7 @@ def facture(request):
     company_type = (request.POST.get('company_type') or 'client').strip().lower()
     company_form_class = FournisseurForm if company_type == 'fournisseur' else ClientForm
     company_model_class = Fournisseur if company_type == 'fournisseur' else Client
-    company_form = company_form_class(request.POST or None, prefix='company', user=request.user)
+    company_form = company_form_class(request.POST or None, request.FILES or None, prefix='company', user=request.user)
     settings_instance = Setting.objects.select_related(
         'compte_tps_percue',
         'compte_tps_payee',
@@ -503,11 +503,11 @@ def facture(request):
             type_is_changing = bool(current_company) and current_type != company_type
 
             if not current_company:
-                company_form = company_form_class(request.POST, prefix='company', user=request.user)
+                company_form = company_form_class(request.POST, request.FILES, prefix='company', user=request.user)
                 company_form.add_error(None, "Compagnie introuvable.")
                 open_company_modal = True
             elif type_is_changing and not is_expert(request.user):
-                company_form = company_form_class(request.POST, prefix='company', user=request.user)
+                company_form = company_form_class(request.POST, request.FILES, prefix='company', user=request.user)
                 company_form.add_error(
                     None,
                     "Seul un compte expert peut corriger le type (Client / Fournisseur) d'une compagnie existante."
@@ -521,6 +521,7 @@ def facture(request):
                 # supprimer l'ancien (voir _migrer_compagnie_vers_autre_type).
                 company_form = company_form_class(
                     request.POST,
+                    request.FILES,
                     prefix='company',
                     instance=(current_company if not type_is_changing else None),
                     user=request.user,
