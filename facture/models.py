@@ -1,9 +1,27 @@
+import uuid
+from pathlib import Path
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 from compte.models import Compte
 from paie.models import FrequencePaie
+from tenancy.db_context import get_current_tenant_alias
+
+
+def logo_prive_upload_path(instance, filename):
+    """Chemin de stockage du logo prive telecharge pour un Client/Fournisseur.
+
+    Chaque tenant a son propre sous-dossier (base sur l'alias de sa base de
+    donnees active), pour que le logo d'un client d'un tenant ne soit jamais
+    liste ni accessible via l'alias d'un autre tenant. Le nom de fichier est
+    remplace par un identifiant aleatoire pour ne pas exposer le nom original
+    (qui peut contenir des informations sur le client) dans l'URL publique.
+    """
+    tenant_alias = get_current_tenant_alias() or 'commun'
+    extension = Path(filename).suffix.lower()
+    return f"logos_prives/{tenant_alias}/{uuid.uuid4().hex}{extension}"
 
 
 class Source(models.Model):
@@ -22,6 +40,12 @@ class Client(models.Model):
         default='images.png',
         help_text="Nom du fichier logo dans static/images/logos (ex: images.png)."
     )
+    logo_prive = models.ImageField(
+        upload_to=logo_prive_upload_path,
+        blank=True,
+        null=True,
+        help_text="Logo prive televerse pour ce client. Visible seulement par les utilisateurs de ce tenant, prioritaire sur le champ Logo ci-dessus si rempli."
+    )
     comptes = models.ManyToManyField(Compte, related_name='clients', blank=True)
     active = models.BooleanField(default=True)
     afficher_card = models.BooleanField(default=True)
@@ -39,6 +63,12 @@ class Fournisseur(models.Model):
         null=False,
         default='images.png',
         help_text="Nom du fichier logo dans static/images/logos (ex: images.png)."
+    )
+    logo_prive = models.ImageField(
+        upload_to=logo_prive_upload_path,
+        blank=True,
+        null=True,
+        help_text="Logo prive televerse pour ce fournisseur. Visible seulement par les utilisateurs de ce tenant, prioritaire sur le champ Logo ci-dessus si rempli."
     )
     comptes = models.ManyToManyField(Compte, related_name='fournisseurs', blank=True)
     active = models.BooleanField(default=True)

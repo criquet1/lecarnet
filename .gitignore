@@ -30,3 +30,6 @@ temp_html_check.py
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Fichiers televerses par les utilisateurs (logos prives, etc.)
+media/
