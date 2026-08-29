@@ -619,6 +619,22 @@ def releve_bancaire(request):
                             errors.append(
                                 "Une compagnie est obligatoire lorsqu'une ligne utilise le compte CAP ou CAR."
                             )
+                        compagnie_mode_mismatch = False
+                        if selected_compagnie is not None:
+                            cap_id = settings_instance.cap_id if settings_instance else None
+                            car_id = settings_instance.car_id if settings_instance else None
+                            if selected_compagnie_type == 'client' and cap_id is not None and cap_id in used_account_ids:
+                                compagnie_mode_mismatch = True
+                                errors.append(
+                                    "La compagnie sélectionnée est un client, habituellement associé au compte "
+                                    "CAR — pas CAP. Vérifiez le compte choisi avant d'enregistrer."
+                                )
+                            elif selected_compagnie_type == 'fournisseur' and car_id is not None and car_id in used_account_ids:
+                                compagnie_mode_mismatch = True
+                                errors.append(
+                                    "La compagnie sélectionnée est un fournisseur, habituellement associé au compte "
+                                    "CAP — pas CAR. Vérifiez le compte choisi avant d'enregistrer."
+                                )
                         compagnie_ecriture = selected_compagnie if company_is_required else (
                             None if is_virement_inter_releves else selected_compagnie
                         )
@@ -635,6 +651,8 @@ def releve_bancaire(request):
                             errors.append(exercice_error)
                             return_open = True
                         elif company_is_required and selected_compagnie is None:
+                            return_open = True
+                        elif compagnie_mode_mismatch:
                             return_open = True
                         elif total_contrepartie != montant_releve:
                             errors.append(

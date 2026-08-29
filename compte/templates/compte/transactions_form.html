@@ -29,6 +29,7 @@
                             <option value="{{ compagnie.key }}">{{ compagnie.obj.nom }}</option>
                         {% endfor %}
                     </select>
+                    <div class="text-danger small mt-1 d-none" id="compagnie-cap-car-warning"></div>
                 </td>
 
 
@@ -150,6 +151,9 @@
     const addLineButton = document.getElementById("add-line");
     const companySelect = document.getElementById("compagnie");
     const comptesOptionsHtml = document.getElementById("compte_1").innerHTML;
+    const compagnieWarning = document.getElementById("compagnie-cap-car-warning");
+    const compteCapId = "{{ compte_cap_id|default:'' }}";
+    const compteCarId = "{{ compte_car_id|default:'' }}";
     let rowIndex = 1;
 
     function syncCompanyRequirement() {
@@ -160,6 +164,48 @@
         });
 
         companySelect.required = companyRequired;
+        checkCapCarMismatch();
+    }
+
+    // Le type ('client' ou 'fournisseur') est encode dans la valeur du
+    // select Compagnie (ex: 'client:5', 'fournisseur:3').
+    function getCompagnieType() {
+        if (!companySelect || !companySelect.value) {
+            return "";
+        }
+        return String(companySelect.value).split(":")[0] || "";
+    }
+
+    // Signale une incoherence entre la Compagnie choisie et le compte
+    // CAP/CAR utilise sur une des lignes (ex: compagnie client + compte CAP).
+    // Pas de pre-remplissage automatique ici: contrairement au relevé
+    // bancaire, on ne sait pas d'avance quelle ligne recevra le
+    // debit/credit, donc on se limite a l'avertissement.
+    function checkCapCarMismatch() {
+        if (!compagnieWarning) {
+            return;
+        }
+
+        const compagnieType = getCompagnieType();
+        const accountSelects = lineItems.querySelectorAll('select[name="comptes_comptables[]"]');
+        const selectedAccountIds = Array.from(accountSelects).map(function (select) {
+            return String(select.value || "");
+        });
+
+        let message = "";
+        if (compagnieType === "client" && compteCapId && selectedAccountIds.includes(compteCapId)) {
+            message = "La compagnie sélectionnée est un client, habituellement associé au compte CAR — pas CAP. Vérifiez le compte choisi.";
+        } else if (compagnieType === "fournisseur" && compteCarId && selectedAccountIds.includes(compteCarId)) {
+            message = "La compagnie sélectionnée est un fournisseur, habituellement associé au compte CAP — pas CAR. Vérifiez le compte choisi.";
+        }
+
+        if (message) {
+            compagnieWarning.textContent = "⚠ " + message;
+            compagnieWarning.classList.remove("d-none");
+        } else {
+            compagnieWarning.textContent = "";
+            compagnieWarning.classList.add("d-none");
+        }
     }
 
     lineItems.addEventListener("change", function (event) {
@@ -167,6 +213,8 @@
             syncCompanyRequirement();
         }
     });
+
+    companySelect.addEventListener("change", checkCapCarMismatch);
 
     addLineButton.addEventListener("click", function () {
         rowIndex += 1;

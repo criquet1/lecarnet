@@ -210,6 +210,25 @@ def transactions_page(request):
 				)
 				return _render_transactions_page()
 
+			if compagnie is not None:
+				line_account_ids = {line['compte'].pk for line in lines}
+				cap_id = settings_instance.cap_id if settings_instance else None
+				car_id = settings_instance.car_id if settings_instance else None
+				if compagnie_type == 'client' and cap_id is not None and cap_id in line_account_ids:
+					messages.error(
+						request,
+						'La compagnie selectionnee est un client, habituellement associee au compte CAR - '
+						'pas CAP. Verifiez le compte choisi avant d\'enregistrer.'
+					)
+					return _render_transactions_page()
+				if compagnie_type == 'fournisseur' and car_id is not None and car_id in line_account_ids:
+					messages.error(
+						request,
+						'La compagnie selectionnee est un fournisseur, habituellement associee au compte CAP - '
+						'pas CAR. Verifiez le compte choisi avant d\'enregistrer.'
+					)
+					return _render_transactions_page()
+
 			if total_debit.quantize(Decimal('0.01')) != total_credit.quantize(Decimal('0.01')):
 				messages.error(request, 'La transaction doit etre equilibree (debit = credit).')
 				return _render_transactions_page()
@@ -432,6 +451,25 @@ def transaction_edit_page(request, pk):
 				'Une compagnie est obligatoire lorsqu\'une ligne utilise le compte CAP ou CAR.'
 			)
 			return _render_edit_page()
+
+		if compagnie is not None:
+			line_account_ids = {line['compte'].pk for line in lines}
+			cap_id = settings_instance.cap_id if settings_instance else None
+			car_id = settings_instance.car_id if settings_instance else None
+			if compagnie_type == 'client' and cap_id is not None and cap_id in line_account_ids:
+				messages.error(
+					request,
+					'La compagnie selectionnee est un client, habituellement associee au compte CAR - '
+					'pas CAP. Verifiez le compte choisi avant d\'enregistrer.'
+				)
+				return _render_edit_page()
+			if compagnie_type == 'fournisseur' and car_id is not None and car_id in line_account_ids:
+				messages.error(
+					request,
+					'La compagnie selectionnee est un fournisseur, habituellement associee au compte CAP - '
+					'pas CAR. Verifiez le compte choisi avant d\'enregistrer.'
+				)
+				return _render_edit_page()
 
 		if total_debit.quantize(Decimal('0.01')) != total_credit.quantize(Decimal('0.01')):
 			messages.error(request, 'La transaction doit etre equilibree (debit = credit).')
