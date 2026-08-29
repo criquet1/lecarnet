@@ -34,5 +34,6 @@ urlpatterns = [
     path('compte-a-payer/', login_required(views.compte_a_payer), name='compte_a_payer'),
     path('compte-a-recevoir/', login_required(views.compte_a_recevoir), name='compte_a_recevoir'),
     path('rapport-de-taxes/', login_required(views.rapport_de_taxes), name='rapport_de_taxes'),
-    
+    path('logo-prive/client/<int:pk>/', login_required(views.logo_prive_client), name='logo_prive_client'),
+    path('logo-prive/fournisseur/<int:pk>/', login_required(views.logo_prive_fournisseur), name='logo_prive_fournisseur'),
 ]

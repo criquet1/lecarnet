@@ -1,27 +1,19 @@
-import uuid
-from pathlib import Path
-
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 from compte.models import Compte
 from paie.models import FrequencePaie
-from tenancy.db_context import get_current_tenant_alias
 
 
 def logo_prive_upload_path(instance, filename):
-    """Chemin de stockage du logo prive telecharge pour un Client/Fournisseur.
-
-    Chaque tenant a son propre sous-dossier (base sur l'alias de sa base de
-    donnees active), pour que le logo d'un client d'un tenant ne soit jamais
-    liste ni accessible via l'alias d'un autre tenant. Le nom de fichier est
-    remplace par un identifiant aleatoire pour ne pas exposer le nom original
-    (qui peut contenir des informations sur le client) dans l'URL publique.
-    """
-    tenant_alias = get_current_tenant_alias() or 'commun'
-    extension = Path(filename).suffix.lower()
-    return f"logos_prives/{tenant_alias}/{uuid.uuid4().hex}{extension}"
+    """Conservee uniquement pour compatibilite avec la migration historique
+    0027 qui y fait reference (Django recharge toutes les migrations depuis
+    le disque, meme celles deja appliquees). N'est plus utilisee : depuis la
+    migration 0028, logo_prive est stocke directement en base de donnees."""
+    import uuid
+    from pathlib import Path
+    return f"logos_prives/{uuid.uuid4().hex}{Path(filename).suffix.lower()}"
 
 
 class Source(models.Model):
@@ -40,11 +32,17 @@ class Client(models.Model):
         default='images.png',
         help_text="Nom du fichier logo dans static/images/logos (ex: images.png)."
     )
-    logo_prive = models.ImageField(
-        upload_to=logo_prive_upload_path,
+    logo_prive = models.BinaryField(
         blank=True,
         null=True,
-        help_text="Logo prive televerse pour ce client. Visible seulement par les utilisateurs de ce tenant, prioritaire sur le champ Logo ci-dessus si rempli."
+        editable=True,
+        help_text="Logo prive televerse pour ce client, stocke dans la base de donnees de ce tenant. Prioritaire sur le champ Logo ci-dessus si rempli."
+    )
+    logo_prive_type = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Type MIME du logo prive (ex: image/png), utilise pour le servir correctement."
     )
     comptes = models.ManyToManyField(Compte, related_name='clients', blank=True)
     active = models.BooleanField(default=True)
@@ -56,10 +54,12 @@ class Client(models.Model):
 
     @property
     def logo_display_url(self):
-        """URL du logo a afficher : le logo prive televerse s'il existe,
+        """URL du logo a afficher : le logo prive televerse s'il existe
+        (sert via une vue dediee, car stocke en base plutot que sur disque),
         sinon le logo generique choisi dans static/images/logos."""
         if self.logo_prive:
-            return self.logo_prive.url
+            from django.urls import reverse
+            return reverse('logo_prive_client', args=[self.pk])
         from django.templatetags.static import static
         return static(f'images/logos/{self.logo}')
 
@@ -73,11 +73,17 @@ class Fournisseur(models.Model):
         default='images.png',
         help_text="Nom du fichier logo dans static/images/logos (ex: images.png)."
     )
-    logo_prive = models.ImageField(
-        upload_to=logo_prive_upload_path,
+    logo_prive = models.BinaryField(
         blank=True,
         null=True,
-        help_text="Logo prive televerse pour ce fournisseur. Visible seulement par les utilisateurs de ce tenant, prioritaire sur le champ Logo ci-dessus si rempli."
+        editable=True,
+        help_text="Logo prive televerse pour ce fournisseur, stocke dans la base de donnees de ce tenant. Prioritaire sur le champ Logo ci-dessus si rempli."
+    )
+    logo_prive_type = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Type MIME du logo prive (ex: image/png), utilise pour le servir correctement."
     )
     comptes = models.ManyToManyField(Compte, related_name='fournisseurs', blank=True)
     active = models.BooleanField(default=True)
@@ -89,10 +95,12 @@ class Fournisseur(models.Model):
 
     @property
     def logo_display_url(self):
-        """URL du logo a afficher : le logo prive televerse s'il existe,
+        """URL du logo a afficher : le logo prive televerse s'il existe
+        (sert via une vue dediee, car stocke en base plutot que sur disque),
         sinon le logo generique choisi dans static/images/logos."""
         if self.logo_prive:
-            return self.logo_prive.url
+            from django.urls import reverse
+            return reverse('logo_prive_fournisseur', args=[self.pk])
         from django.templatetags.static import static
         return static(f'images/logos/{self.logo}')
 

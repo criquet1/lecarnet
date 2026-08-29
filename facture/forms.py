@@ -11,19 +11,23 @@ from .utils import get_available_logos, is_expert
 
 class ClientForm(forms.ModelForm):
     logo = forms.ChoiceField(label="Logo generique", required=False)
+    logo_prive = forms.ImageField(
+        label="Logo prive (televerse)",
+        required=False,
+        help_text=(
+            "Facultatif. Si rempli, remplace le logo generique ci-dessus. Stocke dans la base "
+            "de donnees de ce tenant -- visible seulement par ses utilisateurs."
+        ),
+    )
+    logo_prive_effacer = forms.BooleanField(label="Retirer le logo prive actuel", required=False)
 
     class Meta:
         model = Client
-        fields = ['nom', 'logo', 'logo_prive', 'comptes', 'active', 'afficher_card']
+        fields = ['nom', 'logo', 'comptes', 'active', 'afficher_card']
         labels = {
-            'logo_prive': "Logo prive (televerse)",
             'afficher_card': "Afficher sur la page d'accueil",
         }
         help_texts = {
-            'logo_prive': (
-                "Facultatif. Si rempli, remplace le logo generique ci-dessus. Visible seulement "
-                "par les utilisateurs de ce tenant."
-            ),
             'afficher_card': (
                 "Decoche pour un client occasionnel (facture seulement 1 ou 2 fois par annee, par exemple) : "
                 "il n'apparaitra plus en carte, mais restera facturable depuis « Gerer les compagnies »."
@@ -36,6 +40,10 @@ class ClientForm(forms.ModelForm):
 
         self.fields['logo'].choices = [('', 'Par defaut (images.png)')] + [(name, name) for name in logo_files]
         self.fields['logo'].help_text = "Fichier pris depuis static/images/logos. Laisse vide pour images.png."
+        if self.instance and self.instance.pk and self.instance.logo_prive:
+            self.fields['logo_prive'].help_text += " Un logo prive est deja enregistre ; televerse un fichier pour le remplacer."
+        else:
+            self.fields.pop('logo_prive_effacer', None)
         # Le choix de compte(s) n'est obligatoire que pour un utilisateur expert :
         # un non-expert peut creer la compagnie sans le remplir, l'expert le
         # completera lors de sa verification (voir le jaune sur la carte).
@@ -44,22 +52,40 @@ class ClientForm(forms.ModelForm):
     def clean_logo(self):
         return self.cleaned_data.get('logo') or 'images.png'
 
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        uploaded = self.cleaned_data.get('logo_prive')
+        if uploaded:
+            instance.logo_prive = uploaded.read()
+            instance.logo_prive_type = getattr(uploaded, 'content_type', None) or 'image/png'
+        elif self.cleaned_data.get('logo_prive_effacer'):
+            instance.logo_prive = None
+            instance.logo_prive_type = None
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
+
 
 class FournisseurForm(forms.ModelForm):
     logo = forms.ChoiceField(label="Logo generique", required=False)
+    logo_prive = forms.ImageField(
+        label="Logo prive (televerse)",
+        required=False,
+        help_text=(
+            "Facultatif. Si rempli, remplace le logo generique ci-dessus. Stocke dans la base "
+            "de donnees de ce tenant -- visible seulement par ses utilisateurs."
+        ),
+    )
+    logo_prive_effacer = forms.BooleanField(label="Retirer le logo prive actuel", required=False)
 
     class Meta:
         model = Fournisseur
-        fields = ['nom', 'logo', 'logo_prive', 'comptes', 'active', 'afficher_card']
+        fields = ['nom', 'logo', 'comptes', 'active', 'afficher_card']
         labels = {
-            'logo_prive': "Logo prive (televerse)",
             'afficher_card': "Afficher sur la page d'accueil",
         }
         help_texts = {
-            'logo_prive': (
-                "Facultatif. Si rempli, remplace le logo generique ci-dessus. Visible seulement "
-                "par les utilisateurs de ce tenant."
-            ),
             'afficher_card': (
                 "Decoche pour un fournisseur occasionnel (facture recue seulement 1 ou 2 fois par annee, par exemple) : "
                 "il n'apparaitra plus en carte, mais restera facturable depuis « Gerer les compagnies »."
@@ -72,6 +98,10 @@ class FournisseurForm(forms.ModelForm):
 
         self.fields['logo'].choices = [('', 'Par defaut (images.png)')] + [(name, name) for name in logo_files]
         self.fields['logo'].help_text = "Fichier pris depuis static/images/logos. Laisse vide pour images.png."
+        if self.instance and self.instance.pk and self.instance.logo_prive:
+            self.fields['logo_prive'].help_text += " Un logo prive est deja enregistre ; televerse un fichier pour le remplacer."
+        else:
+            self.fields.pop('logo_prive_effacer', None)
         # Le choix de compte(s) n'est obligatoire que pour un utilisateur expert :
         # un non-expert peut creer la compagnie sans le remplir, l'expert le
         # completera lors de sa verification (voir le jaune sur la carte).
@@ -79,6 +109,20 @@ class FournisseurForm(forms.ModelForm):
 
     def clean_logo(self):
         return self.cleaned_data.get('logo') or 'images.png'
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        uploaded = self.cleaned_data.get('logo_prive')
+        if uploaded:
+            instance.logo_prive = uploaded.read()
+            instance.logo_prive_type = getattr(uploaded, 'content_type', None) or 'image/png'
+        elif self.cleaned_data.get('logo_prive_effacer'):
+            instance.logo_prive = None
+            instance.logo_prive_type = None
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
 
 
 class SettingForm(forms.ModelForm):

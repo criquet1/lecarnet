@@ -337,6 +337,34 @@ def _migrer_compagnie_vers_autre_type(old_company, old_type, new_company):
     old_company.delete()
 
 
+def logo_prive_client(request, pk):
+    """Sert le logo prive d'un Client stocke en base (voir Client.logo_prive).
+
+    Le routeur multi-tenant filtre automatiquement Client.objects sur la base
+    du tenant actif de la requete : un utilisateur d'un autre tenant obtient
+    simplement un 404 (le pk n'existe pas dans sa propre base), pas besoin
+    de verification manuelle supplementaire ici.
+    """
+    from django.http import Http404, HttpResponse
+    from django.shortcuts import get_object_or_404
+
+    client = get_object_or_404(Client, pk=pk)
+    if not client.logo_prive:
+        raise Http404("Aucun logo prive pour ce client.")
+    return HttpResponse(bytes(client.logo_prive), content_type=client.logo_prive_type or 'image/png')
+
+
+def logo_prive_fournisseur(request, pk):
+    """Sert le logo prive d'un Fournisseur stocke en base (voir logo_prive_client)."""
+    from django.http import Http404, HttpResponse
+    from django.shortcuts import get_object_or_404
+
+    fournisseur = get_object_or_404(Fournisseur, pk=pk)
+    if not fournisseur.logo_prive:
+        raise Http404("Aucun logo prive pour ce fournisseur.")
+    return HttpResponse(bytes(fournisseur.logo_prive), content_type=fournisseur.logo_prive_type or 'image/png')
+
+
 def facture(request):
     title = "Facture"
     company_type = (request.POST.get('company_type') or 'client').strip().lower()
