@@ -5,15 +5,6 @@
     <!-- Partie gauche -->
     <div class="topbar-left">
         <div class="topbar-company">
-            {% if site_settings.logo %}
-                <img
-                    src="{% static 'images/logos/' %}{{ site_settings.logo }}"
-                    alt=""
-                    class="topbar-company-bg">
-            {% else %}
-                <i class="bi bi-building topbar-company-bg"></i>
-            {% endif %}
-
             <span class="company-label">
                 {% if request.active_client %}
                     {{ request.active_client.name }}

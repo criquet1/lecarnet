@@ -56,6 +56,54 @@ body.embedded-report .app-content {
     padding:32px;
 }
 
+/* Logo de l'entreprise, fixe dans le coin superieur droit -- reste visible
+   peu importe le defilement ou la longueur de la page. Place au-dessus du
+   contenu (pointer-events:none pour ne jamais bloquer un clic dessous). */
+
+.app-watermark{
+
+    position:fixed;
+
+    top:82px;
+    /* Centre horizontalement sur la zone de contenu (a droite de la barre
+       laterale de 58px), pas sur la fenetre entiere. */
+    left:calc(50vw + 29px);
+    transform:translateX(-50%);
+
+    width:150px;
+    height:150px;
+
+    object-fit:contain;
+
+    opacity:.14;
+
+    z-index:5;
+
+    pointer-events:none;
+    user-select:none;
+}
+
+@media (max-width:992px){
+
+    .app-watermark{
+
+        left:calc(50vw + 27px);
+    }
+}
+
+@media (max-width:768px){
+
+    .app-watermark{
+
+        width:90px;
+        height:90px;
+
+        top:78px;
+
+        opacity:.12;
+    }
+}
+
 @media (max-width:992px){
   .app-main{
     margin-left:54px;

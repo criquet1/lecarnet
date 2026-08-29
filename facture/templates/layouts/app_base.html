@@ -32,6 +32,9 @@
 
         {% if request.GET.embed != "1" %}
         {% include "includes/navigation/app_topbar.html" %}
+        {% if site_settings.logo %}
+            <img src="{{ site_settings.logo_display_url }}" alt="" class="app-watermark">
+        {% endif %}
         {% endif %}
 
         <div class="app-content">
