@@ -16,6 +16,7 @@
 
 {% if periodes_count %}
     <div class="alert alert-light border mb-4 text-center">
+        <div class="fs-5 fw-bold text-uppercase mb-1">{{ working_period.label }}</div>
         <span class="fs-4 fw-bold">Salaire brut : {{ revenu_brut_total|floatformat:2 }} $</span><br>{{ periodes_count }} période{% if periodes_count > 1 %}s{% endif %} incluse{% if periodes_count > 1 %}s{% endif %} pour cette période.
     </div>
 {% else %}

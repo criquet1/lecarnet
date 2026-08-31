@@ -142,6 +142,13 @@ body.embedded-report .app-content {
   IMPRESSION
 ======================================================*/
 
+/* En-tete d'impression : nom du tenant a gauche, nom du rapport (et sa
+   date, le cas echeant) a droite. Invisible a l'ecran, affiche uniquement
+   au moment de l'impression / l'export PDF. */
+.print-header{
+    display:none;
+}
+
 @media print {
   @page {
     size: letter;
@@ -157,8 +164,28 @@ body.embedded-report .app-content {
   .page-actions,
   .site-footer,
   .reports-tabs,
+  .app-watermark,
   .no-print {
     display: none !important;
+  }
+
+  .print-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #000;
+    font-size: 0.85rem;
+  }
+
+  .print-header-tenant {
+    font-weight: 600;
+  }
+
+  .print-header-report {
+    text-align: right;
   }
 
   .app-layout,
@@ -172,21 +199,23 @@ body.embedded-report .app-content {
     padding: 0;
   }
 
+  /* Le titre du rapport et sa date sont deja repris dans .print-header ;
+     on masque le gros titre normalement affiche a l'ecran pour ne pas le
+     dupliquer a l'impression. */
   .page-header {
-    align-items: flex-start;
-    margin-bottom: 16px;
-  }
-
-  .page-title {
-    font-size: 1.5rem;
-  }
-
-  .page-subtitle {
-    margin: 4px 0 0;
+    display: none !important;
   }
 
   .table-responsive {
     overflow: visible !important;
+  }
+
+  /* Un <tfoot> (ligne de total) est repete par le navigateur en bas de
+     CHAQUE page qu'occupe le tableau. On le traite plutot comme une
+     rangee normale du corps du tableau : le total ne s'affiche alors
+     qu'une seule fois, a la toute fin du tableau. */
+  tfoot {
+    display: table-row-group;
   }
 
   .card,

@@ -50,6 +50,13 @@
                 {% include "includes/navigation/breadcrumb.html" %}
             {% endblock %}
 
+            <div class="print-header">
+                <div class="print-header-tenant">{{ active_client.name }}</div>
+                <div class="print-header-report">
+                    {{ title }}{% if report_year_label %} &mdash; {{ report_year_label }}{% endif %}
+                </div>
+            </div>
+
             <header class="page-header">
 
                 <div>

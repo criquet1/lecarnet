@@ -17,9 +17,23 @@
 
 {% include "includes/navigation/reports_tabs.html" %}
 
+<style>
+    @media print {
+        /* Chaque section (Actif / Passif / Avoir) reste groupee : si elle
+           ne tient pas dans l'espace restant sur la page, elle bascule en
+           entier sur la page suivante plutot que d'etre coupee au milieu
+           (ce qui repete l'entete "Montant" et le total au fil de la
+           coupure). */
+        .bilan-section {
+            break-inside: avoid-page;
+            page-break-inside: avoid;
+        }
+    }
+</style>
+
 <div class="mx-auto w-100" style="max-width: 840px;">
 
-<div class="table-responsive">
+<div class="table-responsive bilan-section">
     <table class="table table-sm table-striped align-middle mb-0">
         <thead>
             <tr>
@@ -57,7 +71,7 @@
     </table>
 </div>
 
-<div class="table-responsive mt-4">
+<div class="table-responsive mt-4 bilan-section">
     <table class="table table-sm table-striped align-middle mb-0">
         <thead>
             <tr>
@@ -95,7 +109,7 @@
     </table>
 </div>
 
-<div class="table-responsive mt-4">
+<div class="table-responsive mt-4 bilan-section">
     <table class="table table-sm table-striped align-middle mb-0">
         <thead>
             <tr>
@@ -139,7 +153,7 @@
 
 </div>
 
-<div class="mt-3 text-center {% if is_balanced %}text-success{% else %}text-danger{% endif %}">
+<div class="mt-3 text-center no-print {% if is_balanced %}text-success{% else %}text-danger{% endif %}">
     {% if is_balanced %}
         Le bilan est équilibré.
     {% else %}

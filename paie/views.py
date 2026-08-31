@@ -269,6 +269,7 @@ def remises_mensuelles_page(request):
 		'provincial_total': provincial_total,
 		'periodes_count': len({paie.periode_id for paie in paies}),
 		'revenu_brut_total': revenu_brut_total,
+		'report_year_label': working_period['label'],
 	})
 
 
@@ -383,6 +384,7 @@ def calendrier_paie_page(request):
 		'previous_year_value': previous_year_value,
 		'next_year_value': next_year_value,
 		'month_label': month_label,
+		'report_year_label': month_label,
 		'calendar_weeks': calendar_weeks,
 		'error_message': error_message,
 		'paydays_total': sum(len(entries) for entries in payday_map.values()),
