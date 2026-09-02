@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ClientDatabase, Societe, UserClientAccess, UserSocieteAccess
+from .models import ClientDatabase, Societe, UserClientAccess, UserSecurityState, UserSocieteAccess
 
 
 @admin.register(Societe)
@@ -29,3 +29,10 @@ class UserSocieteAccessAdmin(admin.ModelAdmin):
     list_display = ('user', 'societe', 'is_default')
     list_filter = ('is_default', 'societe')
     search_fields = ('user__username', 'societe__name', 'societe__slug')
+
+
+@admin.register(UserSecurityState)
+class UserSecurityStateAdmin(admin.ModelAdmin):
+    list_display = ('user', 'must_change_password')
+    list_filter = ('must_change_password',)
+    search_fields = ('user__username',)

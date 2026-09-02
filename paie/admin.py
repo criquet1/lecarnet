@@ -1,6 +1,6 @@
 from django.contrib import admin
 from import_export.admin import ExportMixin, ImportExportModelAdmin
-from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie, PaieJournalLigne, SoldeVacancesDepart
+from .models import Employe, FeuilletFiscalAnnuel, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie, PaieJournalLigne, SoldeVacancesDepart
 
 
 @admin.register(FrequencePaie)
@@ -63,3 +63,10 @@ class PaieJournalLigneAdmin(ExportMixin, admin.ModelAdmin):
 
 
 admin.site.register(SoldeVacancesDepart)
+
+
+@admin.register(FeuilletFiscalAnnuel)
+class FeuilletFiscalAnnuelAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('employe', 'annee')
+    list_filter = ('annee',)
+    search_fields = ('employe__nom', 'employe__prenom')

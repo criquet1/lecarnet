@@ -1,5 +1,5 @@
 from django.contrib import admin
-from facture.models import Client, Facture, Fournisseur, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
+from facture.models import Cheque, Client, Facture, Fournisseur, Source, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
 from compte.models import Setting
 from import_export.admin import ExportMixin, ImportExportModelAdmin
 
@@ -93,6 +93,12 @@ class FactureAdmin(ExportMixin, admin.ModelAdmin):
         return False
 
 
+class ChequeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('no_cheque', 'date_emission', 'montant', 'client', 'fournisseur', 'annule')
+    list_filter = ('annule', 'date_emission')
+    search_fields = ('no_cheque', 'description')
+
+
 admin.site.register(Facture, FactureAdmin)
 admin.site.register(TransactionListe, TransactionListeAdmin)
 admin.site.register(Client)
@@ -105,3 +111,5 @@ admin.site.register(RapportTaxes, RapportTaxesAdmin)
 admin.site.register(CompteReleve, CompteReleveAdmin)
 admin.site.register(CompagnieSoldeDepart)
 admin.site.register(SoldeFin, SoldeFinAdmin)
+admin.site.register(Source)
+admin.site.register(Cheque, ChequeAdmin)
