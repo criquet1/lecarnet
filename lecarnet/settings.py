@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 load_dotenv()
 
@@ -43,7 +44,12 @@ def _env_list(name):
     return [item.strip() for item in raw_value.split(',') if item.strip()]
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = _env('SECRET_KEY', 'django-insecure-4yu1pvs&-g1oz$+skhpve!8*+45_efkzq752#!u15h+nj^&kp=')
+SECRET_KEY = _env('SECRET_KEY')
+if not SECRET_KEY:
+    raise ImproperlyConfigured(
+        "La variable d'environnement SECRET_KEY est manquante. "
+        "Définis-la dans ton fichier .env (voir .env.example)."
+    )
 
 # # SECURITY WARNING: don't run with debug turned on in production!
 # DEBUG = _env_bool('DEBUG', default=False)

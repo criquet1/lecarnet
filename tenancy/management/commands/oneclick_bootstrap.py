@@ -70,7 +70,12 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE('4/4 Creation/mise a jour admin + acces clients...'))
         username = os.environ.get('ONECLICK_ADMIN_USERNAME', 'admin').strip() or 'admin'
         email = os.environ.get('ONECLICK_ADMIN_EMAIL', 'admin@localhost').strip() or 'admin@localhost'
-        password = os.environ.get('ONECLICK_ADMIN_PASSWORD', 'Admin123!ChangeMe').strip() or 'Admin123!ChangeMe'
+        password = os.environ.get('ONECLICK_ADMIN_PASSWORD', '').strip()
+        if not password:
+            raise CommandError(
+                "La variable d'environnement ONECLICK_ADMIN_PASSWORD est manquante. "
+                "Définis-la dans ton fichier .env (voir .env.example)."
+            )
 
         User = get_user_model()
         admin, created = User.objects.get_or_create(
