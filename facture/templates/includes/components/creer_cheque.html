@@ -37,6 +37,20 @@
                             <label class="form-label" for="cheque-description">Description</label>
                             <input type="text" class="form-control" id="cheque-description" name="description">
                         </div>
+                        <div class="col-12">
+                            <label class="form-label">Lignes de compte</label>
+                            <div class="border rounded p-2 small bg-light">
+                                <div class="d-flex justify-content-between">
+                                    <span id="cheque-preview-contrepartie-label" class="text-muted">Choisissez un client ou un fournisseur</span>
+                                    <span id="cheque-preview-contrepartie-montant" class="text-nowrap"></span>
+                                </div>
+                                <div class="d-flex justify-content-between mt-1">
+                                    <span id="cheque-preview-banque-label">{{ site_settings.compte_cheques|default:"Compte chèques (non configuré dans Setting)" }}</span>
+                                    <span id="cheque-preview-banque-montant" class="text-nowrap"></span>
+                                </div>
+                            </div>
+                            <div class="form-text">Ces lignes s'inscrivent automatiquement à l'enregistrement du chèque, selon le client ou le fournisseur choisi.</div>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -94,6 +108,58 @@
         }
     }
 
+    const compteCapLabel = "{{ site_settings.cap|default:''|escapejs }}";
+    const compteCarLabel = "{{ site_settings.car|default:''|escapejs }}";
+    const compagnieSelect = document.getElementById('cheque-compagnie');
+    const montantInput = document.getElementById('cheque-montant');
+    const previewContrepartieLabel = document.getElementById('cheque-preview-contrepartie-label');
+    const previewContrepartieMontant = document.getElementById('cheque-preview-contrepartie-montant');
+    const previewBanqueMontant = document.getElementById('cheque-preview-banque-montant');
+
+    function formatPreviewMontant(value) {
+        const amount = parseFloat(value);
+        if (!isFinite(amount) || value === '' || value === null) {
+            return '';
+        }
+        return amount.toFixed(2);
+    }
+
+    function updateChequePreview() {
+        if (!previewContrepartieLabel || !previewContrepartieMontant || !previewBanqueMontant) {
+            return;
+        }
+
+        const raw = compagnieSelect ? compagnieSelect.value : '';
+        const [type] = raw ? raw.split(':') : [''];
+        const montantValue = montantInput ? montantInput.value : '';
+        const formatted = formatPreviewMontant(montantValue);
+
+        if (type === 'fournisseur') {
+            previewContrepartieLabel.textContent = (compteCapLabel || 'Compte CAP (non configuré dans Setting)') + ' — à payer';
+            previewContrepartieLabel.classList.remove('text-muted');
+        } else if (type === 'client') {
+            previewContrepartieLabel.textContent = (compteCarLabel || 'Compte CAR (non configuré dans Setting)') + ' — à recevoir';
+            previewContrepartieLabel.classList.remove('text-muted');
+        } else {
+            previewContrepartieLabel.textContent = 'Choisissez un client ou un fournisseur';
+            previewContrepartieLabel.classList.add('text-muted');
+        }
+
+        previewContrepartieMontant.textContent = formatted;
+        previewBanqueMontant.textContent = formatted ? '-' + formatted : '';
+    }
+
+    if (compagnieSelect) {
+        compagnieSelect.addEventListener('change', updateChequePreview);
+    }
+    if (montantInput) {
+        montantInput.addEventListener('input', updateChequePreview);
+    }
+    if (modalElement) {
+        modalElement.addEventListener('show.bs.modal', updateChequePreview);
+    }
+    updateChequePreview();
+
     form.addEventListener('submit', function (event) {
         event.preventDefault();
         clearError();
@@ -120,6 +186,7 @@
                 }
                 bootstrap.Modal.getOrCreateInstance(modalElement).hide();
                 form.reset();
+                updateChequePreview();
                 window.location.reload();
             })
             .catch(function () {
@@ -159,6 +226,7 @@
                     }
                     bootstrap.Modal.getOrCreateInstance(modalElement).hide();
                     form.reset();
+                    updateChequePreview();
                     window.location.reload();
                 })
                 .catch(function () {

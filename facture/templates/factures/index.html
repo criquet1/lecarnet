@@ -411,7 +411,7 @@
             var totalInput = document.getElementById('id_facture_total');
             var balanceFeedback = document.getElementById('invoice-balance-feedback');
             var trDescDateInput = invoiceForm ? invoiceForm.querySelector('input[name="trdesc-date"]') : null;
-            var trDescDescriptionInput = invoiceForm ? invoiceForm.querySelector('input[name="trdesc-description"]') : null;
+            var trDescDescriptionInput = invoiceForm ? invoiceForm.querySelector('input[name="trdesc-desc_ctb"]') : null;
             var trDescNoteDeCreditInput = invoiceForm ? invoiceForm.querySelector('input[name="trdesc-note_de_credit"]') : null;
             var allComptesRaw = '{{ all_comptes_json|escapejs }}';
             var allComptes = allComptesRaw ? JSON.parse(allComptesRaw) : [];
@@ -561,6 +561,38 @@
                 recalculateInvertedTaxes();
             }
 
+            function findFirstAccountMontantInput() {
+                if (!invoiceModal) {
+                    return null;
+                }
+
+                var forcedCompteId = Number(getForcedCompteIdForActiveCompany() || 0);
+                var excludedIds = [
+                    Number(activeCompteTpsId || 0),
+                    Number(activeCompteTvqId || 0),
+                    Number(activeCompteFrRetardId || compteFrRetardId || 0),
+                    forcedCompteId
+                ];
+
+                var rows = invoiceModal.querySelectorAll('.invoice-detail-row');
+                for (var i = 0; i < rows.length; i++) {
+                    if (rows[i].style.display === 'none') {
+                        continue;
+                    }
+
+                    var hiddenCompte = rows[i].querySelector('input[type="hidden"][name$="-compte"]');
+                    var compteId = hiddenCompte ? Number(hiddenCompte.value) : 0;
+
+                    if (compteId && excludedIds.indexOf(compteId) !== -1) {
+                        continue;
+                    }
+
+                    return rows[i].querySelector('input[name$="-montant"]');
+                }
+
+                return null;
+            }
+
             function recalculateInvertedTaxes() {
                 if (!totalInput || !activeCompteTpsId || !activeCompteTvqId) {
                     return;
@@ -572,11 +604,16 @@
                     return;
                 }
 
+                var subtotalInput = findFirstAccountMontantInput();
+
                 var sign = isNoteDeCreditSelected() ? -1 : 1;
                 var totalCents = toCents(Math.abs(parseAmount(totalInput.value)));
                 if (totalCents <= 0) {
                     tpsInput.value = '';
                     tvqInput.value = '';
+                    if (subtotalInput) {
+                        subtotalInput.value = '';
+                    }
                     return;
                 }
 
@@ -592,11 +629,15 @@
                 var tpsCents = Math.round(subtotalCents * TPS_RATE);
                 var tvqCents = taxableTotalCents - subtotalCents - tpsCents;
 
+                var subtotalAmount = fromCents(subtotalCents);
                 var tpsAmount = fromCents(tpsCents);
                 var tvqAmount = fromCents(tvqCents);
 
                 tpsInput.value = formatSignedAmount(tpsAmount, sign);
                 tvqInput.value = formatSignedAmount(tvqAmount, sign);
+                if (subtotalInput) {
+                    subtotalInput.value = formatSignedAmount(subtotalAmount, sign);
+                }
             }
 
             function bindFrRetardListener() {

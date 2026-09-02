@@ -40,6 +40,7 @@ body.embedded-report .app-content {
 ======================================================*/
 
 .app-main{
+    position:relative;
     flex:1;
     display:flex;
     flex-direction:column;
@@ -56,13 +57,14 @@ body.embedded-report .app-content {
     padding:32px;
 }
 
-/* Logo de l'entreprise, fixe dans le coin superieur droit -- reste visible
-   peu importe le defilement ou la longueur de la page. Place au-dessus du
-   contenu (pointer-events:none pour ne jamais bloquer un clic dessous). */
+/* Logo de l'entreprise, ancre en haut de la zone de contenu -- defile avec
+   la page (ne suit pas le regard a l'ecran) et disparait une fois qu'on a
+   fait defiler plus bas. Place au-dessus du contenu (pointer-events:none
+   pour ne jamais bloquer un clic dessous). */
 
 .app-watermark{
 
-    position:fixed;
+    position:absolute;
 
     top:82px;
     /* Centre horizontalement sur la zone de contenu (a droite de la barre
