@@ -528,3 +528,30 @@ class Cheque(models.Model):
 
     def __str__(self):
         return f"Ch # {self.no_cheque}"
+
+
+class PetiteCaisseLigne(models.Model):
+    """Ligne d'attente pour la compilation de petite caisse (onglet Banque).
+
+    Chaque petite facture payee comptant est ventilee ici, une ligne par
+    compte touche (depense, TPS a payee, TVQ a payee...) -- exactement les
+    memes lignes qui deviendront des Tr_detail au moment de "passer la
+    transaction". `groupe` relie les lignes issues d'un meme recu (utile
+    seulement pour l'affichage/le regroupement ; aucune contrainte comptable
+    ne s'appuie dessus). La table est videe des qu'une transaction est
+    passee : voir facture/views_petite_caisse.py.
+    """
+    groupe = models.PositiveIntegerField(
+        help_text="Relie les lignes issues d'un meme recu (ex.: un recu qui touche plusieurs comptes)."
+    )
+    date = models.DateField()
+    description = models.CharField(max_length=255, blank=True, default='')
+    compte = models.ForeignKey(Compte, on_delete=models.CASCADE, related_name='petite_caisse_lignes')
+    montant = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['groupe', 'id']
+
+    def __str__(self):
+        return f"Petite caisse {self.date} - {self.compte} - {self.montant}"

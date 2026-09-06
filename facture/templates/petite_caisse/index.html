@@ -1,0 +1,600 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+
+{% include "includes/navigation/banque_tabs.html" %}
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Reçus en attente</h5>
+
+        {% if not recus_en_attente %}
+            <p class="text-muted mb-0">Aucun reçu en attente pour le moment.</p>
+        {% else %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Comptes (avant taxes)</th>
+                            <th class="text-end">TPS</th>
+                            <th class="text-end">TVQ</th>
+                            <th class="text-end">Total</th>
+                            <th style="width:50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for recu in recus_en_attente %}
+                            <tr>
+                                <td>{{ recu.date|date:"Y-m-d" }}</td>
+                                <td>{{ recu.description }}</td>
+                                <td>
+                                    {% for ligne in recu.lignes_depense %}
+                                        {{ ligne.compte.numero }} - {{ ligne.compte.libelle }} : {{ ligne.montant|floatformat:2 }}{% if not forloop.last %}<br>{% endif %}
+                                    {% endfor %}
+                                </td>
+                                <td class="text-end">{{ recu.tps|floatformat:2 }}</td>
+                                <td class="text-end">{{ recu.tvq|floatformat:2 }}</td>
+                                <td class="text-end">{{ recu.total|floatformat:2 }}</td>
+                                <td class="text-center">
+                                    <form method="post" class="d-inline" onsubmit="return confirm('Retirer ce reçu de la petite caisse en attente ?');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete_groupe">
+                                        <input type="hidden" name="groupe" value="{{ recu.groupe }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Retirer ce reçu">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="fw-bold">
+                            <td colspan="5" class="text-end">Total en attente</td>
+                            <td class="text-end">{{ total_en_attente|floatformat:2 }}</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <form method="post" id="passer-transaction-form" onsubmit="return confirm('Passer la transaction videra la petite caisse en attente et créera l\'écriture correspondante. Continuer ?');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="passer_transaction">
+
+                <div class="form-check mb-2">
+                    <input type="checkbox" class="form-check-input" id="emettre-cheque-checkbox" name="emettre_cheque">
+                    <label class="form-check-label" for="emettre-cheque-checkbox">
+                        Émettre un chèque réel (au lieu d'un virement)
+                    </label>
+                    <div class="form-text">Par défaut (non coché) : virement qui crédite directement le compte courant.</div>
+                </div>
+
+                <div id="no-cheque-wrapper" class="mb-3" style="display:none; max-width:220px;">
+                    <label class="form-label" for="no-cheque-input">Numéro de chèque</label>
+                    <input type="text" class="form-control" id="no-cheque-input" name="no_cheque" value="{{ prochain_no_cheque }}">
+                </div>
+
+                <button type="submit" class="btn btn-primary">Passer la transaction</button>
+            </form>
+
+            <script>
+                (function () {
+                    var checkbox = document.getElementById('emettre-cheque-checkbox');
+                    var wrapper = document.getElementById('no-cheque-wrapper');
+                    if (checkbox && wrapper) {
+                        checkbox.addEventListener('change', function () {
+                            wrapper.style.display = checkbox.checked ? '' : 'none';
+                        });
+                    }
+                })();
+            </script>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title">Ajouter des reçus</h5>
+        <p class="text-muted small">
+            Une ligne par reçu. Si un reçu touche plus d'un compte, utilise le bouton "+" de sa ligne
+            pour ajouter une ligne supplémentaire (montant avant taxes + compte seulement).
+        </p>
+
+        <form method="post" id="petite-caisse-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_lignes">
+
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th style="width:130px;">Date</th>
+                            <th>Description</th>
+                            <th style="width:110px;">Total facture</th>
+                            <th style="width:80px;" class="text-center">Sans taxes</th>
+                            <th style="width:90px;">TPS</th>
+                            <th style="width:90px;">TVQ</th>
+                            <th style="width:120px;">Avant taxes</th>
+                            <th>Compte (5000 et plus)</th>
+                            <th style="width:70px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="pc-receipts-body"></tbody>
+                    <tfoot>
+                        <tr class="fw-bold">
+                            <td colspan="2"></td>
+                            <td id="pc-sum-total">0,00</td>
+                            <td></td>
+                            <td id="pc-sum-tps">0,00</td>
+                            <td id="pc-sum-tvq">0,00</td>
+                            <td id="pc-sum-avant">0,00</td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="pc-add-row">+ Ajouter un reçu</button>
+
+            <div id="pc-balance-feedback" class="form-text mt-2" aria-live="polite"></div>
+            <div id="pc-error" class="alert alert-danger mt-3" style="display:none;"></div>
+
+            <div class="mt-3">
+                <button type="submit" class="btn btn-primary" id="pc-submit-btn">Ajouter à la petite caisse en attente</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<input type="hidden" id="all-comptes-json" value="{{ all_comptes_json }}">
+<input type="hidden" id="compte-tps-payee-id" value="{{ compte_tps_payee_id }}">
+<input type="hidden" id="compte-tvq-payee-id" value="{{ compte_tvq_payee_id }}">
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var TPS_RATE = 0.05;
+    var TVQ_RATE = 0.09975;
+
+    var allComptesInput = document.getElementById('all-comptes-json');
+    var allComptes = allComptesInput && allComptesInput.value ? JSON.parse(allComptesInput.value) : [];
+    var compteTpsPayeeId = Number(document.getElementById('compte-tps-payee-id').value || 0);
+    var compteTvqPayeeId = Number(document.getElementById('compte-tvq-payee-id').value || 0);
+
+    var pcForm = document.getElementById('petite-caisse-form');
+    var pcReceiptsBody = document.getElementById('pc-receipts-body');
+    var pcAddRowBtn = document.getElementById('pc-add-row');
+    var pcErrorBox = document.getElementById('pc-error');
+    var pcBalanceFeedback = document.getElementById('pc-balance-feedback');
+    var pcSumTotal = document.getElementById('pc-sum-total');
+    var pcSumTps = document.getElementById('pc-sum-tps');
+    var pcSumTvq = document.getElementById('pc-sum-tvq');
+    var pcSumAvant = document.getElementById('pc-sum-avant');
+    var pcGroupCounter = 0;
+
+    function parseAmount(value) {
+        if (value === null || value === undefined) { return 0; }
+        var normalized = String(value).replace(/\s/g, '').replace(',', '.');
+        var amount = parseFloat(normalized);
+        return isNaN(amount) ? 0 : amount;
+    }
+    function toCents(amount) { return Math.round((Number(amount) || 0) * 100); }
+    function fromCents(cents) { return (Number(cents) || 0) / 100; }
+    function roundCurrency(amount) { return Math.round((Number(amount) || 0) * 100) / 100; }
+    function pcFormatDisplay(amount) { return (Number(amount) || 0).toFixed(2).replace('.', ','); }
+
+    function todayIso() {
+        var today = new Date();
+        var yyyy = today.getFullYear();
+        var mm = String(today.getMonth() + 1).padStart(2, '0');
+        var dd = String(today.getDate()).padStart(2, '0');
+        return yyyy + '-' + mm + '-' + dd;
+    }
+
+    function fillCompteSelect(select) {
+        select.innerHTML = '<option value="">Choisir un compte</option>';
+        for (var i = 0; i < allComptes.length; i++) {
+            var option = document.createElement('option');
+            option.value = allComptes[i].id;
+            option.textContent = allComptes[i].label;
+            select.appendChild(option);
+        }
+    }
+
+    function pcMakeAmountInput(className) {
+        var input = document.createElement('input');
+        input.type = 'number';
+        input.step = '0.01';
+        input.className = 'form-control form-control-sm text-end ' + className;
+        input.placeholder = '0.00';
+        return input;
+    }
+
+    function pcMakeComptesSelect() {
+        var select = document.createElement('select');
+        select.className = 'form-select form-select-sm pc-compte-select';
+        fillCompteSelect(select);
+        return select;
+    }
+
+    function pcGroupRows(groupId) {
+        return Array.prototype.slice.call(
+            pcReceiptsBody.querySelectorAll('[data-group-id="' + groupId + '"]')
+        );
+    }
+
+    function pcRowAvantCents(row) {
+        var input = row ? row.querySelector('.pc-avant-input') : null;
+        return toCents(Math.abs(parseAmount(input ? input.value : 0)));
+    }
+
+    function pcCascadeRemainder(groupId, fromRow) {
+        var rows = pcGroupRows(groupId);
+        var idx = rows.indexOf(fromRow);
+        if (idx === -1) { return; }
+
+        var sumCents = 0;
+        for (var i = 0; i <= idx; i++) { sumCents += pcRowAvantCents(rows[i]); }
+
+        var mainRow = rows[0];
+        var originalSubtotalCents = mainRow ? (parseInt(mainRow.dataset.originalSubtotalCents || '0', 10) || 0) : 0;
+        var remainderCents = originalSubtotalCents - sumCents;
+        var nextRow = rows[idx + 1];
+
+        if (remainderCents > 0) {
+            if (nextRow && nextRow.getAttribute('data-auto-remainder') === '1') {
+                var nextInput = nextRow.querySelector('.pc-avant-input');
+                if (nextInput) { nextInput.value = fromCents(remainderCents).toFixed(2); }
+            } else if (!nextRow) {
+                var newRow = pcAddExtraRow(groupId);
+                if (newRow) {
+                    newRow.setAttribute('data-auto-remainder', '1');
+                    var newInput = newRow.querySelector('.pc-avant-input');
+                    if (newInput) { newInput.value = fromCents(remainderCents).toFixed(2); }
+                }
+            }
+        } else if (nextRow && nextRow.getAttribute('data-auto-remainder') === '1') {
+            nextRow.remove();
+        }
+    }
+
+    function pcBindAvantCascade(row, groupId) {
+        var avantInput = row ? row.querySelector('.pc-avant-input') : null;
+        if (!avantInput) { return; }
+        avantInput.addEventListener('input', function () {
+            pcCascadeRemainder(groupId, row);
+            recalcPetiteCaisse();
+        });
+    }
+
+    function pcAddMainRow() {
+        var groupId = 'g' + (pcGroupCounter++);
+        var tr = document.createElement('tr');
+        tr.className = 'pc-row-main';
+        tr.setAttribute('data-group-id', groupId);
+
+        var tdDate = document.createElement('td');
+        var dateInput = document.createElement('input');
+        dateInput.type = 'date';
+        dateInput.className = 'form-control form-control-sm pc-date-input';
+        dateInput.value = todayIso();
+        tdDate.appendChild(dateInput);
+        tr.appendChild(tdDate);
+
+        var tdDesc = document.createElement('td');
+        var descInput = document.createElement('input');
+        descInput.type = 'text';
+        descInput.className = 'form-control form-control-sm pc-desc-input';
+        tdDesc.appendChild(descInput);
+        tr.appendChild(tdDesc);
+
+        var tdTotal = document.createElement('td');
+        var totalInputEl = pcMakeAmountInput('pc-total-input');
+        tdTotal.appendChild(totalInputEl);
+        tr.appendChild(tdTotal);
+
+        var tdSansTaxes = document.createElement('td');
+        tdSansTaxes.className = 'text-center';
+        var sansTaxesInputEl = document.createElement('input');
+        sansTaxesInputEl.type = 'checkbox';
+        sansTaxesInputEl.className = 'form-check-input pc-sans-taxes-input';
+        sansTaxesInputEl.title = 'Ce reçu ne comporte pas de taxes';
+        tdSansTaxes.appendChild(sansTaxesInputEl);
+        tr.appendChild(tdSansTaxes);
+
+        var tdTps = document.createElement('td');
+        var tpsInputEl = pcMakeAmountInput('pc-tps-input');
+        tdTps.appendChild(tpsInputEl);
+        tr.appendChild(tdTps);
+
+        var tdTvq = document.createElement('td');
+        var tvqInputEl = pcMakeAmountInput('pc-tvq-input');
+        tdTvq.appendChild(tvqInputEl);
+        tr.appendChild(tdTvq);
+
+        var tdAvant = document.createElement('td');
+        var avantInputEl = pcMakeAmountInput('pc-avant-input');
+        tdAvant.appendChild(avantInputEl);
+        tr.appendChild(tdAvant);
+
+        var tdCompte = document.createElement('td');
+        tdCompte.appendChild(pcMakeComptesSelect());
+        tr.appendChild(tdCompte);
+
+        var tdActions = document.createElement('td');
+        tdActions.className = 'text-nowrap';
+
+        var addExtraBtn = document.createElement('button');
+        addExtraBtn.type = 'button';
+        addExtraBtn.className = 'btn btn-sm btn-outline-secondary pc-add-extra me-1';
+        addExtraBtn.title = 'Ajouter une ligne pour ce reçu (autre compte)';
+        addExtraBtn.innerHTML = '<i class="bi bi-plus-lg"></i>';
+        addExtraBtn.addEventListener('click', function () { pcAddExtraRow(groupId); });
+        tdActions.appendChild(addExtraBtn);
+
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn btn-sm btn-outline-danger pc-remove-row';
+        removeBtn.title = 'Retirer ce reçu';
+        removeBtn.innerHTML = '<i class="bi bi-trash"></i>';
+        removeBtn.addEventListener('click', function () {
+            var rows = pcReceiptsBody.querySelectorAll('[data-group-id="' + groupId + '"]');
+            for (var i = 0; i < rows.length; i++) { rows[i].remove(); }
+            recalcPetiteCaisse();
+        });
+        tdActions.appendChild(removeBtn);
+
+        tr.appendChild(tdActions);
+        pcReceiptsBody.appendChild(tr);
+
+        function pcApplyTotalSplit() {
+            var totalCents = toCents(Math.abs(parseAmount(totalInputEl.value)));
+            if (totalCents <= 0) {
+                tr.dataset.originalSubtotalCents = '0';
+                recalcPetiteCaisse();
+                return;
+            }
+            var subtotalCents, tpsCents, tvqCents;
+            if (sansTaxesInputEl.checked) {
+                subtotalCents = totalCents;
+                tpsCents = 0;
+                tvqCents = 0;
+            } else {
+                subtotalCents = Math.round(totalCents / (1 + TPS_RATE + TVQ_RATE));
+                tpsCents = Math.round(subtotalCents * TPS_RATE);
+                tvqCents = totalCents - subtotalCents - tpsCents;
+            }
+            tpsInputEl.value = fromCents(tpsCents).toFixed(2);
+            tvqInputEl.value = fromCents(tvqCents).toFixed(2);
+            avantInputEl.value = fromCents(subtotalCents).toFixed(2);
+            tr.dataset.originalSubtotalCents = String(subtotalCents);
+            pcCascadeRemainder(groupId, tr);
+            recalcPetiteCaisse();
+        }
+
+        totalInputEl.addEventListener('input', pcApplyTotalSplit);
+        sansTaxesInputEl.addEventListener('change', pcApplyTotalSplit);
+
+        pcBindAvantCascade(tr, groupId);
+
+        return tr;
+    }
+
+    function pcAddExtraRow(groupId) {
+        var tr = document.createElement('tr');
+        tr.className = 'pc-row-extra';
+        tr.setAttribute('data-group-id', groupId);
+
+        for (var col = 0; col < 6; col++) {
+            var tdBlank = document.createElement('td');
+            tdBlank.className = 'text-muted text-center';
+            tdBlank.textContent = '—';
+            tr.appendChild(tdBlank);
+        }
+
+        var tdAvant = document.createElement('td');
+        var avantInputEl = pcMakeAmountInput('pc-avant-input');
+        tdAvant.appendChild(avantInputEl);
+        tr.appendChild(tdAvant);
+
+        var tdCompte = document.createElement('td');
+        tdCompte.appendChild(pcMakeComptesSelect());
+        tr.appendChild(tdCompte);
+
+        var tdActions = document.createElement('td');
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn btn-sm btn-outline-danger pc-remove-row';
+        removeBtn.title = 'Retirer cette ligne';
+        removeBtn.innerHTML = '<i class="bi bi-trash"></i>';
+        removeBtn.addEventListener('click', function () {
+            tr.remove();
+            recalcPetiteCaisse();
+        });
+        tdActions.appendChild(removeBtn);
+        tr.appendChild(tdActions);
+
+        var groupRows = pcReceiptsBody.querySelectorAll('[data-group-id="' + groupId + '"]');
+        var lastRow = groupRows[groupRows.length - 1];
+        if (lastRow) {
+            lastRow.insertAdjacentElement('afterend', tr);
+        } else {
+            pcReceiptsBody.appendChild(tr);
+        }
+
+        pcBindAvantCascade(tr, groupId);
+        recalcPetiteCaisse();
+
+        return tr;
+    }
+
+    var pcHiddenFieldsContainer = null;
+
+    function recalcPetiteCaisse() {
+        var facturesTotalCents = 0;
+        var tpsTotalCents = 0;
+        var tvqTotalCents = 0;
+        var avantTotalCents = 0;
+
+        var mainRows = pcReceiptsBody.querySelectorAll('.pc-row-main');
+        for (var m = 0; m < mainRows.length; m++) {
+            var totalInputEl = mainRows[m].querySelector('.pc-total-input');
+            var tpsInputEl = mainRows[m].querySelector('.pc-tps-input');
+            var tvqInputEl = mainRows[m].querySelector('.pc-tvq-input');
+            facturesTotalCents += toCents(Math.abs(parseAmount(totalInputEl ? totalInputEl.value : 0)));
+            tpsTotalCents += toCents(Math.abs(parseAmount(tpsInputEl ? tpsInputEl.value : 0)));
+            tvqTotalCents += toCents(Math.abs(parseAmount(tvqInputEl ? tvqInputEl.value : 0)));
+        }
+
+        var allRows = pcReceiptsBody.querySelectorAll('.pc-row-main, .pc-row-extra');
+        for (var r = 0; r < allRows.length; r++) {
+            var avantInputEl = allRows[r].querySelector('.pc-avant-input');
+            avantTotalCents += toCents(Math.abs(parseAmount(avantInputEl ? avantInputEl.value : 0)));
+        }
+
+        var ventileTotalCents = avantTotalCents + tpsTotalCents + tvqTotalCents;
+
+        if (pcSumTotal) { pcSumTotal.textContent = pcFormatDisplay(fromCents(facturesTotalCents)); }
+        if (pcSumTps) { pcSumTps.textContent = pcFormatDisplay(fromCents(tpsTotalCents)); }
+        if (pcSumTvq) { pcSumTvq.textContent = pcFormatDisplay(fromCents(tvqTotalCents)); }
+        if (pcSumAvant) { pcSumAvant.textContent = pcFormatDisplay(fromCents(avantTotalCents)); }
+
+        var differenceCents = facturesTotalCents - ventileTotalCents;
+        if (pcBalanceFeedback) {
+            pcBalanceFeedback.classList.remove('text-success', 'text-danger');
+            if (facturesTotalCents === 0 && ventileTotalCents === 0) {
+                pcBalanceFeedback.textContent = '';
+            } else if (differenceCents === 0) {
+                pcBalanceFeedback.classList.add('text-success');
+                pcBalanceFeedback.textContent = 'Équilibré : la colonne Total facture correspond à TPS + TVQ + Avant taxes.';
+            } else {
+                pcBalanceFeedback.classList.add('text-danger');
+                pcBalanceFeedback.textContent = 'Écart de ' + pcFormatDisplay(fromCents(Math.abs(differenceCents))) + ' entre le Total facture et TPS + TVQ + Avant taxes.';
+            }
+        }
+
+        return { ventileTotalCents: ventileTotalCents, differenceCents: differenceCents, hasRows: mainRows.length > 0 };
+    }
+
+    function pcBuildHiddenFields() {
+        if (pcHiddenFieldsContainer) {
+            pcHiddenFieldsContainer.remove();
+        }
+        pcHiddenFieldsContainer = document.createElement('div');
+        pcHiddenFieldsContainer.style.display = 'none';
+        pcForm.appendChild(pcHiddenFieldsContainer);
+
+        var mainRows = pcReceiptsBody.querySelectorAll('.pc-row-main');
+        var lineIndex = 0;
+
+        for (var m = 0; m < mainRows.length; m++) {
+            var mainRow = mainRows[m];
+            var groupId = mainRow.getAttribute('data-group-id');
+            var dateVal = mainRow.querySelector('.pc-date-input').value;
+            var descVal = mainRow.querySelector('.pc-desc-input').value;
+            var tpsVal = parseAmount(mainRow.querySelector('.pc-tps-input').value);
+            var tvqVal = parseAmount(mainRow.querySelector('.pc-tvq-input').value);
+
+            var rows = pcGroupRows(groupId);
+            for (var i = 0; i < rows.length; i++) {
+                var select = rows[i].querySelector('.pc-compte-select');
+                var avantInput = rows[i].querySelector('.pc-avant-input');
+                var compteId = select ? select.value : '';
+                var avantVal = parseAmount(avantInput ? avantInput.value : 0);
+
+                if (compteId && avantVal > 0) {
+                    pcAppendHidden('ligne-' + lineIndex + '-compte', compteId);
+                    pcAppendHidden('ligne-' + lineIndex + '-montant', roundCurrency(avantVal).toFixed(2));
+                    pcAppendHidden('ligne-' + lineIndex + '-date', dateVal);
+                    pcAppendHidden('ligne-' + lineIndex + '-description', descVal);
+                    pcAppendHidden('ligne-' + lineIndex + '-groupe-local', groupId);
+                    lineIndex++;
+                }
+            }
+
+            if (tpsVal > 0 && compteTpsPayeeId) {
+                pcAppendHidden('ligne-' + lineIndex + '-compte', String(compteTpsPayeeId));
+                pcAppendHidden('ligne-' + lineIndex + '-montant', roundCurrency(tpsVal).toFixed(2));
+                pcAppendHidden('ligne-' + lineIndex + '-date', dateVal);
+                pcAppendHidden('ligne-' + lineIndex + '-description', descVal);
+                pcAppendHidden('ligne-' + lineIndex + '-groupe-local', groupId);
+                lineIndex++;
+            }
+            if (tvqVal > 0 && compteTvqPayeeId) {
+                pcAppendHidden('ligne-' + lineIndex + '-compte', String(compteTvqPayeeId));
+                pcAppendHidden('ligne-' + lineIndex + '-montant', roundCurrency(tvqVal).toFixed(2));
+                pcAppendHidden('ligne-' + lineIndex + '-date', dateVal);
+                pcAppendHidden('ligne-' + lineIndex + '-description', descVal);
+                pcAppendHidden('ligne-' + lineIndex + '-groupe-local', groupId);
+                lineIndex++;
+            }
+        }
+
+        return lineIndex;
+    }
+
+    function pcAppendHidden(name, value) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        pcHiddenFieldsContainer.appendChild(input);
+    }
+
+    if (pcAddRowBtn) {
+        pcAddRowBtn.addEventListener('click', function () { pcAddMainRow(); });
+    }
+
+    if (pcReceiptsBody) {
+        pcReceiptsBody.addEventListener('input', recalcPetiteCaisse);
+        pcReceiptsBody.addEventListener('change', recalcPetiteCaisse);
+    }
+
+    if (pcForm) {
+        pcForm.addEventListener('submit', function (event) {
+            var result = recalcPetiteCaisse();
+            if (pcErrorBox) {
+                pcErrorBox.style.display = 'none';
+                pcErrorBox.textContent = '';
+            }
+            if (!result.hasRows || result.ventileTotalCents <= 0) {
+                event.preventDefault();
+                if (pcErrorBox) {
+                    pcErrorBox.textContent = 'Ajoute au moins un reçu (montant avant taxes + compte) avant d’enregistrer.';
+                    pcErrorBox.style.display = '';
+                }
+                return;
+            }
+            if (result.differenceCents !== 0) {
+                event.preventDefault();
+                if (pcErrorBox) {
+                    pcErrorBox.textContent = 'La colonne "Total facture" ne correspond pas à TPS + TVQ + Avant taxes. Corrige l’écart avant d’enregistrer.';
+                    pcErrorBox.style.display = '';
+                }
+                return;
+            }
+            var nbLignes = pcBuildHiddenFields();
+            if (nbLignes === 0) {
+                event.preventDefault();
+                if (pcErrorBox) {
+                    pcErrorBox.textContent = 'Ajoute au moins un reçu (montant avant taxes + compte) avant d’enregistrer.';
+                    pcErrorBox.style.display = '';
+                }
+            }
+        });
+    }
+
+    // Demarre avec quelques lignes vides pretes a remplir.
+    for (var i = 0; i < 5; i++) { pcAddMainRow(); }
+    recalcPetiteCaisse();
+});
+</script>
+{% endblock %}

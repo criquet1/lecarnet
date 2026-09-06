@@ -24,6 +24,7 @@ urlpatterns = [
     path('releves/similaire/<int:releve_id>/', views.releve_ecriture_similaire, name='releve_ecriture_similaire'),
     path('cheques/creer/', login_required(views.creer_cheque), name='creer_cheque'),
     path('cheques/', login_required(views.cheques), name='cheques'),
+    path('petite-caisse/', login_required(views.petite_caisse), name='petite_caisse'),
     path('administration/', views.administration, name='administration'),
     path('exercices-financiers/', login_required(views.exercices_financiers_page), name='exercices_financiers'),
     path('journal-general/', login_required(views.journal_general), name='journal_general'),

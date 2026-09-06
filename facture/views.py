@@ -64,6 +64,7 @@ from facture.services.taxes_service import (
 )
 from facture.views_releve_bancaire import releve_bancaire, releve_ecriture_similaire
 from facture.views_cheques import creer_cheque, cheques
+from facture.views_petite_caisse import petite_caisse
 from facture.views_rapports import (
     journal_general,
     grand_livre,
