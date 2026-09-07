@@ -683,6 +683,7 @@ def releve_bancaire(request):
                                 source_releve, _ = Source.objects.get_or_create(nom=source_nom[:15])
                                 tr_desc = tr_desc_form.save(commit=False)
                                 if not tr_desc.no_ej:
+                                    from facture.views import _next_no_ej  # import tardif : evite l'import circulaire avec facture.views
                                     tr_desc.no_ej = _next_no_ej(tr_desc.date)
                                 tr_desc.desc_releve = tr_desc.desc_releve or releve.desc_releve or ''
                                 tr_desc.source = source_releve

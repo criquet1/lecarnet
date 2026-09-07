@@ -350,3 +350,78 @@ class ExerciceFinancier(models.Model):
     def __str__(self):
         return f"Exercice {self.date_debut} au {self.date_fin}"
 
+
+class Preteur(models.Model):
+    """Une des personnes qui prêtent de l'argent, pour le registre de référence des intérêts.
+
+    Chaque prêteur a son propre solde et ses propres intérêts, indépendants
+    des autres — voir InteretAnnee.
+    """
+    nom = models.CharField(max_length=120, unique=True)
+
+    class Meta:
+        verbose_name = "Prêteur (registre des intérêts)"
+        verbose_name_plural = "Prêteurs (registre des intérêts)"
+        ordering = ['nom']
+
+    def __str__(self):
+        return self.nom
+
+
+class InteretAnnee(models.Model):
+    """Une année du registre de référence des intérêts (page 'Intérêts'), pour un prêteur donné.
+
+    Registre volontairement séparé des transactions réelles du projet : sert
+    uniquement à calculer, année par année et par prêteur, les intérêts
+    courus sur des montants prêtés/remboursés dont les dates et chiffres
+    sont saisis à la main (souvent à partir des relevés bancaires). Le solde
+    à rembourser n'est pas stocké : il est calculé à l'affichage à partir de
+    `solde_initial` et des lignes (voir compte/views_interets.py).
+    """
+    preteur = models.ForeignKey(Preteur, on_delete=models.CASCADE, related_name='annees')
+    annee = models.PositiveIntegerField()
+    taux = models.DecimalField(
+        max_digits=6, decimal_places=3, default=Decimal('0'),
+        verbose_name="Taux annuel (%)",
+        help_text="Taux d'intérêt annuel, en pourcentage, proraté par jour.",
+    )
+    solde_initial = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal('0'),
+        verbose_name="Solde reporté au 1er janvier",
+        help_text="Solde à rembourser reporté de l'année précédente, pour ce prêteur (0 si aucun report).",
+    )
+
+    class Meta:
+        verbose_name = "Année (registre des intérêts)"
+        verbose_name_plural = "Années (registre des intérêts)"
+        ordering = ['preteur__nom', 'annee']
+        constraints = [
+            models.UniqueConstraint(fields=['preteur', 'annee'], name='une_annee_par_preteur'),
+        ]
+
+    def __str__(self):
+        return f"{self.preteur} — {self.annee}"
+
+
+class InteretLigne(models.Model):
+    """Une ligne du registre des intérêts pour une année donnée.
+
+    Colonnes du tableau (voir compte/templates/compte/interets.html) :
+    date_montant/montant (avance), date_remboursement/remboursement, plus
+    les intérêts à ce jour et le solde à rembourser, calculés à
+    l'affichage — pas stockés ici.
+    """
+    annee = models.ForeignKey(InteretAnnee, on_delete=models.CASCADE, related_name='lignes')
+    ordre = models.PositiveIntegerField(default=0, help_text="Ordre chronologique d'affichage des lignes.")
+    date_montant = models.DateField(null=True, blank=True, verbose_name="Date (montant prêté)")
+    montant = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Montant prêté")
+    date_remboursement = models.DateField(null=True, blank=True, verbose_name="Date (remboursement)")
+    remboursement = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Ligne (registre des intérêts)"
+        verbose_name_plural = "Lignes (registre des intérêts)"
+        ordering = ['annee', 'ordre', 'id']
+
+    def __str__(self):
+        return f"Ligne {self.ordre} — {self.annee.annee}"

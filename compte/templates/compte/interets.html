@@ -1,0 +1,271 @@
+{% extends "layouts/app_base.html" %}
+{% load static %}
+{% load l10n %}
+{% load facture_extras %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block page_subtitle %}
+    Suivi de référence — avances, remboursements et intérêts, par prêteur. Ne touche pas aux transactions du projet.
+{% endblock %}
+
+{% block page_css %}
+<style>
+    .interets-annees .section-tab.is-next { opacity: .55; }
+    .interets-table { font-variant-numeric: tabular-nums; }
+    .interets-table input.form-control { min-width: 118px; }
+    .interets-table td.text-end input { text-align: right; }
+    .interets-table tfoot td { font-weight: 600; border-top: 2px solid #dee2e6; }
+    .interets-delete-form { display: inline; }
+    .interets-solde-lecture { color: #6c757d; }
+    .interets-grand-total .stat-value { font-size: 1.15rem; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="section-tabs interets-annees mb-3" role="tablist">
+    {% for a in annees_disponibles %}
+        <a href="?annee={{ a }}" class="section-tab{% if a == annee_courante %} active{% endif %}">{{ a }}</a>
+    {% endfor %}
+    {% with prochaine=annee_courante|add:1 %}
+        {% if prochaine not in annees_disponibles %}
+            <a href="?annee={{ prochaine }}" class="section-tab is-next">+ {{ prochaine }}</a>
+        {% endif %}
+    {% endwith %}
+</div>
+
+<form method="post" class="row g-2 align-items-end mb-4" style="max-width: 420px;">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="ajouter_preteur">
+    <input type="hidden" name="annee_courante" value="{{ annee_courante }}">
+    <div class="col">
+        <label class="form-label small text-muted mb-1">Ajouter un prêteur</label>
+        <input type="text" name="nom" class="form-control form-control-sm" placeholder="Nom du prêteur" required>
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-outline-secondary btn-sm">Ajouter</button>
+    </div>
+</form>
+
+{% for bloc in blocs %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <strong>{{ bloc.preteur.nom }}</strong>
+        <div class="d-flex gap-2">
+            {% if bloc.annee_obj %}
+                <form method="post" class="interets-delete-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="reporter_annee">
+                    <input type="hidden" name="annee_id" value="{{ bloc.annee_obj.id }}">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm">
+                        Reporter le solde vers {{ annee_courante|add:1 }} →
+                    </button>
+                </form>
+            {% endif %}
+            <form method="post" class="interets-delete-form"
+                  onsubmit="return confirm('Supprimer définitivement le prêteur « {{ bloc.preteur.nom }} » et toutes ses années/lignes? Cette action est irréversible.');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="supprimer_preteur">
+                <input type="hidden" name="preteur_id" value="{{ bloc.preteur.id }}">
+                <input type="hidden" name="annee_courante" value="{{ annee_courante }}">
+                <button type="submit" class="btn btn-outline-danger btn-sm" title="Supprimer ce prêteur et tout son historique">
+                    🗑 Supprimer ce prêteur
+                </button>
+            </form>
+        </div>
+    </div>
+    <div class="card-body">
+
+        {% if bloc.annee_obj %}
+            {% with a=bloc.annee_obj c=bloc.calc %}
+
+            <form method="post" class="row g-3 align-items-end mb-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="maj_parametres">
+                <input type="hidden" name="annee_id" value="{{ a.id }}">
+                <input type="hidden" name="annee_courante" value="{{ annee_courante }}">
+                <div class="col-auto">
+                    <label class="form-label small text-muted mb-1">Taux annuel (%)</label>
+                    <input type="number" step="0.001" min="0" name="taux" value="{{ a.taux|unlocalize }}" class="form-control form-control-sm" style="width: 110px;">
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small text-muted mb-1">
+                        Solde reporté au 1er janvier
+                        {% if not bloc.premiere_annee %}<span title="Reporté automatiquement de l'année précédente">🔒</span>{% endif %}
+                    </label>
+                    {% if bloc.premiere_annee %}
+                        <input type="number" step="0.01" name="solde_initial" value="{{ a.solde_initial|unlocalize }}" class="form-control form-control-sm" style="width: 150px;">
+                    {% else %}
+                        <input type="text" value="{{ a.solde_initial|montant }} $" class="form-control form-control-sm interets-solde-lecture" style="width: 150px;" readonly>
+                    {% endif %}
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm">Mettre à jour</button>
+                </div>
+            </form>
+
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="enregistrer_lignes">
+                <input type="hidden" name="annee_id" value="{{ a.id }}">
+                <input type="hidden" name="annee_courante" value="{{ annee_courante }}">
+
+                <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle interets-table mb-2">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th class="text-end">Montant prêté</th>
+                            <th>Date</th>
+                            <th class="text-end">Remboursement</th>
+                            <th class="text-end">Intérêts à ce jour</th>
+                            <th class="text-end">Solde à rembourser</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if bloc.rangees_precedentes %}
+                        {% for r in bloc.rangees_precedentes %}
+                        <tr class="table-light interets-ligne-passee" title="Ligne {{ bloc.annee_precedente_num }} — voir/modifier sur cet onglet">
+                            <td class="text-muted">{{ r.ligne.date_montant|date:'Y-m-d'|default:'—' }}</td>
+                            <td class="text-end text-muted">{% if r.ligne.montant is not None %}{{ r.ligne.montant|montant }} $ {% else %}—{% endif %}</td>
+                            <td class="text-muted">{{ r.ligne.date_remboursement|date:'Y-m-d'|default:'—' }}</td>
+                            <td class="text-end text-muted">{% if r.ligne.remboursement is not None %}{{ r.ligne.remboursement|montant }} $ {% else %}—{% endif %}</td>
+                            <td class="text-end text-muted">{% if r.interet is not None %}{{ r.interet|montant }} $ {% else %}—{% endif %}</td>
+                            <td class="text-end text-muted">{% if r.solde is not None %}{{ r.solde|montant }} $ {% else %}—{% endif %}</td>
+                            <td></td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="table-light">
+                            <td colspan="7" class="text-muted small fst-italic">
+                                ↑ lignes {{ bloc.annee_precedente_num }} (à modifier sur l'onglet {{ bloc.annee_precedente_num }}) — solde reporté au 1er janv. {{ a.annee }} : {{ a.solde_initial|montant }} $
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr class="table-light">
+                            <td class="text-muted">1er janv. {{ a.annee }}</td>
+                            <td class="text-end text-muted">—</td>
+                            <td class="text-muted">Solde reporté</td>
+                            <td class="text-end text-muted">—</td>
+                            <td class="text-end text-muted">—</td>
+                            <td class="text-end fw-semibold">{{ a.solde_initial|montant }} $</td>
+                            <td></td>
+                        </tr>
+                        {% endif %}
+                        {% for r in c.rangees %}
+                        <tr>
+                            <td><input type="date" name="date_montant[]" value="{{ r.ligne.date_montant|date:'Y-m-d' }}" class="form-control form-control-sm"></td>
+                            <td class="text-end"><input type="number" step="0.01" name="montant[]" value="{{ r.ligne.montant|default_if_none:''|unlocalize }}" class="form-control form-control-sm"></td>
+                            <td><input type="date" name="date_remboursement[]" value="{{ r.ligne.date_remboursement|date:'Y-m-d' }}" class="form-control form-control-sm"></td>
+                            <td class="text-end"><input type="number" step="0.01" name="remboursement[]" value="{{ r.ligne.remboursement|default_if_none:''|unlocalize }}" class="form-control form-control-sm"></td>
+                            <td class="text-end text-muted">{% if r.interet is not None %}{{ r.interet|montant }} $ {% else %}—{% endif %}</td>
+                            <td class="text-end">{% if r.solde is not None %}{{ r.solde|montant }} $ {% else %}—{% endif %}</td>
+                            <td>
+                                <input type="hidden" name="ligne_id[]" value="{{ r.ligne.id }}">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% for _ in bloc.lignes_vides %}
+                        <tr>
+                            <td><input type="date" name="date_montant[]" value="" class="form-control form-control-sm"></td>
+                            <td class="text-end"><input type="number" step="0.01" name="montant[]" value="" class="form-control form-control-sm" placeholder="—"></td>
+                            <td><input type="date" name="date_remboursement[]" value="" class="form-control form-control-sm"></td>
+                            <td class="text-end"><input type="number" step="0.01" name="remboursement[]" value="" class="form-control form-control-sm" placeholder="—"></td>
+                            <td class="text-end text-muted">—</td>
+                            <td class="text-end text-muted">—</td>
+                            <td><input type="hidden" name="ligne_id[]" value=""></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td>Totaux</td>
+                            <td class="text-end">{{ c.total_montant|montant }} $</td>
+                            <td></td>
+                            <td class="text-end">{{ c.total_remboursement|montant }} $</td>
+                            <td class="text-end">{{ c.interet_final|montant }} $</td>
+                            <td class="text-end">{{ c.solde_final|montant }} $</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+                </div>
+
+                <div class="text-muted small mb-2">
+                    Une case vidée sur une ligne existante supprime cette ligne. Les intérêts (31 déc.) : {{ c.interet_final|montant }} $ — solde à rembourser au 31 déc. : {{ c.solde_final|montant }} $.
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm">Enregistrer les lignes</button>
+            </form>
+
+            {% if c.rangees %}
+            <details class="mt-2">
+                <summary class="small text-muted">Supprimer une ligne existante</summary>
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    {% for r in c.rangees %}
+                    <form method="post" class="interets-delete-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="supprimer_ligne">
+                        <input type="hidden" name="ligne_id" value="{{ r.ligne.id }}">
+                        <input type="hidden" name="annee_courante" value="{{ annee_courante }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                            ✕ {{ r.ligne.date_montant|default:r.ligne.date_remboursement|date:'Y-m-d' }}
+                        </button>
+                    </form>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endif %}
+
+            {% endwith %}
+        {% else %}
+            <form method="post" class="d-flex gap-2 align-items-end">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="creer_annee">
+                <input type="hidden" name="preteur_id" value="{{ bloc.preteur.id }}">
+                <input type="hidden" name="annee" value="{{ annee_courante }}">
+                <div class="text-muted small flex-grow-1">
+                    Aucun registre {{ annee_courante }} pour {{ bloc.preteur.nom }} pour l'instant.
+                </div>
+                <button type="submit" class="btn btn-outline-primary btn-sm">Créer le registre {{ annee_courante }}</button>
+            </form>
+        {% endif %}
+
+    </div>
+</div>
+{% empty %}
+    <p class="text-muted">Aucun prêteur pour l'instant — ajoute-en un ci-dessus pour commencer.</p>
+{% endfor %}
+
+{% if nb_preteurs_avec_donnees > 1 %}
+<div class="card interets-grand-total">
+    <div class="card-body d-flex gap-4 flex-wrap">
+        <div>
+            <div class="text-muted small">Total prêté ({{ annee_courante }})</div>
+            <div class="stat-value">{{ grand_total.total_montant|montant }} $</div>
+        </div>
+        <div>
+            <div class="text-muted small">Total remboursé ({{ annee_courante }})</div>
+            <div class="stat-value">{{ grand_total.total_remboursement|montant }} $</div>
+        </div>
+        <div>
+            <div class="text-muted small">Intérêts courus au 31 déc.</div>
+            <div class="stat-value">{{ grand_total.interet_final|montant }} $</div>
+        </div>
+        <div>
+            <div class="text-muted small">Solde total à rembourser au 31 déc.</div>
+            <div class="stat-value">{{ grand_total.solde_final|montant }} $</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

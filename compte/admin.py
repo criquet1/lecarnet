@@ -1,5 +1,5 @@
 from django.contrib import admin
-from compte.models import Compte, ExerciceFinancier, SoldeAuxLivres, Total
+from compte.models import Compte, ExerciceFinancier, InteretAnnee, InteretLigne, Preteur, SoldeAuxLivres, Total
 from import_export.admin import ImportExportModelAdmin
 
 class TotalAdmin(ImportExportModelAdmin, admin.ModelAdmin):
@@ -25,3 +25,17 @@ admin.site.register(Compte, CompteAdmin)
 admin.site.register(Total, TotalAdmin)
 admin.site.register(SoldeAuxLivres, SoldeAuxLivresAdmin)
 admin.site.register(ExerciceFinancier, ExerciceFinancierAdmin)
+
+class InteretLigneInline(admin.TabularInline):
+    model = InteretLigne
+    extra = 0
+
+
+class InteretAnneeAdmin(admin.ModelAdmin):
+    list_display = ('preteur', 'annee', 'taux', 'solde_initial')
+    list_filter = ('preteur', 'annee')
+    inlines = [InteretLigneInline]
+
+
+admin.site.register(Preteur)
+admin.site.register(InteretAnnee, InteretAnneeAdmin)
