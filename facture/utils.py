@@ -54,6 +54,21 @@ def expert_required(view_func):
 	return _wrapped
 
 
+def has_interets_access(user):
+	return is_expert(user) or user.groups.filter(name__iexact='acces_interets').exists()
+
+
+def interets_access_required(view_func):
+	@wraps(view_func)
+	@login_required
+	def _wrapped(request, *args, **kwargs):
+		if not has_interets_access(request.user):
+			raise PermissionDenied("Accès réservé aux experts ou aux utilisateurs autorisés.")
+		return view_func(request, *args, **kwargs)
+
+	return _wrapped
+
+
 def parse_decimal(raw_value, *, strip_spaces=False, none_if_blank=False):
 	text = str(raw_value or '').strip()
 	if strip_spaces:

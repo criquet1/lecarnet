@@ -3,6 +3,7 @@
     <a href="{% url 'releve_bancaire' %}" class="section-tab{% if active == 'releve_bancaire' %} active{% endif %}" role="tab" aria-selected="{% if active == 'releve_bancaire' %}true{% else %}false{% endif %}">Relevés</a>
     <a href="{% url 'cheques' %}" class="section-tab{% if active == 'cheques' %} active{% endif %}" role="tab" aria-selected="{% if active == 'cheques' %}true{% else %}false{% endif %}">Chèques</a>
     <a href="{% url 'petite_caisse' %}" class="section-tab{% if active == 'petite_caisse' %} active{% endif %}" role="tab" aria-selected="{% if active == 'petite_caisse' %}true{% else %}false{% endif %}">Petite caisse</a>
+    <a href="{% url 'interets' %}" class="section-tab{% if active == 'interets' %} active{% endif %}" role="tab" aria-selected="{% if active == 'interets' %}true{% else %}false{% endif %}">Intérêts</a>
     <span class="section-tab disabled" role="tab" aria-disabled="true" tabindex="-1">Dépôts</span>
     <span class="section-tab disabled" role="tab" aria-disabled="true" tabindex="-1">Conciliation bancaire</span>
 </nav>

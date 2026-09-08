@@ -26,6 +26,8 @@
 
 {% block content %}
 
+{% include "includes/navigation/banque_tabs.html" %}
+
 {% if messages %}
     {% for message in messages %}
         <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>

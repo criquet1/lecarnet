@@ -16,7 +16,7 @@ from django.db.models import Max
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from facture.utils import expert_required, parse_decimal
+from facture.utils import interets_access_required, parse_decimal
 
 from .models import InteretAnnee, InteretLigne, Preteur
 
@@ -78,7 +78,7 @@ def _redirect_interets(annee):
     return redirect(reverse('interets') + f'?annee={annee}')
 
 
-@expert_required
+@interets_access_required
 def interets_page(request):
     if request.method == 'POST':
         return _traiter_action(request)

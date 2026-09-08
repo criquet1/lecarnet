@@ -1,7 +1,6 @@
 from django.urls import path
 
 from . import views
-from .views_interets import interets_page
 
 urlpatterns = [
     path('', views.compte_page, name='compte'),
@@ -17,5 +16,4 @@ urlpatterns = [
     path('transactions/', views.transactions_page, name='transactions'),
     path('transactions/<int:pk>/modifier/', views.transaction_edit_page, name='transaction_edit'),
     path('transactions/<int:pk>/supprimer/', views.transaction_delete, name='transaction_delete'),
-    path('interets/', interets_page, name='interets'),
 ]
