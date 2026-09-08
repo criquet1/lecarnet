@@ -11,6 +11,7 @@ from datetime import date, timedelta
 from django.contrib import messages
 from django.db import DatabaseError, transaction
 from django.db.utils import OperationalError, ProgrammingError
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.connection import ConnectionDoesNotExist
 from django.utils import timezone
@@ -299,6 +300,7 @@ def transactions_page(request):
 @expert_required
 def transaction_edit_page(request, pk):
 	tr_desc = get_object_or_404(Tr_desc, pk=pk)
+	is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
 
 	try:
 		compagnies = sorted(
@@ -310,11 +312,13 @@ def transaction_edit_page(request, pk):
 		settings_instance = get_settings()
 	except (OperationalError, ProgrammingError, ConnectionDoesNotExist):
 		logger.exception('Modification de transaction indisponible: tables facture/compte manquantes sur la base active.')
-		messages.error(
-			request,
+		error_message = (
 			'La base client active n\'est pas initialisee (tables facture/compte manquantes). '
 			'Lancez les migrations tenant (migrate_tenants) puis rechargez la page.'
 		)
+		if is_ajax:
+			return JsonResponse({'success': False, 'errors': [error_message]}, status=400)
+		messages.error(request, error_message)
 		return redirect('journal_general')
 
 	existing_compagnie_key = ''
@@ -322,6 +326,13 @@ def transaction_edit_page(request, pk):
 		existing_compagnie_key = f'fournisseur:{tr_desc.fournisseur_id}'
 	elif tr_desc.client_id:
 		existing_compagnie_key = f'client:{tr_desc.client_id}'
+
+	# Certaines ecritures (ex: creees depuis le module Facture) n'ont rempli
+	# que desc_ctb (utilise pour l'affichage journal/grand livre) sans jamais
+	# renseigner desc_releve. Se rabattre sur desc_ctb evite d'afficher un
+	# champ vide dans le formulaire - et donc d'effacer la description en
+	# enregistrant sans y toucher.
+	existing_description = tr_desc.desc_releve or tr_desc.desc_ctb or ''
 
 	def _existing_lines():
 		lines = []
@@ -335,7 +346,8 @@ def transaction_edit_page(request, pk):
 		return lines
 
 	def _render_edit_page(line_items=None):
-		return render(request, 'compte/transaction_edit.html', {
+		template_name = 'compte/_transaction_edit_form.html' if is_ajax else 'compte/transaction_edit.html'
+		return render(request, template_name, {
 			'title': f"Modifier l'écriture {tr_desc.no_ej}",
 			'tr_desc': tr_desc,
 			'compagnies': compagnies,
@@ -343,6 +355,7 @@ def transaction_edit_page(request, pk):
 			'compte_cap_id': settings_instance.cap_id if settings_instance else None,
 			'compte_car_id': settings_instance.car_id if settings_instance else None,
 			'existing_compagnie_key': existing_compagnie_key,
+			'existing_description': existing_description,
 			'line_items': line_items if line_items is not None else _existing_lines(),
 		})
 
@@ -516,7 +529,10 @@ def transaction_edit_page(request, pk):
 			)
 			return _render_edit_page()
 
-		messages.success(request, f"Écriture {tr_desc.no_ej} mise à jour.")
+		success_message = f"Écriture {tr_desc.no_ej} mise à jour."
+		if is_ajax:
+			return JsonResponse({'success': True, 'message': success_message})
+		messages.success(request, success_message)
 		return redirect('journal_general')
 
 	return _render_edit_page()
@@ -524,24 +540,37 @@ def transaction_edit_page(request, pk):
 
 @expert_required
 def transaction_delete(request, pk):
+	is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
+
 	if request.method != 'POST':
+		if is_ajax:
+			return JsonResponse({'success': False, 'errors': ['Methode non autorisee.']}, status=405)
 		return redirect('journal_general')
 
 	tr_desc = get_object_or_404(Tr_desc, pk=pk)
 	no_ej = tr_desc.no_ej
+	error_message = None
 	try:
 		verifier_exercice_modifiable(tr_desc.date)
 		with transaction.atomic():
 			tr_desc.delete()
 	except ValueError as exc:
-		messages.error(request, str(exc))
+		error_message = str(exc)
 	except (OperationalError, ProgrammingError, ConnectionDoesNotExist, DatabaseError):
 		logger.exception('Echec suppression transaction: base active non initialisee.')
-		messages.error(request, 'Impossible de supprimer: la base client active n\'est pas initialisee.')
+		error_message = 'Impossible de supprimer: la base client active n\'est pas initialisee.'
 	except Exception:
 		logger.exception('Echec suppression transaction: erreur non prevue.')
-		messages.error(request, 'Impossible de supprimer cette écriture pour le moment.')
-	else:
-		messages.success(request, f"Écriture {no_ej} supprimée.")
+		error_message = 'Impossible de supprimer cette écriture pour le moment.'
 
+	if error_message:
+		if is_ajax:
+			return JsonResponse({'success': False, 'errors': [error_message]}, status=400)
+		messages.error(request, error_message)
+		return redirect('journal_general')
+
+	success_message = f"Écriture {no_ej} supprimée."
+	if is_ajax:
+		return JsonResponse({'success': True, 'message': success_message})
+	messages.success(request, success_message)
 	return redirect('journal_general')

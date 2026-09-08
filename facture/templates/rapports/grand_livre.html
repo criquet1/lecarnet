@@ -121,6 +121,11 @@
                                 <td>
                                     {% if row.is_solde_depart %}
                                         <em>{{ row.description }}</em>
+                                    {% elif row.tr_desc_id and can_edit_journal %}
+                                        <a href="#" class="link-body-emphasis text-decoration-underline" title="Modifier cette écriture"
+                                           data-bs-toggle="modal" data-bs-target="#transactionEditModal" data-tr-desc-id="{{ row.tr_desc_id }}">
+                                            {% if row.compagnie %}{{ row.compagnie.nom }}{% if row.description %} - {% endif %}{% endif %}{{ row.description|default:"" }}
+                                        </a>
                                     {% else %}
                                         {% if row.compagnie %}{{ row.compagnie.nom }}{% if row.description %} - {% endif %}{% endif %}{{ row.description|default:"" }}
                                     {% endif %}
@@ -176,4 +181,8 @@
     </div>
 </div>
 </div>
+
+{% if can_edit_journal %}
+    {% include "includes/components/transaction_edit_modal.html" %}
+{% endif %}
 {% endblock %}

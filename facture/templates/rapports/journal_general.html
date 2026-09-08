@@ -40,7 +40,8 @@
                 <span class="fw-bold">{{ entry.date|date:"Y-m-d" }}</span>
                 <span class="fw-bold">
                     {% if entry.tr_desc_id and can_edit_journal %}
-                        <a href="{% url 'transaction_edit' entry.tr_desc_id %}" class="link-body-emphasis text-decoration-underline" title="Modifier cette écriture">
+                        <a href="#" class="link-body-emphasis text-decoration-underline" title="Modifier cette écriture"
+                           data-bs-toggle="modal" data-bs-target="#transactionEditModal" data-tr-desc-id="{{ entry.tr_desc_id }}">
                             {% if entry.compagnie %}{{ entry.compagnie }}{% if entry.description %} - {% endif %}{% endif %}{{ entry.description|default:"" }}
                         </a>
                     {% else %}
@@ -118,6 +119,10 @@
     </div>
 
 </div>
+
+{% if can_edit_journal %}
+    {% include "includes/components/transaction_edit_modal.html" %}
+{% endif %}
 
 {% endblock %}
 

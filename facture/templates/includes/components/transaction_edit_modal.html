@@ -1,0 +1,194 @@
+<!-- facture/templates/includes/components/transaction_edit_modal.html -->
+<!-- Modal reutilisable pour modifier ou supprimer une ecriture (Tr_desc) sans
+     quitter la page (grand livre, journal general). L'element declencheur doit
+     avoir : data-bs-toggle="modal" data-bs-target="#transactionEditModal"
+     data-tr-desc-id="{{ id }}" -->
+<div class="modal fade" id="transactionEditModal" tabindex="-1" aria-labelledby="transactionEditModalLabel" aria-hidden="true" data-url-template="{% url 'transaction_edit' 0 %}">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="transactionEditModalLabel">Modifier l'écriture</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body" id="transactionEditModalBody">
+                <div class="text-center text-muted py-4">Chargement...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const modalElement = document.getElementById('transactionEditModal');
+    if (!modalElement) {
+        return;
+    }
+    const modalBody = document.getElementById('transactionEditModalBody');
+    const urlTemplate = modalElement.dataset.urlTemplate;
+    const SCROLL_STORAGE_KEY = 'transactionEditModalScrollY';
+
+    function getModalInstance() {
+        return bootstrap.Modal.getOrCreateInstance(modalElement);
+    }
+
+    function getCookie(name) {
+        const match = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+        return match ? decodeURIComponent(match[2]) : '';
+    }
+
+    function buildUrl(trDescId) {
+        return urlTemplate.replace('/0/modifier/', '/' + trDescId + '/modifier/');
+    }
+
+    // Les scripts injectes via innerHTML ne s'executent pas automatiquement :
+    // on les recree pour forcer leur execution a chaque chargement du formulaire.
+    function runScripts(container) {
+        container.querySelectorAll('script').forEach(function (oldScript) {
+            const newScript = document.createElement('script');
+            Array.from(oldScript.attributes).forEach(function (attr) {
+                newScript.setAttribute(attr.name, attr.value);
+            });
+            newScript.textContent = oldScript.textContent;
+            oldScript.parentNode.replaceChild(newScript, oldScript);
+        });
+    }
+
+    // Garde la position de defilement avant de recharger la page, pour
+    // revenir a peu pres au meme endroit apres une sauvegarde/suppression.
+    function rememberScrollPosition() {
+        try {
+            sessionStorage.setItem(SCROLL_STORAGE_KEY, String(window.scrollY));
+        } catch (e) {
+            // Stockage indisponible (navigation privee, etc.) - tant pis.
+        }
+    }
+
+    function restoreScrollPositionIfNeeded() {
+        let saved = null;
+        try {
+            saved = sessionStorage.getItem(SCROLL_STORAGE_KEY);
+            sessionStorage.removeItem(SCROLL_STORAGE_KEY);
+        } catch (e) {
+            return;
+        }
+        if (saved !== null) {
+            window.scrollTo(0, parseInt(saved, 10) || 0);
+        }
+    }
+
+    function closeModalAndReload() {
+        rememberScrollPosition();
+        getModalInstance().hide();
+        window.location.reload();
+    }
+
+    function loadForm(trDescId) {
+        modalBody.innerHTML = '<div class="text-center text-muted py-4">Chargement...</div>';
+        fetch(buildUrl(trDescId), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error('load-failed');
+                }
+                return response.text();
+            })
+            .then(function (html) {
+                modalBody.innerHTML = html;
+                runScripts(modalBody);
+            })
+            .catch(function () {
+                modalBody.innerHTML = '<div class="alert alert-danger">Impossible de charger cette écriture pour le moment.</div>';
+            });
+    }
+
+    function handleSubmit(event) {
+        const form = event.target;
+        const isEditForm = form.matches('form[action*="/modifier/"]');
+        const isDeleteForm = form.matches('form[action*="/supprimer/"]');
+        if (!isEditForm && !isDeleteForm) {
+            return;
+        }
+
+        // Le formulaire de suppression a une confirmation native (onsubmit
+        // avec confirm()) : si l'utilisateur a annule, l'evenement arrive ici
+        // avec defaultPrevented deja a true - on ne fait rien de plus.
+        if (event.defaultPrevented) {
+            return;
+        }
+        event.preventDefault();
+
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+        }
+
+        const formData = new FormData(form);
+
+        fetch(form.action, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: formData,
+        })
+            .then(function (response) {
+                const contentType = response.headers.get('content-type') || '';
+                if (contentType.indexOf('application/json') !== -1) {
+                    return response.json().then(function (data) {
+                        return { json: true, ok: response.ok, data: data };
+                    });
+                }
+                return response.text().then(function (html) {
+                    return { json: false, html: html };
+                });
+            })
+            .then(function (result) {
+                if (result.json) {
+                    if (result.ok && result.data.success) {
+                        closeModalAndReload();
+                        return;
+                    }
+                    modalBody.innerHTML = '<div class="alert alert-danger">' +
+                        ((result.data.errors || []).join(' ') || 'Une erreur est survenue.') +
+                        '</div>';
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                    }
+                    return;
+                }
+                // Fragment HTML renvoye avec les erreurs de validation affichees dedans
+                // (formulaire d'edition uniquement).
+                modalBody.innerHTML = result.html;
+                runScripts(modalBody);
+            })
+            .catch(function () {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                }
+                modalBody.innerHTML = '<div class="alert alert-danger">Erreur réseau lors de l\'enregistrement.</div>';
+            });
+    }
+
+    modalBody.addEventListener('submit', handleSubmit);
+
+    modalBody.addEventListener('click', function (event) {
+        const cancelLink = event.target.closest('.js-transaction-edit-cancel');
+        if (cancelLink) {
+            event.preventDefault();
+            getModalInstance().hide();
+        }
+    });
+
+    modalElement.addEventListener('show.bs.modal', function (event) {
+        const trigger = event.relatedTarget;
+        const trDescId = trigger ? trigger.getAttribute('data-tr-desc-id') : null;
+        if (trDescId) {
+            loadForm(trDescId);
+        }
+    });
+
+    restoreScrollPositionIfNeeded();
+})();
+</script>

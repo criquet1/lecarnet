@@ -273,7 +273,8 @@ def _fetch_grand_livre_from_sql_view():
             source_nom,
             debit,
             credit,
-            solde
+            solde,
+            tr_desc_id
         FROM facture_v_grand_livre_lignes
         ORDER BY compte_numero, tr_date, no_ej, tr_desc_id, tr_detail_id
     """
@@ -299,6 +300,7 @@ def _fetch_grand_livre_from_sql_view():
             debit,
             credit,
             solde,
+            tr_desc_id,
         ) in cursor.fetchall():
             comptes_with_entries.add(compte_id)
             if current_compte_id != compte_id:
@@ -351,6 +353,7 @@ def _fetch_grand_livre_from_sql_view():
                 'debit': debit,
                 'credit': credit,
                 'solde': solde_avec_depart,
+                'tr_desc_id': tr_desc_id,
             })
             current_block['total_debit'] += debit
             current_block['total_credit'] += credit
@@ -548,6 +551,7 @@ def grand_livre(request):
                     'debit': debit,
                     'credit': credit,
                     'solde': solde,
+                    'tr_desc_id': detail.tr_desc_id,
                 })
 
         if current_compte_id is not None:
@@ -612,6 +616,7 @@ def grand_livre(request):
         'grand_total_solde': grand_total_solde,
         'is_balanced': is_balanced,
         'report_year_label': report_year_label,
+        'can_edit_journal': is_expert(request.user),
     })
 
 
