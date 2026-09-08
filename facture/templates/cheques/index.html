@@ -32,7 +32,7 @@
                         <tr>
                             <td>{{ cheque.no_cheque }}</td>
                             <td>{{ cheque.date_emission|date:"Y-m-d" }}</td>
-                            <td>{% if cheque.compagnie %}{{ cheque.compagnie.nom }}{% endif %}</td>
+                            <td>{% if cheque.fournisseur %}{{ cheque.fournisseur.nom }}{% elif cheque.client %}{{ cheque.client.nom }}{% endif %}</td>
                             <td>{{ cheque.description }}</td>
                             <td class="text-end">{% if cheque.montant %}{{ cheque.montant|floatformat:2 }}{% endif %}</td>
                             <td>
