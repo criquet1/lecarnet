@@ -17,7 +17,7 @@ from django.utils.connection import ConnectionDoesNotExist
 from django.utils import timezone
 
 from facture.helpers.dates import verifier_exercice_modifiable
-from facture.models import Client, Fournisseur, Source, Tr_desc, Tr_detail
+from facture.models import Client, Fournisseur, Releve, Source, Tr_desc, Tr_detail
 from facture.views import _next_no_ej
 from facture.utils import expert_required, get_settings, parse_decimal
 
@@ -553,6 +553,7 @@ def transaction_delete(request, pk):
 	try:
 		verifier_exercice_modifiable(tr_desc.date)
 		with transaction.atomic():
+			Releve.objects.filter(ecriture_tr_desc=tr_desc).update(ecriture_creee=False)
 			tr_desc.delete()
 	except ValueError as exc:
 		error_message = str(exc)

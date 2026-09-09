@@ -604,6 +604,7 @@ def facture(request):
                 open_tr_modal = True
             else:
                 with transaction.atomic():
+                    Releve.objects.filter(ecriture_tr_desc=editing_tr_desc).update(ecriture_creee=False)
                     editing_tr_desc.delete()
                 return redirect('facture')
 
