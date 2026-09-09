@@ -1,0 +1,99 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+
+{% include "includes/navigation/banque_tabs.html" %}
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header">Selon le grand livre — {{ working_period.label }}</div>
+    <div class="card-body">
+        {% if bloc_grand_livre %}
+            <table class="table table-sm mb-0">
+                <tbody>
+                    <tr>
+                        <td>Solde de départ</td>
+                        <td class="text-end">{{ bloc_grand_livre.solde_depart|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                        <td>Total des débits</td>
+                        <td class="text-end">{{ bloc_grand_livre.total_debits|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                        <td>Total des crédits</td>
+                        <td class="text-end">{{ bloc_grand_livre.total_credits|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="fw-bold">
+                        <td>Solde à la fin</td>
+                        <td class="text-end">{{ bloc_grand_livre.solde_fin|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        {% else %}
+            <p class="text-muted mb-0">Configure le compte chèques dans Setting avant de calculer ce bloc.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header">Selon le relevé bancaire — {{ working_period.label }}</div>
+    <div class="card-body">
+        {% if bloc_releve %}
+            <table class="table table-sm mb-0">
+                <tbody>
+                    <tr>
+                        <td>Solde selon le relevé ({{ bloc_releve.date_releve|date:"Y-m-d" }})</td>
+                        <td class="text-end">{{ bloc_releve.solde_releve|floatformat:2 }}</td>
+                    </tr>
+                    <tr>
+                        <td>Moins : chèques en circulation</td>
+                        <td class="text-end">-{{ bloc_releve.total_cheques_circulation|floatformat:2 }}</td>
+                    </tr>
+                    <tr class="fw-bold">
+                        <td>Solde ajusté</td>
+                        <td class="text-end">{{ bloc_releve.solde_ajuste|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        {% else %}
+            <p class="text-muted mb-0">Le relevé bancaire de {{ working_period.label }} n'a pas encore été importé.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header">Chèques en circulation</div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>No chèque</th>
+                        <th>Date</th>
+                        <th>Compagnie</th>
+                        <th>Description</th>
+                        <th class="text-end">Montant</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cheque in cheques_en_circulation %}
+                        <tr>
+                            <td>{{ cheque.no_cheque }}</td>
+                            <td>{{ cheque.date_emission|date:"Y-m-d" }}</td>
+                            <td>{% if cheque.fournisseur %}{{ cheque.fournisseur.nom }}{% elif cheque.client %}{{ cheque.client.nom }}{% endif %}</td>
+                            <td>{{ cheque.description }}</td>
+                            <td class="text-end">{% if cheque.montant %}{{ cheque.montant|floatformat:2 }}{% endif %}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-muted">Aucun chèque en circulation.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

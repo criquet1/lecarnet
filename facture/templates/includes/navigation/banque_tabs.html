@@ -5,6 +5,6 @@
     <a href="{% url 'petite_caisse' %}" class="section-tab{% if active == 'petite_caisse' %} active{% endif %}" role="tab" aria-selected="{% if active == 'petite_caisse' %}true{% else %}false{% endif %}">Petite caisse</a>
     <a href="{% url 'interets' %}" class="section-tab{% if active == 'interets' %} active{% endif %}" role="tab" aria-selected="{% if active == 'interets' %}true{% else %}false{% endif %}">Intérêts</a>
     <span class="section-tab disabled" role="tab" aria-disabled="true" tabindex="-1">Dépôts</span>
-    <span class="section-tab disabled" role="tab" aria-disabled="true" tabindex="-1">Conciliation bancaire</span>
+    <a href="{% url 'conciliation' %}" class="section-tab{% if active == 'conciliation' %} active{% endif %}" role="tab" aria-selected="{% if active == 'conciliation' %}true{% else %}false{% endif %}">Conciliation bancaire</a>
 </nav>
 {% endwith %}

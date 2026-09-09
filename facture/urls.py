@@ -2,6 +2,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.urls import path
 from compte.views_interets import interets_page
+from facture.views_conciliation import conciliation
 from . import views
 
 
@@ -27,6 +28,7 @@ urlpatterns = [
     path('cheques/', login_required(views.cheques), name='cheques'),
     path('petite-caisse/', login_required(views.petite_caisse), name='petite_caisse'),
     path('interets/', interets_page, name='interets'),
+    path('conciliation/', login_required(conciliation), name='conciliation'),
     path('administration/', views.administration, name='administration'),
     path('exercices-financiers/', login_required(views.exercices_financiers_page), name='exercices_financiers'),
     path('journal-general/', login_required(views.journal_general), name='journal_general'),
