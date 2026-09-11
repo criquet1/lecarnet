@@ -22,6 +22,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.db.models import Max
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.urls import reverse
 
 from facture.utils import interets_access_required, parse_decimal
@@ -108,7 +109,7 @@ def interet_gagne_durant(tranche, annee_num, taux_lookup):
     montant = tranche['montant_restant']
     origine = tranche['date']
     fin_annee = date(annee_num, 12, 31)
-    fin_periode = min(date.today(), fin_annee)
+    fin_periode = min(timezone.localdate(), fin_annee)
     if montant <= 0 or origine > fin_periode:
         return Decimal('0')
     debut_ref = max(origine, date(annee_num, 1, 1))
@@ -251,12 +252,12 @@ def interets_page(request):
         return _traiter_action(request)
 
     try:
-        annee_courante = int(request.GET.get('annee') or date.today().year)
+        annee_courante = int(request.GET.get('annee') or timezone.localdate().year)
     except (TypeError, ValueError):
-        annee_courante = date.today().year
+        annee_courante = timezone.localdate().year
 
     preteurs = list(Preteur.objects.all())
-    annees_disponibles = {annee_courante, date.today().year}
+    annees_disponibles = {annee_courante, timezone.localdate().year}
     for a in InteretAnnee.objects.values_list('annee', flat=True):
         annees_disponibles.add(a)
 
@@ -276,7 +277,7 @@ def interets_page(request):
             total_interet_verse_general += calc['total_interet_verse']
             total_solde_general += calc['solde_final']
         premiere_annee = bool(annee_obj) and not preteur.annees.filter(annee__lt=annee_courante).exists()
-        annee_terminee = annee_courante < date.today().year
+        annee_terminee = annee_courante < timezone.localdate().year
 
         blocs.append({
             'preteur': preteur,
@@ -306,7 +307,7 @@ def interets_page(request):
 
 def _traiter_action(request):
     action = request.POST.get('action')
-    annee_courante = request.POST.get('annee_courante') or date.today().year
+    annee_courante = request.POST.get('annee_courante') or timezone.localdate().year
 
     if action == 'ajouter_preteur':
         nom = (request.POST.get('nom') or '').strip()
