@@ -143,7 +143,7 @@ def construire_tranches(preteur):
 
     lignes = list(
         InteretLigne.objects.filter(annee__preteur=preteur)
-        .select_related('annee').order_by('annee__annee', 'ordre', 'id')
+        .select_related('annee').order_by('annee__annee', 'date_montant', 'ordre', 'id')
     )
     for ligne in lignes:
         montant = ligne.montant or Decimal('0')
