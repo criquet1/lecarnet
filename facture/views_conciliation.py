@@ -74,10 +74,13 @@ def conciliation(request):
 
     cheques_en_circulation = (
         Cheque.objects
-        .filter(annule=False)
+        .filter(annule=False, date_emission__lt=premier_jour_mois_suivant)
         .exclude(no_cheque__in=no_cheques_encaisses)
         .order_by('date_emission')
     )
+    total_decaissements_circulation = cheques_en_circulation.aggregate(
+        total=Sum('montant')
+    )['total'] or Decimal('0')
 
     if compte_releve_banque:
         derniere_ligne_releve = (
@@ -92,18 +95,13 @@ def conciliation(request):
         )
 
         if derniere_ligne_releve:
-            cheques_en_circulation_periode = cheques_en_circulation.filter(date_emission__lt=premier_jour_mois_suivant)
-            total_cheques_circulation = cheques_en_circulation_periode.aggregate(
-                total=Sum('montant')
-            )['total'] or Decimal('0')
-
             solde_releve = derniere_ligne_releve.solde
-            solde_ajuste = solde_releve - total_cheques_circulation
+            solde_ajuste = solde_releve - total_decaissements_circulation
 
             bloc_releve = {
                 'solde_releve': solde_releve,
                 'date_releve': derniere_ligne_releve.date,
-                'total_cheques_circulation': total_cheques_circulation,
+                'total_cheques_circulation': total_decaissements_circulation,
                 'solde_ajuste': solde_ajuste,
             }
 
@@ -113,4 +111,5 @@ def conciliation(request):
         'bloc_grand_livre': bloc_grand_livre,
         'bloc_releve': bloc_releve,
         'cheques_en_circulation': cheques_en_circulation,
+        'total_decaissements_circulation': total_decaissements_circulation,
     })

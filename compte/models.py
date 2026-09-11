@@ -390,6 +390,11 @@ class InteretAnnee(models.Model):
         verbose_name="Solde reporté au 1er janvier",
         help_text="Solde à rembourser reporté de l'année précédente, pour ce prêteur (0 si aucun report).",
     )
+    interet_reporte = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal('0'),
+        verbose_name="Intérêts non versés reportés",
+        help_text="Intérêts courus l'année précédente mais non versés (courus moins versés) : s'ajoutent au calcul des intérêts courus de cette année.",
+    )
 
     class Meta:
         verbose_name = "Année (registre des intérêts)"
@@ -417,6 +422,11 @@ class InteretLigne(models.Model):
     montant = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Montant prêté")
     date_remboursement = models.DateField(null=True, blank=True, verbose_name="Date (remboursement)")
     remboursement = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    interet_verse = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name="Intérêts versés",
+        help_text="Montant d'intérêts réellement versé à cette date (n'affecte pas le solde à rembourser, contrairement à un remboursement de capital).",
+    )
 
     class Meta:
         verbose_name = "Ligne (registre des intérêts)"

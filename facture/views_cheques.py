@@ -88,7 +88,12 @@ def creer_cheque(request):
 
 
 def cheques(request):
-    cheques_list = Cheque.objects.select_related('client', 'fournisseur').order_by('-date_emission', '-id')
+    cheques_list = (
+        Cheque.objects
+        .select_related('client', 'fournisseur')
+        .exclude(no_cheque__startswith='PC-')
+        .order_by('-date_emission', '-id')
+    )
     return render(request, "cheques/index.html", {
         'title': "Chèques",
         'cheques': cheques_list,

@@ -57,6 +57,15 @@ def in_group(user, group_name):
 
 
 @register.filter
+def has_interets_access(user):
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    if user.is_superuser or user.groups.filter(name__iexact='expert').exists():
+        return True
+    return user.groups.filter(name__iexact='acces_interets').exists()
+
+
+@register.filter
 def accounting_amount(value):
     """Comme `montant`, mais affiche les montants negatifs entre parentheses,
     convention comptable (ex. : -1000.99 -> '(1 000,99)')."""

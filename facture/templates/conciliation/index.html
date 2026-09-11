@@ -48,7 +48,7 @@
                         <td class="text-end">{{ bloc_releve.solde_releve|floatformat:2 }}</td>
                     </tr>
                     <tr>
-                        <td>Moins : chèques en circulation</td>
+                        <td>Moins : décaissements en circulation</td>
                         <td class="text-end">-{{ bloc_releve.total_cheques_circulation|floatformat:2 }}</td>
                     </tr>
                     <tr class="fw-bold">
@@ -64,7 +64,7 @@
 </div>
 
 <div class="card shadow-sm">
-    <div class="card-header">Chèques en circulation</div>
+    <div class="card-header">Décaissements en circulation</div>
     <div class="card-body">
         <div class="table-responsive">
             <table class="table table-sm table-striped align-middle">
@@ -88,10 +88,16 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="5" class="text-muted">Aucun chèque en circulation.</td>
+                            <td colspan="5" class="text-muted">Aucun décaissement en circulation.</td>
                         </tr>
                     {% endfor %}
                 </tbody>
+                <tfoot>
+                    <tr class="fw-bold">
+                        <td colspan="4" class="text-end">Total</td>
+                        <td class="text-end">{{ total_decaissements_circulation|floatformat:2 }}</td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     </div>
