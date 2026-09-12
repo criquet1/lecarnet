@@ -62,7 +62,16 @@ def valeur_composee(montant, date_debut, taux_lookup, jusqua, interet_verse=None
     pour la toute première année de cette tranche : il réduit d'autant
     l'intérêt qui se capitalise à la bascule vers l'année suivante (un
     intérêt entièrement versé ne capitalise rien, le capital reste
-    inchangé)."""
+    inchangé).
+
+    Note sur le compte de jours : la toute première année d'une tranche
+    exclut son jour de départ (ex. prêt le 15 janvier au 31 décembre = 350
+    jours — le jour du prêt lui-même ne porte pas encore intérêt). Mais une
+    fois qu'une tranche est déjà en cours au 1er janvier d'une année
+    suivante, ce 1er janvier compte comme un jour porteur d'intérêt à part
+    entière : une année complète (1er janvier au 31 décembre) doit donc
+    représenter 365 jours pleins (366 en année bissextile), pas 364 — sans
+    ce +1, une année complète ne rapportait que 364/365 du taux annoncé."""
     if montant <= 0 or jusqua <= date_debut:
         return montant
     valeur = montant
@@ -73,6 +82,10 @@ def valeur_composee(montant, date_debut, taux_lookup, jusqua, interet_verse=None
         borne_annee = date(annee, 12, 31)
         borne = min(jusqua, borne_annee)
         jours = (borne - point).days
+        if point == date(annee, 1, 1) and annee != annee_origine and borne == borne_annee:
+            # Année complète (pas la première de la tranche) : le 1er
+            # janvier compte comme jour porteur d'intérêt.
+            jours += 1
         interet_periode = Decimal('0')
         if jours > 0:
             interet_periode = valeur * taux_lookup(annee) / Decimal('365') * Decimal(jours)
