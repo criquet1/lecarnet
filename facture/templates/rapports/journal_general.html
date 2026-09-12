@@ -17,6 +17,14 @@
 {% block page_css %}
 <style>
     .table td.indent-credit { padding-left: 2rem; }
+
+    @keyframes journal-entry-flash-anim {
+        0% { background-color: #fff3cd; }
+        100% { background-color: transparent; }
+    }
+    .journal-entry-flash {
+        animation: journal-entry-flash-anim 2.5s ease;
+    }
 </style>
 {% endblock %}
 
@@ -34,7 +42,7 @@
 <div class="mx-auto w-100" style="max-width: 840px;">
 
     {% for entry in journal_entries %}
-        <div class="border rounded p-3 mb-3">
+        <div class="border rounded p-3 mb-3" {% if entry.tr_desc_id %}id="journal-entry-{{ entry.tr_desc_id }}"{% endif %}>
             <div class="d-flex align-items-center gap-3 flex-wrap mb-2">
                 <span class="fw-bold">{{ entry.no_ej }}</span>
                 <span class="fw-bold">{{ entry.date|date:"Y-m-d" }}</span>
@@ -127,4 +135,22 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Arrivee ici via un lien "No cheque" cliquable (page Cheques) :
+    // ?voir_ecriture=<tr_desc_id> -- on defile jusqu'a la bonne ecriture et on
+    // la surligne brievement, sans ouvrir le modal automatiquement.
+    var params = new URLSearchParams(window.location.search);
+    var trDescId = params.get('voir_ecriture');
+    if (!trDescId) {
+        return;
+    }
+    var target = document.getElementById('journal-entry-' + trDescId);
+    if (!target) {
+        return;
+    }
+    target.scrollIntoView({ block: 'center' });
+    target.classList.add('journal-entry-flash');
+});
+</script>
 {% endblock %}

@@ -21,7 +21,7 @@ from django.utils import timezone
 from compte.models import Compte
 from facture.helpers.dates import verifier_exercice_modifiable
 from facture.models import Cheque, PetiteCaisseLigne, Source, Tr_desc, Tr_detail
-from facture.utils import get_setting
+from facture.utils import get_setting, no_cheques_encaisses
 
 
 def _parse_montant(raw_value):
@@ -206,6 +206,26 @@ def _handle_passer_transaction(request):
     messages.success(request, f"Transaction de petite caisse enregistrée (no EJ {tr_desc.no_ej}).")
 
 
+def _historique_petite_caisse():
+    """Transactions de petite caisse deja passees (voir _handle_passer_transaction),
+    avec leur statut -- meme logique de rapprochement que la page Cheques."""
+    deja_encaisses = no_cheques_encaisses()
+
+    historique = list(
+        Cheque.objects
+        .filter(tr_desc__source__nom='Petite caisse')
+        .order_by('-date_emission', '-id')
+    )
+    for cheque in historique:
+        if cheque.annule:
+            cheque.statut = 'annule'
+        elif cheque.no_cheque in deja_encaisses:
+            cheque.statut = 'encaisse'
+        else:
+            cheque.statut = 'en_circulation'
+    return historique
+
+
 @login_required
 def petite_caisse(request):
     comptes_queryset = Compte.objects.filter(numero__gte=5000).order_by('numero')
@@ -263,6 +283,7 @@ def petite_caisse(request):
         'title': "Petite caisse",
         'recus_en_attente': recus_en_attente,
         'total_en_attente': total_en_attente,
+        'historique_petite_caisse': _historique_petite_caisse(),
         'all_comptes_json': json.dumps(all_comptes),
         'compte_tps_payee_id': tps_id or 0,
         'compte_tvq_payee_id': tvq_id or 0,

@@ -22,3 +22,5 @@ services:
         value: "5432"
       - key: TENANT_DATABASES_JSON
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false

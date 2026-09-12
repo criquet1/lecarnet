@@ -68,6 +68,7 @@
     <p class="text-muted small mb-2">
         <span class="badge bg-info text-dark">≈ no EJ</span>
         indique qu'une écriture similaire existe déjà pour cette description; ouvre la ligne pour la voir et l'appliquer.
+        Une ligne verte a déjà une écriture liée — soit créée directement d'ici, soit (<span class="badge bg-success">encaissé</span>) parce qu'elle correspond à un chèque déjà comptabilisé ailleurs.
     </p>
 
     <div class="tab-content" id="releveTabsContent">
@@ -112,7 +113,7 @@
                                 </thead>
                                 <tbody>
                                     {% for r in lignes %}
-                                    <tr class="releve-row {% if r.ecriture_creee %}table-success{% endif %}"
+                                    <tr class="releve-row {% if r.ecriture_creee or r.cheque_deja_comptabilise %}table-success{% endif %}"
                                         role="button"
                                         tabindex="0"
                                         data-releve-id="{{ r.id }}"
@@ -152,7 +153,14 @@
                                                 </span>
                                             {% endif %}
                                         </td>
-                                        <td>{{ r.no_cheque|default:'' }}</td>
+                                        <td>
+                                            {{ r.no_cheque|default:'' }}
+                                            {% if r.cheque_deja_comptabilise and not r.ecriture_creee %}
+                                                <span class="badge bg-success ms-1" title="Ce chèque est déjà comptabilisé (voir l'onglet Chèques); rien à créer ici.">
+                                                    encaissé
+                                                </span>
+                                            {% endif %}
+                                        </td>
                                         <td class="text-end">{% if r.retrait %}{{ r.retrait }}{% endif %}</td>
                                         <td class="text-end">{% if r.depot %}{{ r.depot }}{% endif %}</td>
                                         <td class="text-end">{{ r.solde }}</td>

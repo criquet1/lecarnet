@@ -11,7 +11,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils.connection import ConnectionDoesNotExist
 
-from facture.models import Client, Fournisseur
+from facture.models import Client, Fournisseur, CompteReleve, Releve
 from compte.models import Setting
 from facture.constants import MODE_CAP, MODE_CAR, MODE_AUTRE
 
@@ -135,6 +135,31 @@ def get_setting(*select_related_fields):
 		if valid_fields:
 			queryset = queryset.select_related(*valid_fields)
 	return queryset.first()
+
+
+def no_cheques_encaisses():
+	"""Numeros de cheque (Cheque.no_cheque) retrouves dans un releve du compte
+	bancaire utilise pour les cheques (Setting.compte_cheques) -- meme
+	rapprochement pour les vrais cheques et les decaissements de petite
+	caisse (prefixe PC-<no_ej>), qui partagent le meme champ no_cheque.
+	Reutilise par les pages Cheques, Conciliation, Releves (surlignage vert)
+	et Petite caisse (historique)."""
+	setting = get_setting()
+	if not setting or not setting.compte_cheques_id:
+		return set()
+
+	compte_releve_banque = CompteReleve.objects.filter(
+		compte_comptable_id=setting.compte_cheques_id
+	).first()
+	if not compte_releve_banque:
+		return set()
+
+	return set(
+		Releve.objects
+		.filter(compte_releve_id=compte_releve_banque.id)
+		.exclude(no_cheque='')
+		.values_list('no_cheque', flat=True)
+	)
 
 
 def tax_target_mode_from_setting(settings_instance):

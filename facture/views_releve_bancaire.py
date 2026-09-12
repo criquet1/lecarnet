@@ -24,7 +24,7 @@ from facture.models import Client, Fournisseur, Tr_detail, Source, Releve, Compt
 from facture.forms import TrDescForm, TrDetailFormSet
 from facture.helpers.dates import verifier_exercice_modifiable
 from facture.working_period import get_working_period
-from facture.utils import get_setting, parse_decimal
+from facture.utils import get_setting, parse_decimal, no_cheques_encaisses
 
 
 def _detecter_compte_csv(row):
@@ -800,6 +800,12 @@ def releve_bancaire(request):
     # modele, pour la suggestion automatique "ecriture similaire" affichee dans le tableau.
     candidats_ecriture_similaire = _candidats_ecriture_similaire()
 
+    # Numeros de cheque (vrais cheques et decaissements de petite caisse
+    # PC-<no_ej>) deja retrouves dans un releve -- reutilise pour surligner
+    # en vert les lignes deja comptabilisees ailleurs (voir facture/utils.py),
+    # meme quand ecriture_creee reste a False pour cette ligne precise.
+    deja_encaisses = no_cheques_encaisses()
+
     releves_par_compte = {}
     for compte in comptes_releves:
         releves_list = list(releves_qs.filter(compte_releve=compte))
@@ -824,6 +830,10 @@ def releve_bancaire(request):
             releve.similaire_desc_ctb = ''
             releve.similaire_compagnie_id = ''
             releve.similaire_details_json = '[]'
+            # Nomme differemment de "cheque_associe" (deja pris par le
+            # related_name du champ Cheque.releve_ligne, cote reverse FK sur
+            # Releve -- une simple affectation dessus leve un TypeError).
+            releve.cheque_deja_comptabilise = bool(releve.no_cheque) and releve.no_cheque in deja_encaisses
 
             if not releve.ecriture_creee:
                 meilleures = _meilleures_correspondances(releve, candidats_ecriture_similaire, limit=1)

@@ -1,0 +1,77 @@
+{% extends "layouts/app_base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+
+{% block content %}
+
+{% include "includes/navigation/banque_tabs.html" %}
+
+{% if mode == 'upload' %}
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Ajouter une facture par photo</h5>
+        <form method="post" enctype="multipart/form-data" action="{% url 'facture_photo' %}">
+            {% csrf_token %}
+            <div class="mb-3">
+                <input type="file" name="photo" accept="image/*" capture="environment" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Analyser la facture</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% if mode == 'verification' %}
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Vérifie les informations avant d'enregistrer</h5>
+        <p class="text-muted">Fournisseur détecté : {{ extraction.fournisseur|default:"inconnu" }} — Total détecté : {{ extraction.montant_total|default:"?" }} $</p>
+
+        <form method="post" action="{% url 'facture_photo' %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="confirmer">
+
+            <div class="mb-3">
+                <label class="form-label">Date</label>
+                <input type="date" name="date" class="form-control" value="{{ extraction.date|default:'' }}" required>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <input type="text" name="description" class="form-control" value="{{ extraction.description|default:'' }}">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Compte de dépense</label>
+                <select name="compte" class="form-select" required>
+                    <option value="">-- choisir --</option>
+                    {% for compte in all_comptes %}
+                        <option value="{{ compte.id }}">{{ compte.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Montant avant taxes</label>
+                <input type="number" step="0.01" name="montant_avant_taxes" class="form-control" value="{{ extraction.montant_avant_taxes|default:'' }}" required>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">TPS</label>
+                <input type="number" step="0.01" name="tps" class="form-control" value="{{ extraction.tps|default:'0' }}">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">TVQ</label>
+                <input type="number" step="0.01" name="tvq" class="form-control" value="{{ extraction.tvq|default:'0' }}">
+            </div>
+
+            <button type="submit" class="btn btn-success">Confirmer et enregistrer</button>
+            <a href="{% url 'facture_photo' %}" class="btn btn-link">Annuler</a>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

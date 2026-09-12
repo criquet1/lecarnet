@@ -30,7 +30,13 @@
                 <tbody>
                     {% for cheque in cheques %}
                         <tr>
-                            <td>{{ cheque.no_cheque }}</td>
+                            <td>
+                                {% if cheque.tr_desc_id %}
+                                    <a href="{% url 'journal_general' %}?voir_ecriture={{ cheque.tr_desc_id }}" title="Voir cette écriture dans le journal général">{{ cheque.no_cheque }}</a>
+                                {% else %}
+                                    {{ cheque.no_cheque }}
+                                {% endif %}
+                            </td>
                             <td>{{ cheque.date_emission|date:"Y-m-d" }}</td>
                             <td>{% if cheque.fournisseur %}{{ cheque.fournisseur.nom }}{% elif cheque.client %}{{ cheque.client.nom }}{% endif %}</td>
                             <td>{{ cheque.description }}</td>
@@ -38,6 +44,8 @@
                             <td>
                                 {% if cheque.annule %}
                                     <span class="badge text-bg-secondary">Annulé</span>
+                                {% elif cheque.encaisse %}
+                                    <span class="badge text-bg-primary">Encaissé</span>
                                 {% else %}
                                     <span class="badge text-bg-success">En circulation</span>
                                 {% endif %}

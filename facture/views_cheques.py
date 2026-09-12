@@ -12,7 +12,7 @@ from django.utils import timezone
 from facture.models import Cheque, Tr_desc, Tr_detail, Source
 from facture.forms import ChequeForm
 from facture.helpers.dates import verifier_exercice_modifiable
-from facture.utils import get_setting
+from facture.utils import get_setting, no_cheques_encaisses
 
 
 @login_required
@@ -88,12 +88,17 @@ def creer_cheque(request):
 
 
 def cheques(request):
+    deja_encaisses = no_cheques_encaisses()
+
     cheques_list = (
         Cheque.objects
         .select_related('client', 'fournisseur')
         .exclude(no_cheque__startswith='PC-')
         .order_by('-date_emission', '-id')
     )
+    for cheque in cheques_list:
+        cheque.encaisse = cheque.no_cheque in deja_encaisses
+
     return render(request, "cheques/index.html", {
         'title': "Chèques",
         'cheques': cheques_list,

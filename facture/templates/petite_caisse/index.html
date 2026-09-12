@@ -152,6 +152,47 @@
     </div>
 </div>
 
+<div class="card shadow-sm mt-4">
+    <div class="card-body">
+        <h5 class="card-title">Transactions déjà passées</h5>
+
+        {% if not historique_petite_caisse %}
+            <p class="text-muted mb-0">Aucune transaction de petite caisse passée pour le moment.</p>
+        {% else %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Date de paiement</th>
+                            <th>No chèque</th>
+                            <th class="text-end">Montant</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cheque in historique_petite_caisse %}
+                            <tr>
+                                <td>{{ cheque.date_emission|date:"Y-m-d" }}</td>
+                                <td>{{ cheque.no_cheque }}</td>
+                                <td class="text-end">{% if cheque.montant %}{{ cheque.montant|floatformat:2 }}{% endif %}</td>
+                                <td>
+                                    {% if cheque.statut == 'annule' %}
+                                        <span class="badge text-bg-secondary">Annulé</span>
+                                    {% elif cheque.statut == 'encaisse' %}
+                                        <span class="badge text-bg-primary">Encaissé</span>
+                                    {% else %}
+                                        <span class="badge text-bg-success">En circulation</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
 <input type="hidden" id="all-comptes-json" value="{{ all_comptes_json }}">
 <input type="hidden" id="compte-tps-payee-id" value="{{ compte_tps_payee_id }}">
 <input type="hidden" id="compte-tvq-payee-id" value="{{ compte_tvq_payee_id }}">
