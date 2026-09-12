@@ -118,6 +118,23 @@ def interet_gagne_durant(tranche, annee_num, taux_lookup):
     return valeur_fin - valeur_debut
 
 
+def interet_annee_complete(tranche, annee_num, taux_lookup):
+    """Intérêt qu'une tranche aura accumulé au 31 décembre de annee_num, peu
+    importe la date d'aujourd'hui — contrairement à interet_gagne_durant, qui
+    s'arrête à aujourd'hui pour l'année en cours, ceci calcule toujours
+    jusqu'à la fin de l'année (utile pour voir d'avance l'intérêt de fin
+    d'année pendant qu'elle est encore en cours)."""
+    montant = tranche['montant_restant']
+    origine = tranche['date']
+    fin_annee = date(annee_num, 12, 31)
+    if montant <= 0 or origine > fin_annee:
+        return Decimal('0')
+    debut_ref = max(origine, date(annee_num, 1, 1))
+    valeur_debut = valeur_tranche_au(tranche, taux_lookup, debut_ref)
+    valeur_fin = valeur_tranche_au(tranche, taux_lookup, fin_annee)
+    return valeur_fin - valeur_debut
+
+
 def construire_tranches(preteur):
     """Construit, en ordre chronologique, toutes les tranches (montants
     prêtés) de ce prêteur, toutes années confondues, avec ce qu'il en reste
@@ -200,12 +217,13 @@ def calculer_preteur_pour_annee(preteur, annee_num):
             continue
         tranche = tranche_par_ligne_id.get(ligne.id)
         interet = interet_gagne_durant(tranche, annee_num, taux_lookup) if tranche else None
+        interet_31dec = interet_annee_complete(tranche, annee_num, taux_lookup) if tranche else None
         if ligne.annee.annee == annee_num:
             # Ligne de l'année courante : "Montant prêté" reste la valeur
             # saisie telle quelle (éditable), pas de capitalisation à afficher.
             solde_courant += ligne.montant or Decimal('0')
             solde_courant -= ligne.remboursement or Decimal('0')
-            rangee = {'ligne': ligne, 'interet': interet, 'solde': solde_courant}
+            rangee = {'ligne': ligne, 'interet': interet, 'interet_31dec': interet_31dec, 'solde': solde_courant}
             rangees.append(rangee)
             total_montant += ligne.montant or Decimal('0')
             total_remboursement += ligne.remboursement or Decimal('0')
@@ -219,7 +237,7 @@ def calculer_preteur_pour_annee(preteur, annee_num):
             montant_affiche = valeur_tranche_au(tranche, taux_lookup, debut_annee_courante) if tranche else ligne.montant
             solde_courant += montant_affiche or Decimal('0')
             solde_courant -= ligne.remboursement or Decimal('0')
-            rangee = {'ligne': ligne, 'interet': interet, 'solde': solde_courant, 'montant_affiche': montant_affiche}
+            rangee = {'ligne': ligne, 'interet': interet, 'interet_31dec': interet_31dec, 'solde': solde_courant, 'montant_affiche': montant_affiche}
             rangees_precedentes.append(rangee)
 
     # Total de l'année = l'intérêt gagné cette année-là par TOUTES les
@@ -230,6 +248,10 @@ def calculer_preteur_pour_annee(preteur, annee_num):
         (interet_gagne_durant(t, annee_num, taux_lookup) for t in tranches),
         Decimal('0'),
     )
+    interet_31dec_final = sum(
+        (interet_annee_complete(t, annee_num, taux_lookup) for t in tranches),
+        Decimal('0'),
+    )
 
     return {
         'rangees': rangees,
@@ -238,6 +260,7 @@ def calculer_preteur_pour_annee(preteur, annee_num):
         'total_remboursement': total_remboursement,
         'total_interet_verse': total_interet_verse,
         'interet_final': interet_final,
+        'interet_31dec_final': interet_31dec_final,
         'solde_final': solde_courant,
     }
 
@@ -265,6 +288,7 @@ def interets_page(request):
     total_montant_general = Decimal('0')
     total_remboursement_general = Decimal('0')
     total_interet_general = Decimal('0')
+    total_interet_31dec_general = Decimal('0')
     total_interet_verse_general = Decimal('0')
     total_solde_general = Decimal('0')
     for preteur in preteurs:
@@ -274,6 +298,7 @@ def interets_page(request):
             total_montant_general += calc['total_montant']
             total_remboursement_general += calc['total_remboursement']
             total_interet_general += calc['interet_final']
+            total_interet_31dec_general += calc['interet_31dec_final']
             total_interet_verse_general += calc['total_interet_verse']
             total_solde_general += calc['solde_final']
         premiere_annee = bool(annee_obj) and not preteur.annees.filter(annee__lt=annee_courante).exists()
@@ -298,6 +323,7 @@ def interets_page(request):
             'total_montant': total_montant_general,
             'total_remboursement': total_remboursement_general,
             'interet_final': total_interet_general,
+            'interet_31dec_final': total_interet_31dec_general,
             'total_interet_verse': total_interet_verse_general,
             'solde_final': total_solde_general,
         },
@@ -407,6 +433,12 @@ def _traiter_action(request):
 
     elif action == 'supprimer_ligne':
         InteretLigne.objects.filter(pk=request.POST.get('ligne_id')).delete()
+
+    elif action == 'supprimer_annee':
+        # Supprime seulement le registre (et ses lignes) de l'année consultée
+        # pour ce prêteur — les autres années de ce même prêteur ne sont pas
+        # touchées. Le prêteur lui-même n'est jamais supprimé ici.
+        InteretAnnee.objects.filter(pk=request.POST.get('annee_id')).delete()
 
     elif action == 'supprimer_preteur':
         Preteur.objects.filter(pk=request.POST.get('preteur_id')).delete()

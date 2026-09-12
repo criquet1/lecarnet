@@ -74,18 +74,20 @@
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <strong>{{ bloc.preteur.nom }}</strong>
+        {% if bloc.annee_obj %}
         <div class="d-flex gap-2">
             <form method="post" class="interets-delete-form"
-                  onsubmit="return confirm('Supprimer définitivement le prêteur « {{ bloc.preteur.nom }} » et toutes ses années/lignes? Cette action est irréversible.');">
+                  onsubmit="return confirm('Supprimer le registre {{ annee_courante }} de « {{ bloc.preteur.nom }} » (et toutes ses lignes)? Les autres années de ce prêteur ne seront pas touchées. Cette action est irréversible.');">
                 {% csrf_token %}
-                <input type="hidden" name="action" value="supprimer_preteur">
-                <input type="hidden" name="preteur_id" value="{{ bloc.preteur.id }}">
+                <input type="hidden" name="action" value="supprimer_annee">
+                <input type="hidden" name="annee_id" value="{{ bloc.annee_obj.id }}">
                 <input type="hidden" name="annee_courante" value="{{ annee_courante }}">
-                <button type="submit" class="btn btn-outline-danger btn-sm" title="Supprimer ce prêteur et tout son historique">
-                    🗑 Supprimer ce prêteur
+                <button type="submit" class="btn btn-outline-danger btn-sm" title="Supprimer seulement le registre {{ annee_courante }} de ce prêteur">
+                    🗑 Supprimer le registre {{ annee_courante }}
                 </button>
             </form>
         </div>
+        {% endif %}
     </div>
     <div class="card-body">
 
@@ -142,7 +144,10 @@
                             <th class="text-end">Montant prêté</th>
                             <th>Date</th>
                             <th class="text-end">Remboursement</th>
-                            <th class="text-end">{% if bloc.annee_terminee %}Intérêts courus au 31 décembre{% else %}Intérêts courus{% endif %}</th>
+                            {% if not bloc.annee_terminee %}
+                            <th class="text-end">Intérêts courus</th>
+                            {% endif %}
+                            <th class="text-end">Intérêts au 31 décembre</th>
                             <th class="text-end">Intérêts versés</th>
                             <th class="text-end">Solde à rembourser</th>
                             <th></th>
@@ -156,7 +161,10 @@
                             <td class="text-end text-muted">{% if r.montant_affiche is not None %}{{ r.montant_affiche|montant }} $ {% else %}—{% endif %}</td>
                             <td><input type="date" name="date_remboursement[]" value="{{ r.ligne.date_remboursement|date:'Y-m-d' }}" class="form-control form-control-sm"></td>
                             <td class="text-end"><input type="number" step="0.01" name="remboursement[]" value="{{ r.ligne.remboursement|default_if_none:''|unlocalize }}" class="form-control form-control-sm" placeholder="—"></td>
+                            {% if not bloc.annee_terminee %}
                             <td class="text-end text-muted">{% if r.interet is not None %}{{ r.interet|montant }} $ {% else %}—{% endif %}</td>
+                            {% endif %}
+                            <td class="text-end text-muted">{% if r.interet_31dec is not None %}{{ r.interet_31dec|montant }} $ {% else %}—{% endif %}</td>
                             <td class="text-end"><input type="number" step="0.01" name="interet_verse[]" value="{{ r.ligne.interet_verse|default_if_none:''|unlocalize }}" class="form-control form-control-sm" placeholder="—"></td>
                             <td class="text-end text-muted">{% if r.solde is not None %}{{ r.solde|montant }} $ {% else %}—{% endif %}</td>
                             <td>
@@ -167,7 +175,7 @@
                         </tr>
                         {% endfor %}
                         <tr class="table-light">
-                            <td colspan="8" class="text-muted small fst-italic">
+                            <td colspan="{% if bloc.annee_terminee %}8{% else %}9{% endif %}" class="text-muted small fst-italic">
                                 ↑ lignes des années précédentes (chacune indépendante, avec son propre intérêt composé) — remboursement/intérêts versés modifiables ci-dessus, enregistrés avec le bouton "Enregistrer les lignes" plus bas
                             </td>
                         </tr>
@@ -177,6 +185,9 @@
                             <td class="text-end text-muted">—</td>
                             <td class="text-muted">Solde reporté</td>
                             <td class="text-end text-muted">—</td>
+                            {% if not bloc.annee_terminee %}
+                            <td class="text-end text-muted">{% if a.interet_reporte %}{{ a.interet_reporte|montant }} $ {% else %}—{% endif %}</td>
+                            {% endif %}
                             <td class="text-end text-muted">{% if a.interet_reporte %}{{ a.interet_reporte|montant }} $ {% else %}—{% endif %}</td>
                             <td class="text-end text-muted">—</td>
                             <td class="text-end fw-semibold">{{ a.solde_initial|montant }} $</td>
@@ -189,7 +200,10 @@
                             <td class="text-end"><input type="number" step="0.01" name="montant[]" value="{{ r.ligne.montant|default_if_none:''|unlocalize }}" class="form-control form-control-sm"></td>
                             <td><input type="date" name="date_remboursement[]" value="{{ r.ligne.date_remboursement|date:'Y-m-d' }}" class="form-control form-control-sm"></td>
                             <td class="text-end"><input type="number" step="0.01" name="remboursement[]" value="{{ r.ligne.remboursement|default_if_none:''|unlocalize }}" class="form-control form-control-sm"></td>
+                            {% if not bloc.annee_terminee %}
                             <td class="text-end text-muted">{% if r.interet is not None %}{{ r.interet|montant }} $ {% else %}—{% endif %}</td>
+                            {% endif %}
+                            <td class="text-end text-muted">{% if r.interet_31dec is not None %}{{ r.interet_31dec|montant }} $ {% else %}—{% endif %}</td>
                             <td class="text-end"><input type="number" step="0.01" name="interet_verse[]" value="{{ r.ligne.interet_verse|default_if_none:''|unlocalize }}" class="form-control form-control-sm" placeholder="—"></td>
                             <td class="text-end">{% if r.solde is not None %}{{ r.solde|montant }} $ {% else %}—{% endif %}</td>
                             <td>
@@ -203,6 +217,9 @@
                             <td class="text-end"><input type="number" step="0.01" name="montant[]" value="" class="form-control form-control-sm" placeholder="—"></td>
                             <td><input type="date" name="date_remboursement[]" value="" class="form-control form-control-sm"></td>
                             <td class="text-end"><input type="number" step="0.01" name="remboursement[]" value="" class="form-control form-control-sm" placeholder="—"></td>
+                            {% if not bloc.annee_terminee %}
+                            <td class="text-end text-muted">—</td>
+                            {% endif %}
                             <td class="text-end text-muted">—</td>
                             <td class="text-end"><input type="number" step="0.01" name="interet_verse[]" value="" class="form-control form-control-sm" placeholder="—"></td>
                             <td class="text-end text-muted">—</td>
@@ -216,7 +233,10 @@
                             <td class="text-end">{{ c.total_montant|montant }} $</td>
                             <td></td>
                             <td class="text-end">{{ c.total_remboursement|montant }} $</td>
+                            {% if not bloc.annee_terminee %}
                             <td class="text-end">{{ c.interet_final|montant }} $</td>
+                            {% endif %}
+                            <td class="text-end">{{ c.interet_31dec_final|montant }} $</td>
                             <td class="text-end">{{ c.total_interet_verse|montant }} $</td>
                             <td class="text-end">{{ c.solde_final|montant }} $</td>
                             <td></td>
@@ -226,7 +246,7 @@
                 </div>
 
                 <div class="text-muted small mb-2">
-                    Une case vidée sur une ligne existante supprime cette ligne. Les intérêts au 31 déc. : {{ c.interet_final|montant }} $ — solde à rembourser au 31 déc. : {{ c.solde_final|montant }} $.
+                    Une case vidée sur une ligne existante supprime cette ligne. Les intérêts au 31 déc. : {{ c.interet_31dec_final|montant }} $ — solde à rembourser au 31 déc. : {{ c.solde_final|montant }} $.
                 </div>
                 <button type="submit" class="btn btn-primary btn-sm">Enregistrer les lignes</button>
             </form>
@@ -282,8 +302,8 @@
             <div class="stat-value">{{ grand_total.total_remboursement|montant }} $</div>
         </div>
         <div>
-            <div class="text-muted small">Intérêts courus au 31 déc.</div>
-            <div class="stat-value">{{ grand_total.interet_final|montant }} $</div>
+            <div class="text-muted small">Intérêts au 31 déc.</div>
+            <div class="stat-value">{{ grand_total.interet_31dec_final|montant }} $</div>
         </div>
         <div>
             <div class="text-muted small">Intérêts versés ({{ annee_courante }})</div>
