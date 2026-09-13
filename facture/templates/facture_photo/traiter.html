@@ -40,18 +40,29 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Compte de dépense</label>
-                        <select name="compte" class="form-select" required>
-                            <option value="">-- choisir --</option>
-                            {% for compte in all_comptes %}
-                                <option value="{{ compte.id }}" {% if compte_suggere and compte.id == compte_suggere.numero %}selected{% endif %}>{{ compte.label }}</option>
+                        <label class="form-label">Compte(s) de dépense</label>
+                        <div id="lignes-comptes">
+                            {% for item in lignes_initiales %}
+                                <div class="row g-2 mb-2 align-items-center ligne-compte">
+                                    <div class="col-7">
+                                        <select name="ligne-{{ forloop.counter0 }}-compte" class="form-select" required>
+                                            <option value="">-- choisir --</option>
+                                            {% for compte in all_comptes %}
+                                                <option value="{{ compte.id }}" {% if compte.id|stringformat:"s" == item.compte_id %}selected{% endif %}>{{ compte.label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-4">
+                                        <input type="number" step="0.01" name="ligne-{{ forloop.counter0 }}-montant" class="form-control" placeholder="Montant" value="{{ item.montant|default:'' }}" required>
+                                    </div>
+                                    <div class="col-1">
+                                        <button type="button" class="btn btn-sm btn-outline-danger retirer-ligne" title="Retirer cette ligne">×</button>
+                                    </div>
+                                </div>
                             {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">Montant avant taxes</label>
-                        <input type="number" step="0.01" name="montant_avant_taxes" class="form-control" value="{{ extraction.montant_avant_taxes|default:'' }}" required>
+                        </div>
+                        <button type="button" id="ajouter-ligne" class="btn btn-sm btn-outline-secondary mt-1">+ Ajouter une ligne de compte</button>
+                        <p class="small text-muted mt-2 mb-0">Total des lignes : <span id="total-lignes">0,00</span> $ (montant avant taxes détecté : {{ ligne.montant_avant_taxes_detecte|default:"?" }} $)</p>
                     </div>
 
                     <div class="mb-3">
@@ -71,5 +82,80 @@
         </div>
     </div>
 </div>
+
+<template id="modele-ligne-compte">
+    <div class="row g-2 mb-2 align-items-center ligne-compte">
+        <div class="col-7">
+            <select name="ligne-__INDEX__-compte" class="form-select" required>
+                <option value="">-- choisir --</option>
+                {% for compte in all_comptes %}
+                    <option value="{{ compte.id }}">{{ compte.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-4">
+            <input type="number" step="0.01" name="ligne-__INDEX__-montant" class="form-control" placeholder="Montant" required>
+        </div>
+        <div class="col-1">
+            <button type="button" class="btn btn-sm btn-outline-danger retirer-ligne" title="Retirer cette ligne">×</button>
+        </div>
+    </div>
+</template>
+
+<script>
+(function () {
+    var conteneur = document.getElementById('lignes-comptes');
+    var modele = document.getElementById('modele-ligne-compte');
+    var totalAffiche = document.getElementById('total-lignes');
+
+    function recalculerTotal() {
+        var total = 0;
+        conteneur.querySelectorAll('input[name$="-montant"]').forEach(function (champ) {
+            var valeur = parseFloat((champ.value || '0').replace(',', '.'));
+            if (!isNaN(valeur)) {
+                total += valeur;
+            }
+        });
+        totalAffiche.textContent = total.toFixed(2).replace('.', ',');
+    }
+
+    function prochainIndex() {
+        return conteneur.querySelectorAll('.ligne-compte').length;
+    }
+
+    function renumeroter() {
+        // Les noms des champs (ligne-0-compte, ligne-1-compte, ...) doivent
+        // rester une suite sans trou -- sinon le serveur s'arrete au premier
+        // numero manquant et perd les lignes suivantes.
+        conteneur.querySelectorAll('.ligne-compte').forEach(function (ligneEl, i) {
+            ligneEl.querySelectorAll('select, input').forEach(function (champ) {
+                champ.name = champ.name.replace(/ligne-\d+-/, 'ligne-' + i + '-');
+            });
+        });
+    }
+
+    document.getElementById('ajouter-ligne').addEventListener('click', function () {
+        var html = modele.innerHTML.replaceAll('__INDEX__', prochainIndex());
+        var wrapper = document.createElement('div');
+        wrapper.innerHTML = html.trim();
+        conteneur.appendChild(wrapper.firstElementChild);
+        recalculerTotal();
+    });
+
+    conteneur.addEventListener('click', function (evenement) {
+        if (evenement.target.classList.contains('retirer-ligne')) {
+            var lignes = conteneur.querySelectorAll('.ligne-compte');
+            if (lignes.length > 1) {
+                evenement.target.closest('.ligne-compte').remove();
+                renumeroter();
+                recalculerTotal();
+            }
+        }
+    });
+
+    conteneur.addEventListener('input', recalculerTotal);
+    recalculerTotal();
+})();
+</script>
 
 {% endblock %}

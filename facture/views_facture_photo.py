@@ -156,22 +156,42 @@ def facture_photo(request):
     })
 
 
+def _extraire_lignes_post(request):
+    """Lit les lignes compte/montant soumises (ligne-0-compte, ligne-0-montant,
+    ligne-1-compte, ...), sans validation -- juste pour re-afficher le
+    formulaire tel quel en cas d'erreur, ou pour les traiter dans
+    _handle_confirmer."""
+    lignes = []
+    index = 0
+    while f'ligne-{index}-compte' in request.POST:
+        lignes.append({
+            'compte_id': (request.POST.get(f'ligne-{index}-compte') or '').strip(),
+            'montant': (request.POST.get(f'ligne-{index}-montant') or '').strip(),
+        })
+        index += 1
+    return lignes
+
+
 def _handle_confirmer(request, ligne, comptes_queryset):
-    compte_id = (request.POST.get('compte') or '').strip()
-    compte = comptes_queryset.filter(pk=compte_id).first()
-    if not compte:
-        messages.error(request, "Compte de dépense invalide.")
+    lignes_brutes = _extraire_lignes_post(request)
+    lignes_comptes = []
+    montant_avant_taxes = Decimal('0')
+    for entree in lignes_brutes:
+        compte = comptes_queryset.filter(pk=entree['compte_id']).first() if entree['compte_id'] else None
+        montant = _parse_montant(entree['montant'])
+        if not compte or montant is None or montant <= 0:
+            continue
+        lignes_comptes.append((compte, montant))
+        montant_avant_taxes += montant
+
+    if not lignes_comptes:
+        messages.error(request, "Ajoute au moins une ligne (compte + montant) avant d'enregistrer.")
         return False
 
-    montant_avant_taxes = _parse_montant(request.POST.get('montant_avant_taxes'))
     tps = _parse_montant(request.POST.get('tps')) or Decimal('0')
     tvq = _parse_montant(request.POST.get('tvq')) or Decimal('0')
     description = (request.POST.get('description') or '').strip() or 'Facture (photo)'
     date_brute = (request.POST.get('date') or '').strip()
-
-    if montant_avant_taxes is None or montant_avant_taxes <= 0:
-        messages.error(request, "Montant avant taxes invalide.")
-        return False
 
     try:
         date_facture = datetime.strptime(date_brute, '%Y-%m-%d').date()
@@ -204,7 +224,8 @@ def _handle_confirmer(request, ligne, comptes_queryset):
                 fournisseur=fournisseur,
             )
 
-            Tr_detail.objects.create(tr_desc=tr_desc, compte=compte, montant=montant_avant_taxes)
+            for compte_ligne, montant_ligne in lignes_comptes:
+                Tr_detail.objects.create(tr_desc=tr_desc, compte=compte_ligne, montant=montant_ligne)
 
             settings_instance = get_setting()
             if tps and settings_instance.compte_tps_payee:
@@ -243,6 +264,7 @@ def facture_photo_traiter(request, pk):
             'fournisseur_trouve': fournisseur_trouve,
             'compte_suggere': compte_suggere,
             'extraction': request.POST,
+            'lignes_initiales': _extraire_lignes_post(request) or [{'compte_id': '', 'montant': ''}],
         })
 
     return render(request, "facture_photo/traiter.html", {
@@ -259,4 +281,8 @@ def facture_photo_traiter(request, pk):
             'tvq': ligne.tvq_detectee,
             'montant_avant_taxes': ligne.montant_avant_taxes_detecte,
         },
+        'lignes_initiales': [{
+            'compte_id': str(compte_suggere.numero) if compte_suggere else '',
+            'montant': ligne.montant_avant_taxes_detecte,
+        }],
     })
