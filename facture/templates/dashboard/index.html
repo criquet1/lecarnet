@@ -7,6 +7,19 @@ Tableau de bord
 
 {% block page_css %}
 <link rel="stylesheet" href="{% static 'css/pages/app_dashboard.css' %}?v=20260804-3">
+<style>
+    /* La carte "Facture par photo" n'a d'utilite que sur telephone (prendre
+       une photo depuis un ordinateur n'a pas de sens) -- cachee par defaut,
+       affichee seulement sous un certain seuil de largeur d'ecran. */
+    .dashboard-card-mobile-only {
+        display: none;
+    }
+    @media (max-width: 768px) {
+        .dashboard-card-mobile-only {
+            display: flex;
+        }
+    }
+</style>
 {% endblock %}
 
 {% block page_title %}Tableau de bord{% endblock %}
@@ -20,6 +33,47 @@ Tableau de bord
 <div class="dashboard-container">
 
     <div class="dashboard-grid">
+
+        <!-- ===================================================== -->
+        <!-- FACTURE PAR PHOTO -->
+        <!-- ===================================================== -->
+
+        <div class="dashboard-card dashboard-card-mobile-only">
+
+            <div class="card-header">
+
+                <i class="bi bi-camera"></i>
+
+                <h2>Facture par photo</h2>
+
+            </div>
+
+            <div class="card-content">
+
+                <div class="card-row">
+
+                    <span class="card-label">
+                        Prends une facture en photo, elle sera traitée plus tard.
+                    </span>
+
+                </div>
+
+            </div>
+
+            <div class="card-footer">
+
+                <a href="{% url 'facture_photo_rapide' %}">
+
+                    Prendre une photo
+
+                    <i class="bi bi-arrow-right"></i>
+
+                </a>
+
+            </div>
+
+        </div>
+
 
         <!-- ===================================================== -->
         <!-- FACTURES -->

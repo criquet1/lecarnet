@@ -555,3 +555,30 @@ class PetiteCaisseLigne(models.Model):
 
     def __str__(self):
         return f"Petite caisse {self.date} - {self.compte} - {self.montant}"
+
+
+class FacturePhotoEnAttente(models.Model):
+    """File d'attente pour les factures prises en photo depuis un telephone.
+
+    La page mobile (minimaliste, sans menu) ne fait qu'envoyer la photo ;
+    l'analyse par IA est faite tout de suite et le resultat est mis de cote
+    ici. Le traitement (verification, choix du compte, creation de
+    l'ecriture) se fait plus tard, sur l'onglet Banque > Facture (photo).
+    """
+    photo = models.BinaryField()
+    photo_type = models.CharField(max_length=50, blank=True, default='')
+    fournisseur_detecte = models.CharField(max_length=255, blank=True, default='')
+    date_detectee = models.CharField(max_length=20, blank=True, default='')
+    montant_total_detecte = models.CharField(max_length=20, blank=True, default='')
+    tps_detectee = models.CharField(max_length=20, blank=True, default='')
+    tvq_detectee = models.CharField(max_length=20, blank=True, default='')
+    montant_avant_taxes_detecte = models.CharField(max_length=20, blank=True, default='')
+    description_detectee = models.CharField(max_length=255, blank=True, default='')
+    erreur_analyse = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Photo en attente {self.created_at:%Y-%m-%d %H:%M} - {self.fournisseur_detecte or '?'}"

@@ -1,9 +1,13 @@
 """Vue de l'onglet Banque > Facture par photo.
 
-Prend une photo de facture, l'envoie a l'API Gemini pour extraire les
-montants, puis affiche un court ecran de verification avant d'enregistrer
-l'ecriture comptable (meme esprit que la petite caisse : rien n'est
-comptabilise avant confirmation explicite).
+Deux parcours :
+- facture_photo_rapide : page mobile minimaliste, sans menu. Prend la photo,
+  l'analyse tout de suite, et met le resultat de cote dans la file d'attente
+  (FacturePhotoEnAttente). Rien n'est comptabilise ici.
+- facture_photo (liste) + facture_photo_traiter (une facture a la fois) :
+  page normale du site, pour traiter les photos en attente -- verification,
+  choix du compte (suggere automatiquement si le fournisseur detecte
+  correspond a un fournisseur existant), et creation de l'ecriture.
 """
 
 import json
@@ -14,7 +18,8 @@ from decimal import Decimal, InvalidOperation
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.shortcuts import redirect, render
+from django.http import Http404, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from dotenv import load_dotenv
 from google import genai
@@ -22,7 +27,7 @@ from google.genai import types
 
 from compte.models import Compte
 from facture.helpers.dates import verifier_exercice_modifiable
-from facture.models import Source, Tr_desc, Tr_detail
+from facture.models import FacturePhotoEnAttente, Fournisseur, Source, Tr_desc, Tr_detail
 from facture.utils import get_setting
 
 load_dotenv()
@@ -52,6 +57,13 @@ def _parse_montant(raw_value):
         return None
 
 
+def _valeur_texte(extraction, cle):
+    valeur = extraction.get(cle) if isinstance(extraction, dict) else None
+    if valeur is None:
+        return ''
+    return str(valeur)
+
+
 def _analyser_photo(image_bytes, mime_type):
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     response = client.models.generate_content(
@@ -68,7 +80,83 @@ def _analyser_photo(image_bytes, mime_type):
             texte = texte[4:]
     return json.loads(texte)
 
-def _handle_confirmer(request, comptes_queryset):
+
+def _trouver_fournisseur_et_compte(nom_detecte):
+    """Tente de faire correspondre le fournisseur detecte par l'IA a un
+    fournisseur deja connu, pour suggerer automatiquement son compte
+    habituel (ex : Bell Canada, Hydro-Quebec)."""
+    nom_detecte = (nom_detecte or '').strip()
+    if not nom_detecte:
+        return None, None
+
+    fournisseur = Fournisseur.objects.filter(nom__iexact=nom_detecte).first()
+    if not fournisseur:
+        fournisseur = Fournisseur.objects.filter(nom__icontains=nom_detecte).first()
+    if not fournisseur:
+        for candidat in Fournisseur.objects.all():
+            if candidat.nom.lower() in nom_detecte.lower():
+                fournisseur = candidat
+                break
+    if not fournisseur:
+        return None, None
+
+    compte = fournisseur.comptes.first()
+    return fournisseur, compte
+
+
+@login_required
+def facture_photo_rapide(request):
+    """Page minimaliste pour telephone : prend la photo, l'analyse tout de
+    suite, et met le resultat de cote dans la file d'attente."""
+    if request.method == 'POST':
+        photo = request.FILES.get('photo')
+        if not photo:
+            return render(request, "facture_photo/rapide.html", {'erreur': "Choisis une photo avant d'envoyer."})
+
+        photo_bytes = photo.read()
+        mime_type = photo.content_type or 'image/jpeg'
+
+        ligne = FacturePhotoEnAttente(photo=photo_bytes, photo_type=mime_type)
+
+        try:
+            extraction = _analyser_photo(photo_bytes, mime_type)
+            ligne.fournisseur_detecte = _valeur_texte(extraction, 'fournisseur')
+            ligne.date_detectee = _valeur_texte(extraction, 'date')
+            ligne.montant_total_detecte = _valeur_texte(extraction, 'montant_total')
+            ligne.tps_detectee = _valeur_texte(extraction, 'tps')
+            ligne.tvq_detectee = _valeur_texte(extraction, 'tvq')
+            ligne.montant_avant_taxes_detecte = _valeur_texte(extraction, 'montant_avant_taxes')
+            ligne.description_detectee = _valeur_texte(extraction, 'description')
+        except Exception as exc:
+            ligne.erreur_analyse = str(exc)
+
+        ligne.save()
+
+        return render(request, "facture_photo/rapide.html", {'envoye': True})
+
+    return render(request, "facture_photo/rapide.html", {})
+
+
+@login_required
+def facture_photo_image(request, pk):
+    """Sert l'image d'une photo en attente (pour l'aperçu sur la page de traitement)."""
+    ligne = get_object_or_404(FacturePhotoEnAttente, pk=pk)
+    if not ligne.photo:
+        raise Http404
+    return HttpResponse(bytes(ligne.photo), content_type=ligne.photo_type or 'image/jpeg')
+
+
+@login_required
+def facture_photo(request):
+    """Liste des photos en attente de traitement."""
+    en_attente = FacturePhotoEnAttente.objects.all()
+    return render(request, "facture_photo/index.html", {
+        'title': "Facture par photo",
+        'en_attente': en_attente,
+    })
+
+
+def _handle_confirmer(request, ligne, comptes_queryset):
     compte_id = (request.POST.get('compte') or '').strip()
     compte = comptes_queryset.filter(pk=compte_id).first()
     if not compte:
@@ -95,6 +183,9 @@ def _handle_confirmer(request, comptes_queryset):
         messages.error(request, "Compte courant (compte_cheques) non configuré dans Setting.")
         return False
 
+    fournisseur_id = (request.POST.get('fournisseur') or '').strip()
+    fournisseur = Fournisseur.objects.filter(pk=fournisseur_id).first() if fournisseur_id else None
+
     total = montant_avant_taxes + tps + tvq
 
     try:
@@ -110,6 +201,7 @@ def _handle_confirmer(request, comptes_queryset):
                 date=date_facture,
                 desc_ctb=description,
                 source=source_photo,
+                fournisseur=fournisseur,
             )
 
             Tr_detail.objects.create(tr_desc=tr_desc, compte=compte, montant=montant_avant_taxes)
@@ -125,52 +217,46 @@ def _handle_confirmer(request, comptes_queryset):
         messages.error(request, str(exc))
         return False
 
+    ligne.delete()
     messages.success(request, f"Facture enregistrée (no EJ {tr_desc.no_ej}).")
     return True
 
 
 @login_required
-def facture_photo(request):
+def facture_photo_traiter(request, pk):
+    ligne = get_object_or_404(FacturePhotoEnAttente, pk=pk)
     comptes_queryset = Compte.objects.filter(numero__gte=5000).order_by('numero')
     all_comptes = [
         {'id': compte.numero, 'label': f"{compte.numero} - {compte.libelle}"}
         for compte in comptes_queryset
     ]
 
+    fournisseur_trouve, compte_suggere = _trouver_fournisseur_et_compte(ligne.fournisseur_detecte)
+
     if request.method == 'POST':
-        action = (request.POST.get('action') or '').strip()
-
-        if action == 'confirmer':
-            if _handle_confirmer(request, comptes_queryset):
-                return redirect('facture_photo')
-            # en cas d'erreur, on revient au formulaire de verification tel quel
-            return render(request, "facture_photo/index.html", {
-                'title': "Facture par photo",
-                'mode': 'verification',
-                'extraction': request.POST,
-                'all_comptes': all_comptes,
-            })
-
-        # sinon, on est dans le cas "analyser" : une photo vient d'etre soumise
-        photo = request.FILES.get('photo')
-        if not photo:
-            messages.error(request, "Choisis une photo avant d'envoyer.")
+        if _handle_confirmer(request, ligne, comptes_queryset):
             return redirect('facture_photo')
-
-        try:
-            extraction = _analyser_photo(photo.read(), photo.content_type or 'image/jpeg')
-        except Exception:
-            messages.error(request, "L'analyse de la photo a échoué. Réessaie, ou entre la facture manuellement.")
-            return redirect('facture_photo')
-
-        return render(request, "facture_photo/index.html", {
+        return render(request, "facture_photo/traiter.html", {
             'title': "Facture par photo",
-            'mode': 'verification',
-            'extraction': extraction,
+            'ligne': ligne,
             'all_comptes': all_comptes,
+            'fournisseur_trouve': fournisseur_trouve,
+            'compte_suggere': compte_suggere,
+            'extraction': request.POST,
         })
 
-    return render(request, "facture_photo/index.html", {
+    return render(request, "facture_photo/traiter.html", {
         'title': "Facture par photo",
-        'mode': 'upload',
+        'ligne': ligne,
+        'all_comptes': all_comptes,
+        'fournisseur_trouve': fournisseur_trouve,
+        'compte_suggere': compte_suggere,
+        'extraction': {
+            'date': ligne.date_detectee,
+            'description': ligne.description_detectee,
+            'montant_total': ligne.montant_total_detecte,
+            'tps': ligne.tps_detectee,
+            'tvq': ligne.tvq_detectee,
+            'montant_avant_taxes': ligne.montant_avant_taxes_detecte,
+        },
     })

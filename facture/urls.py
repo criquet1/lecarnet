@@ -4,7 +4,7 @@ from django.urls import path
 from compte.views_interets import interets_page
 from facture.views_conciliation import conciliation
 from . import views
-from facture.views_facture_photo import facture_photo
+from facture.views_facture_photo import facture_photo, facture_photo_image, facture_photo_rapide, facture_photo_traiter
 
 
 urlpatterns = [
@@ -29,6 +29,9 @@ urlpatterns = [
     path('cheques/', login_required(views.cheques), name='cheques'),
     path('petite-caisse/', login_required(views.petite_caisse), name='petite_caisse'),
     path('facture-photo/', login_required(facture_photo), name='facture_photo'),
+    path('facture-photo/rapide/', login_required(facture_photo_rapide), name='facture_photo_rapide'),
+    path('facture-photo/<int:pk>/', login_required(facture_photo_traiter), name='facture_photo_traiter'),
+    path('facture-photo/<int:pk>/image/', login_required(facture_photo_image), name='facture_photo_image'),
     path('interets/', interets_page, name='interets'),
     path('conciliation/', login_required(conciliation), name='conciliation'),
     path('administration/', views.administration, name='administration'),
