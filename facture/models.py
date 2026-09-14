@@ -576,6 +576,18 @@ class FacturePhotoEnAttente(models.Model):
     description_detectee = models.CharField(max_length=255, blank=True, default='')
     erreur_analyse = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
+    traite = models.BooleanField(
+        default=False,
+        help_text="Vrai une fois l'ecriture comptable creee. La photo est conservee (compressee) pour consultation future."
+    )
+    tr_desc = models.ForeignKey(
+        Tr_desc,
+        on_delete=models.SET_NULL,
+        related_name='photos_facture',
+        blank=True,
+        null=True,
+        help_text="Ecriture comptable creee a partir de cette photo, une fois traitee.",
+    )
 
     class Meta:
         ordering = ['-created_at']

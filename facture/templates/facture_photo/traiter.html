@@ -14,11 +14,15 @@
                 <img src="{% url 'facture_photo_image' ligne.pk %}" class="img-fluid rounded border" alt="Photo de la facture">
             </div>
             <div class="col-md-8">
-                <h5 class="card-title">Vérifie les informations avant d'enregistrer</h5>
+                {% if mode_edition %}
+                    <h5 class="card-title">Modifier cette facture (no EJ {{ ligne.tr_desc.no_ej }})</h5>
+                {% else %}
+                    <h5 class="card-title">Vérifie les informations avant d'enregistrer</h5>
+                {% endif %}
 
                 {% if fournisseur_trouve %}
-                    <p class="text-success">Fournisseur reconnu : <strong>{{ fournisseur_trouve.nom }}</strong>{% if compte_suggere %} — compte {{ compte_suggere.numero }} - {{ compte_suggere.libelle }} suggéré ci-dessous{% endif %}</p>
-                {% else %}
+                    <p class="text-success">Fournisseur {% if mode_edition %}lié{% else %}reconnu{% endif %} : <strong>{{ fournisseur_trouve.nom }}</strong>{% if compte_suggere %} — compte {{ compte_suggere.numero }} - {{ compte_suggere.libelle }} suggéré ci-dessous{% endif %}</p>
+                {% elif not mode_edition %}
                     <p class="text-muted">Fournisseur détecté : {{ ligne.fournisseur_detecte|default:"inconnu" }} (aucune correspondance trouvée dans tes fournisseurs)</p>
                 {% endif %}
 
@@ -75,7 +79,7 @@
                         <input type="number" step="0.01" name="tvq" class="form-control" value="{{ extraction.tvq|default:'0' }}">
                     </div>
 
-                    <button type="submit" class="btn btn-success">Confirmer et enregistrer</button>
+                    <button type="submit" class="btn btn-success">{% if mode_edition %}Enregistrer les modifications{% else %}Confirmer et enregistrer{% endif %}</button>
                     <a href="{% url 'facture_photo' %}" class="btn btn-link">Retour à la liste</a>
                 </form>
             </div>

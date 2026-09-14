@@ -48,4 +48,45 @@
     </div>
 </div>
 
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Photos traitées</h5>
+
+        {% if not traitees %}
+            <p class="text-muted mb-0">Aucune photo traitée pour le moment.</p>
+        {% else %}
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Photo</th>
+                            <th>Fournisseur détecté</th>
+                            <th>Date</th>
+                            <th class="text-end">Total</th>
+                            <th>No EJ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ligne in traitees %}
+                            <tr>
+                                <td><img src="{% url 'facture_photo_image' ligne.pk %}" style="width:50px;height:50px;object-fit:cover;" class="rounded"></td>
+                                <td>{{ ligne.fournisseur_detecte|default:"?" }}</td>
+                                <td>{{ ligne.date_detectee|default:"?" }}</td>
+                                <td class="text-end">{{ ligne.montant_total_detecte|default:"?" }}</td>
+                                <td>
+                                    {% if ligne.tr_desc %}
+                                        <a href="{% url 'facture_photo_traiter' ligne.pk %}">{{ ligne.tr_desc.no_ej }}</a>
+                                    {% else %}
+                                        ?
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
 {% endblock %}

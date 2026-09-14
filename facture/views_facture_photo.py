@@ -10,6 +10,7 @@ Deux parcours :
   correspond a un fournisseur existant), et creation de l'ecriture.
 """
 
+import io
 import json
 import os
 from datetime import datetime
@@ -24,6 +25,7 @@ from django.utils import timezone
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from PIL import Image
 
 from compte.models import Compte
 from facture.helpers.dates import verifier_exercice_modifiable
@@ -31,6 +33,29 @@ from facture.models import FacturePhotoEnAttente, Fournisseur, Source, Tr_desc, 
 from facture.utils import get_setting
 
 load_dotenv()
+
+LARGEUR_MAX_PHOTO = 1200
+QUALITE_JPEG = 70
+
+
+def _compresser_image(image_bytes):
+    """Redimensionne (largeur max ~1200px) et recompresse en JPEG pour
+    limiter la place prise en base de donnees. Les photos sont conservees
+    en permanence (voir FacturePhotoEnAttente.traite), donc chaque octet
+    compte sur le plan Render limite a 1 Go."""
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        image = image.convert('RGB')
+        if image.width > LARGEUR_MAX_PHOTO:
+            nouvelle_hauteur = int(image.height * (LARGEUR_MAX_PHOTO / image.width))
+            image = image.resize((LARGEUR_MAX_PHOTO, nouvelle_hauteur), Image.LANCZOS)
+        tampon = io.BytesIO()
+        image.save(tampon, format='JPEG', quality=QUALITE_JPEG, optimize=True)
+        return tampon.getvalue(), 'image/jpeg'
+    except Exception:
+        # En cas de probleme (format inattendu, etc.), on garde la photo
+        # originale plutot que de perdre la facture.
+        return image_bytes, None
 
 PROMPT_EXTRACTION = """Analyse cette facture et réponds uniquement en JSON avec les champs suivants :
 {
@@ -116,6 +141,11 @@ def facture_photo_rapide(request):
         photo_bytes = photo.read()
         mime_type = photo.content_type or 'image/jpeg'
 
+        photo_bytes_compressee, mime_type_compresse = _compresser_image(photo_bytes)
+        if mime_type_compresse:
+            photo_bytes = photo_bytes_compressee
+            mime_type = mime_type_compresse
+
         ligne = FacturePhotoEnAttente(photo=photo_bytes, photo_type=mime_type)
 
         try:
@@ -149,10 +179,12 @@ def facture_photo_image(request, pk):
 @login_required
 def facture_photo(request):
     """Liste des photos en attente de traitement."""
-    en_attente = FacturePhotoEnAttente.objects.all()
+    en_attente = FacturePhotoEnAttente.objects.filter(traite=False)
+    traitees = FacturePhotoEnAttente.objects.filter(traite=True).order_by('-created_at')[:50]
     return render(request, "facture_photo/index.html", {
         'title': "Facture par photo",
         'en_attente': en_attente,
+        'traitees': traitees,
     })
 
 
@@ -173,6 +205,8 @@ def _extraire_lignes_post(request):
 
 
 def _handle_confirmer(request, ligne, comptes_queryset):
+    mode_edition = bool(ligne.traite and ligne.tr_desc_id)
+
     lignes_brutes = _extraire_lignes_post(request)
     lignes_comptes = []
     montant_avant_taxes = Decimal('0')
@@ -214,20 +248,26 @@ def _handle_confirmer(request, ligne, comptes_queryset):
 
             verifier_exercice_modifiable(date_facture)
 
-            source_photo, _ = Source.objects.get_or_create(nom='Facture (photo)')
-
-            tr_desc = Tr_desc.objects.create(
-                no_ej=_next_no_ej(date_facture),
-                date=date_facture,
-                desc_ctb=description,
-                source=source_photo,
-                fournisseur=fournisseur,
-            )
+            if mode_edition:
+                tr_desc = ligne.tr_desc
+                tr_desc.date = date_facture
+                tr_desc.desc_ctb = description
+                tr_desc.fournisseur = fournisseur
+                tr_desc.save()
+                tr_desc.details.all().delete()
+            else:
+                source_photo, _ = Source.objects.get_or_create(nom='Facture (photo)')
+                tr_desc = Tr_desc.objects.create(
+                    no_ej=_next_no_ej(date_facture),
+                    date=date_facture,
+                    desc_ctb=description,
+                    source=source_photo,
+                    fournisseur=fournisseur,
+                )
 
             for compte_ligne, montant_ligne in lignes_comptes:
                 Tr_detail.objects.create(tr_desc=tr_desc, compte=compte_ligne, montant=montant_ligne)
 
-            settings_instance = get_setting()
             if tps and settings_instance.compte_tps_payee:
                 Tr_detail.objects.create(tr_desc=tr_desc, compte=settings_instance.compte_tps_payee, montant=tps)
             if tvq and settings_instance.compte_tvq_payee:
@@ -238,23 +278,56 @@ def _handle_confirmer(request, ligne, comptes_queryset):
         messages.error(request, str(exc))
         return False
 
-    ligne.delete()
-    messages.success(request, f"Facture enregistrée (no EJ {tr_desc.no_ej}).")
+    if not mode_edition:
+        ligne.traite = True
+        ligne.tr_desc = tr_desc
+        ligne.save(update_fields=['traite', 'tr_desc'])
+        messages.success(request, f"Facture enregistrée (no EJ {tr_desc.no_ej}).")
+    else:
+        messages.success(request, f"Facture mise à jour (no EJ {tr_desc.no_ej}).")
     return True
+
+
+def _lignes_pour_edition(tr_desc, settings_instance):
+    """Reconstruit les lignes de depense (compte, montant), la TPS et la TVQ
+    a partir de l'ecriture comptable existante, pour pre-remplir le
+    formulaire de modification."""
+    lignes_initiales = []
+    tps_montant = Decimal('0')
+    tvq_montant = Decimal('0')
+    for detail in tr_desc.details.all().order_by('id'):
+        if settings_instance and detail.compte_id == getattr(settings_instance, 'compte_tps_payee_id', None):
+            tps_montant = detail.montant
+        elif settings_instance and detail.compte_id == getattr(settings_instance, 'compte_tvq_payee_id', None):
+            tvq_montant = detail.montant
+        elif settings_instance and detail.compte_id == getattr(settings_instance, 'compte_cheques_id', None):
+            continue  # ligne de contrepartie (credit au compte courant)
+        else:
+            lignes_initiales.append({'compte_id': str(detail.compte_id), 'montant': str(detail.montant)})
+
+    if not lignes_initiales:
+        lignes_initiales = [{'compte_id': '', 'montant': ''}]
+
+    return lignes_initiales, tps_montant, tvq_montant
 
 
 @login_required
 def facture_photo_traiter(request, pk):
     ligne = get_object_or_404(FacturePhotoEnAttente, pk=pk)
+    mode_edition = bool(ligne.traite and ligne.tr_desc_id)
+
     comptes_queryset = Compte.objects.filter(numero__gte=5000).order_by('numero')
     all_comptes = [
         {'id': compte.numero, 'label': f"{compte.numero} - {compte.libelle}"}
         for compte in comptes_queryset
     ]
 
-    fournisseur_trouve, compte_suggere = _trouver_fournisseur_et_compte(ligne.fournisseur_detecte)
-
     if request.method == 'POST':
+        if mode_edition:
+            fournisseur_trouve, compte_suggere = ligne.tr_desc.fournisseur, None
+        else:
+            fournisseur_trouve, compte_suggere = _trouver_fournisseur_et_compte(ligne.fournisseur_detecte)
+
         if _handle_confirmer(request, ligne, comptes_queryset):
             return redirect('facture_photo')
         return render(request, "facture_photo/traiter.html", {
@@ -265,7 +338,31 @@ def facture_photo_traiter(request, pk):
             'compte_suggere': compte_suggere,
             'extraction': request.POST,
             'lignes_initiales': _extraire_lignes_post(request) or [{'compte_id': '', 'montant': ''}],
+            'mode_edition': mode_edition,
         })
+
+    if mode_edition:
+        settings_instance = get_setting()
+        tr_desc = ligne.tr_desc
+        lignes_initiales, tps_montant, tvq_montant = _lignes_pour_edition(tr_desc, settings_instance)
+
+        return render(request, "facture_photo/traiter.html", {
+            'title': "Facture par photo",
+            'ligne': ligne,
+            'all_comptes': all_comptes,
+            'fournisseur_trouve': tr_desc.fournisseur,
+            'compte_suggere': None,
+            'extraction': {
+                'date': tr_desc.date.isoformat(),
+                'description': tr_desc.desc_ctb,
+                'tps': str(tps_montant),
+                'tvq': str(tvq_montant),
+            },
+            'lignes_initiales': lignes_initiales,
+            'mode_edition': True,
+        })
+
+    fournisseur_trouve, compte_suggere = _trouver_fournisseur_et_compte(ligne.fournisseur_detecte)
 
     return render(request, "facture_photo/traiter.html", {
         'title': "Facture par photo",
@@ -285,4 +382,5 @@ def facture_photo_traiter(request, pk):
             'compte_id': str(compte_suggere.numero) if compte_suggere else '',
             'montant': ligne.montant_avant_taxes_detecte,
         }],
+        'mode_edition': False,
     })
