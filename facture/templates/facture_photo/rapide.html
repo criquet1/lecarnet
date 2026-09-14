@@ -21,9 +21,22 @@
     {% endif %}
     <form method="post" enctype="multipart/form-data" action="{% url 'facture_photo_rapide' %}">
         {% csrf_token %}
-        <input type="file" name="photo" accept="image/*" capture="environment" class="form-control form-control-lg mb-3" required>
+        <input type="file" id="photo-input" name="photo" accept="image/*" capture="environment" class="d-none" required>
+        <label for="photo-input" id="photo-label" class="btn btn-outline-primary btn-lg w-100 mb-3">
+            📷 Prendre une photo
+        </label>
         <button type="submit" class="btn btn-primary btn-lg w-100">Envoyer</button>
     </form>
+    <script>
+        document.getElementById('photo-input').addEventListener('change', function () {
+            var label = document.getElementById('photo-label');
+            if (this.files && this.files.length > 0) {
+                label.textContent = '✓ Photo prête à envoyer';
+                label.classList.remove('btn-outline-primary');
+                label.classList.add('btn-success');
+            }
+        });
+    </script>
 {% endif %}
 
 </div>
