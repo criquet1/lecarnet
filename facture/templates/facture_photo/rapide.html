@@ -41,6 +41,21 @@
             }
         });
     }
+
+    // Affiche un indicateur d'envoi -- l'analyse de la photo par l'IA prend
+    // quelques secondes, sans ca on dirait que rien ne se passe.
+    var form = document.getElementById('form-envoi');
+    var bouton = document.getElementById('bouton-envoyer');
+    if (form && bouton) {
+        form.addEventListener('submit', function () {
+            bouton.disabled = true;
+            bouton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Envoi en cours...';
+            if (label) {
+                label.classList.add('disabled');
+                label.style.pointerEvents = 'none';
+            }
+        });
+    }
 })();
 </script>
 </body>
