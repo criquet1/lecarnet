@@ -4,9 +4,29 @@ from django import forms
 from django.forms import formset_factory
 
 from .constants import MONTH_CHOICES_FR
-from .models import Cheque, Tr_desc, Client, Fournisseur
+from .models import Cheque, MessageContact, Tr_desc, Client, Fournisseur
 from compte.models import Setting
 from .utils import get_available_logos, is_expert
+
+
+class MessageContactForm(forms.ModelForm):
+    """Formulaire de contact de la page d'accueil publique. Le champ
+    `site_web` est un piege anti-spam (honeypot) : invisible pour un vrai
+    visiteur (cache en CSS), mais souvent rempli automatiquement par les
+    robots. La vue ignore silencieusement l'envoi si ce champ est rempli,
+    sans le signaler comme une erreur (pour ne pas indiquer au robot que le
+    piege a ete detecte)."""
+    site_web = forms.CharField(required=False, widget=forms.TextInput(attrs={
+        'autocomplete': 'off',
+        'tabindex': '-1',
+    }))
+
+    class Meta:
+        model = MessageContact
+        fields = ['nom', 'courriel', 'message']
+        widgets = {
+            'message': forms.Textarea(attrs={'rows': 5}),
+        }
 
 
 class ClientForm(forms.ModelForm):

@@ -1,4 +1,4 @@
-from pyexpat.errors import messages
+from django.contrib import messages
 
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
@@ -24,7 +24,7 @@ from datetime import date, datetime, timedelta
 from facture.constants import MONTH_LABELS_FR, MODE_CAP, MODE_CAR
 from facture.models import Cheque, Client, Fournisseur, Tr_desc, Tr_detail, Source, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, Facture, SoldeFin, TransactionListe
 from compte.models import Setting
-from facture.forms import ChequeForm, ClientForm, FournisseurForm, TrDescForm, TrDetailFormSet
+from facture.forms import ChequeForm, ClientForm, FournisseurForm, MessageContactForm, TrDescForm, TrDetailFormSet
 from facture.services.tax_report_enrich import enrich_report_with_calculations
 from facture.services.tax_report_actions import remove_line_from_report, transmit_report, undo_transmit_report
 from facture.helpers.dates import exercice_pour_working_period, prochaine_date_fin_exercice, verifier_exercice_modifiable
@@ -87,8 +87,26 @@ def _money(value):
 
 def index(request):
     return render(request, "accueil/index.html", {
-        "title": "Mon carnet comptable"
+        "title": "Mon carnet comptable",
+        "contact_form": MessageContactForm(),
     })
+
+
+@require_POST
+def contact_message(request):
+    form = MessageContactForm(request.POST)
+    if form.is_valid():
+        if form.cleaned_data.get('site_web'):
+            # Piege anti-spam (honeypot) rempli : tres probablement un robot.
+            # On ignore silencieusement, sans l'enregistrer ni le signaler --
+            # une redirection normale, pour ne pas indiquer au robot que le
+            # piege a ete detecte.
+            return redirect('accueil_public')
+        form.save()
+        messages.success(request, "Merci ! Votre message a bien été envoyé.")
+    else:
+        messages.error(request, "Le message n'a pas pu être envoyé : vérifiez les champs et réessayez.")
+    return redirect('accueil_public')
 
 
 @login_required

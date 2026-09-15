@@ -19,6 +19,7 @@ urlpatterns = [
     ),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('', views.index, name='accueil_public'),
+    path('contact/', views.contact_message, name='contact_message'),
     path("dashboard/", login_required(views.dashboard), name="dashboard"),
     path('working-period/', views.update_working_period, name='update_working_period'),
     path('accueil/', login_required(views.index), name='accueil'),

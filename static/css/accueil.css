@@ -387,6 +387,174 @@
 
 
 /* ==========================================================
+   CONTACT
+========================================================== */
+
+.contact{
+
+    padding:80px 0;
+
+    background:var(--light);
+
+}
+
+
+.contact-grid{
+
+    display:grid;
+
+    grid-template-columns:1fr 1.3fr;
+
+    gap:60px;
+
+    align-items:start;
+
+}
+
+
+.contact-intro h2{
+
+    font-size:2.2rem;
+
+    font-weight:800;
+
+    color:var(--dark);
+
+    margin-bottom:16px;
+
+}
+
+
+.contact-intro p{
+
+    color:var(--text);
+
+    font-size:1.1rem;
+
+    line-height:1.7;
+
+    max-width:340px;
+
+}
+
+
+.contact-form{
+
+    background:white;
+
+    border-radius:22px;
+
+    padding:40px;
+
+    box-shadow:0 18px 45px rgba(40,50,90,.08);
+
+}
+
+
+.contact-form .form-group{
+
+    margin-bottom:20px;
+
+}
+
+
+.contact-form label{
+
+    display:block;
+
+    margin-bottom:8px;
+
+    font-weight:600;
+
+    color:var(--dark);
+
+}
+
+
+.contact-form input,
+.contact-form textarea{
+
+    width:100%;
+
+    padding:12px 16px;
+
+    border:1px solid #e2e6f0;
+
+    border-radius:12px;
+
+    font-size:1rem;
+
+    color:var(--text);
+
+    font-family:inherit;
+
+}
+
+
+.contact-form input:focus,
+.contact-form textarea:focus{
+
+    outline:none;
+
+    border-color:var(--primary);
+
+}
+
+
+.contact-btn{
+
+    display:inline-flex;
+
+    align-items:center;
+
+    padding:14px 32px;
+
+    border:none;
+
+    border-radius:15px;
+
+    background:linear-gradient(135deg,#ff4b97,#ff2f86);
+
+    color:#fff;
+
+    font-weight:700;
+
+    font-size:1rem;
+
+    cursor:pointer;
+
+    transition:.30s;
+
+}
+
+
+.contact-btn:hover{
+
+    transform:translateY(-2px);
+
+}
+
+
+/* Piege anti-spam (honeypot) : invisible pour un vrai visiteur, mais
+   present dans le HTML pour les robots qui remplissent tous les champs. */
+.contact-honeypot{
+
+    position:absolute;
+
+    left:-9999px;
+
+    top:-9999px;
+
+    width:1px;
+
+    height:1px;
+
+    overflow:hidden;
+
+}
+
+
+/* ==========================================================
    RESPONSIVE
 ========================================================== */
 
@@ -415,6 +583,18 @@ justify-content:center;
 .hero-image{
 
 margin-top:60px;
+
+}
+
+.contact-grid{
+
+grid-template-columns:1fr;
+
+}
+
+.contact-intro p{
+
+max-width:none;
 
 }
 

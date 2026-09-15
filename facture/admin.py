@@ -1,5 +1,5 @@
 from django.contrib import admin
-from facture.models import Cheque, Client, Facture, Fournisseur, Source, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
+from facture.models import Cheque, Client, Facture, Fournisseur, MessageContact, Source, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
 from compte.models import Setting
 from import_export.admin import ExportMixin, ImportExportModelAdmin
 
@@ -113,3 +113,18 @@ admin.site.register(CompagnieSoldeDepart)
 admin.site.register(SoldeFin, SoldeFinAdmin)
 admin.site.register(Source)
 admin.site.register(Cheque, ChequeAdmin)
+
+
+class MessageContactAdmin(admin.ModelAdmin):
+    list_display = ('nom', 'courriel', 'created_at', 'lu')
+    list_filter = ('lu',)
+    list_editable = ('lu',)
+    search_fields = ('nom', 'courriel', 'message')
+    ordering = ('-created_at',)
+    readonly_fields = ('nom', 'courriel', 'message', 'created_at')
+
+    def has_add_permission(self, request):
+        return False
+
+
+admin.site.register(MessageContact, MessageContactAdmin)

@@ -8,7 +8,7 @@ class TenantDatabaseRouter:
 
     tenant_app_labels = {'compte', 'facture', 'paie'}
     central_app_labels = {'auth', 'admin', 'contenttypes', 'sessions', 'tenancy'}
-    centralized_tenant_models = {('paie', 'parametrestauxpaie')}
+    centralized_tenant_models = {('paie', 'parametrestauxpaie'), ('facture', 'messagecontact')}
 
     @classmethod
     def _is_centralized_tenant_model(cls, app_label, model_name):

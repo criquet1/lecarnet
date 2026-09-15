@@ -187,4 +187,55 @@
 
 </section>
 
+<!-- ========================================================= -->
+<!-- CONTACT -->
+<!-- ========================================================= -->
+
+<section class="contact">
+
+    <div class="container contact-grid">
+
+        <div class="contact-intro">
+
+            <h2>Une question&nbsp;?</h2>
+
+            <p>
+                Laissez-moi un message ci-contre et je vous r&eacute;pondrai
+                d&egrave;s que possible.
+            </p>
+
+        </div>
+
+        <form class="contact-form" method="post" action="{% url 'contact_message' %}" novalidate>
+
+            {% csrf_token %}
+
+            <div class="contact-honeypot" aria-hidden="true">
+                <label for="{{ contact_form.site_web.id_for_label }}">Site web</label>
+                {{ contact_form.site_web }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ contact_form.nom.id_for_label }}">Nom</label>
+                {{ contact_form.nom }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ contact_form.courriel.id_for_label }}">Votre courriel (facultatif, pour vous r&eacute;pondre)</label>
+                {{ contact_form.courriel }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ contact_form.message.id_for_label }}">Message</label>
+                {{ contact_form.message }}
+            </div>
+
+            <button type="submit" class="contact-btn">Envoyer</button>
+
+        </form>
+
+    </div>
+
+</section>
+
 {% endblock %}

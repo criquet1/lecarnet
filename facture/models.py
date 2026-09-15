@@ -594,3 +594,22 @@ class FacturePhotoEnAttente(models.Model):
 
     def __str__(self):
         return f"Photo en attente {self.created_at:%Y-%m-%d %H:%M} - {self.fournisseur_detecte or '?'}"
+
+
+class MessageContact(models.Model):
+    """Message laisse par un visiteur depuis le formulaire de contact de la
+    page d'accueil publique. Aucune adresse courriel n'est affichee sur la
+    page : les messages sont consultes ici (admin Django ou page dediee).
+    Le champ courriel est facultatif, uniquement pour permettre de repondre
+    au visiteur si celui-ci le souhaite."""
+    nom = models.CharField(max_length=255)
+    courriel = models.EmailField(blank=True, default='')
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    lu = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Message de {self.nom} - {self.created_at:%Y-%m-%d %H:%M}"
