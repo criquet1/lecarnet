@@ -596,6 +596,40 @@ class FacturePhotoEnAttente(models.Model):
         return f"Photo en attente {self.created_at:%Y-%m-%d %H:%M} - {self.fournisseur_detecte or '?'}"
 
 
+class PetiteCaissePhotoEnAttente(models.Model):
+    """File d'attente pour les petits reçus de petite caisse pris en photo
+    depuis un telephone.
+
+    Meme esprit que FacturePhotoEnAttente : la page mobile envoie juste la
+    photo, l'analyse IA est faite tout de suite et le resultat est mis de
+    cote ici. Contrairement aux grosses factures, un reçu de petite caisse
+    ne cree pas sa propre ecriture comptable -- une fois ajoute, il devient
+    simplement une ligne (ou plusieurs) dans PetiteCaisseLigne, la table
+    d'attente commune utilisee par l'onglet Banque > Petite caisse.
+    """
+    photo = models.BinaryField()
+    photo_type = models.CharField(max_length=50, blank=True, default='')
+    fournisseur_detecte = models.CharField(max_length=255, blank=True, default='')
+    date_detectee = models.CharField(max_length=20, blank=True, default='')
+    montant_total_detecte = models.CharField(max_length=20, blank=True, default='')
+    tps_detectee = models.CharField(max_length=20, blank=True, default='')
+    tvq_detectee = models.CharField(max_length=20, blank=True, default='')
+    montant_avant_taxes_detecte = models.CharField(max_length=20, blank=True, default='')
+    description_detectee = models.CharField(max_length=255, blank=True, default='')
+    erreur_analyse = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    traite = models.BooleanField(
+        default=False,
+        help_text="Vrai une fois ajoute au tableau de la petite caisse. La photo est conservee (compressee) pour consultation future."
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Reçu petite caisse en attente {self.created_at:%Y-%m-%d %H:%M} - {self.fournisseur_detecte or '?'}"
+
+
 class MessageContact(models.Model):
     """Message laisse par un visiteur depuis le formulaire de contact de la
     page d'accueil publique. Aucune adresse courriel n'est affichee sur la

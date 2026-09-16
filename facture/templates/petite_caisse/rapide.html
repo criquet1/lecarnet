@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Facture par photo</title>
+<title>Petite caisse (photo)</title>
 
 <!-- Rend cette page installable comme une icone sur l'ecran d'accueil -->
-<link rel="manifest" href="{% static 'manifest.json' %}">
-<meta name="theme-color" content="#0d6efd">
-<link rel="apple-touch-icon" href="{% static 'images/pwa/icone-180.png' %}">
+<link rel="manifest" href="{% static 'manifest-petite-caisse.json' %}">
+<meta name="theme-color" content="#198754">
+<link rel="apple-touch-icon" href="{% static 'images/pwa/icone-petite-caisse-180.png' %}">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Facture">
+<meta name="apple-mobile-web-app-title" content="Petite caisse">
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css">
 </head>
@@ -38,23 +38,23 @@
 
 {% if envoye %}
     <div class="display-1 text-success mb-3">✓</div>
-    <h4>Facture envoyée</h4>
-    <p class="text-muted">Elle sera traitée plus tard dans la comptabilité.</p>
-    <a href="{% url 'facture_photo_rapide' %}" class="btn btn-primary btn-lg mt-3">Envoyer une autre photo</a>
+    <h4>Reçu envoyé</h4>
+    <p class="text-muted">Il sera ajouté plus tard à la petite caisse.</p>
+    <a href="{% url 'petite_caisse_photo_rapide' %}" class="btn btn-success btn-lg mt-3">Envoyer une autre photo</a>
 {% else %}
-    <h4 class="mb-4">Facture par photo</h4>
+    <h4 class="mb-4">Petite caisse (photo)</h4>
     {% if erreur %}
         <div class="alert alert-danger">{{ erreur }}</div>
     {% endif %}
-    <form method="post" enctype="multipart/form-data" action="{% url 'facture_photo_rapide' %}" id="form-envoi">
+    <form method="post" enctype="multipart/form-data" action="{% url 'petite_caisse_photo_rapide' %}" id="form-envoi">
         {% csrf_token %}
         <input type="file" id="photo-input" name="photo" accept="image/*" capture="environment" class="d-none" required>
-        <label for="photo-input" id="photo-label" class="btn btn-outline-primary btn-lg w-100 mb-3">📷 Prendre une photo</label>
-        <button type="submit" id="bouton-envoyer" class="btn btn-primary btn-lg w-100">Envoyer</button>
+        <label for="photo-input" id="photo-label" class="btn btn-outline-success btn-lg w-100 mb-3">📷 Prendre une photo</label>
+        <button type="submit" id="bouton-envoyer" class="btn btn-success btn-lg w-100">Envoyer</button>
     </form>
 {% endif %}
 
-<p class="mt-4 mb-0"><a href="{% url 'petite_caisse_photo_rapide' %}">↔ Passer à Petite caisse (photo)</a></p>
+<p class="mt-4 mb-0"><a href="{% url 'facture_photo_rapide' %}">↔ Passer à Facture par photo</a></p>
 
 </div>
 <script>
@@ -65,7 +65,7 @@
         input.addEventListener('change', function () {
             if (input.files && input.files.length > 0) {
                 label.textContent = '✓ Photo prête à envoyer';
-                label.classList.remove('btn-outline-primary');
+                label.classList.remove('btn-outline-success');
                 label.classList.add('btn-success');
             }
         });
@@ -76,13 +76,25 @@
     var form = document.getElementById('form-envoi');
     var bouton = document.getElementById('bouton-envoyer');
     if (form && bouton) {
-        form.addEventListener('submit', function () {
+        form.addEventListener('submit', function (evenement) {
+            if (form.dataset.envoiEnCours) {
+                return;
+            }
+            evenement.preventDefault();
+            form.dataset.envoiEnCours = '1';
+
             bouton.disabled = true;
             bouton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Envoi en cours...';
             if (label) {
                 label.classList.add('disabled');
                 label.style.pointerEvents = 'none';
             }
+
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () {
+                    form.submit();
+                });
+            });
         });
     }
 })();

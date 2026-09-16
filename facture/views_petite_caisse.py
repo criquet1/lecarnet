@@ -20,8 +20,9 @@ from django.utils import timezone
 
 from compte.models import Compte
 from facture.helpers.dates import verifier_exercice_modifiable
-from facture.models import Cheque, PetiteCaisseLigne, Source, Tr_desc, Tr_detail
+from facture.models import Cheque, PetiteCaissePhotoEnAttente, PetiteCaisseLigne, Source, Tr_desc, Tr_detail
 from facture.utils import get_setting, no_cheques_encaisses
+from facture.views_facture_photo import _trouver_fournisseur_et_compte
 
 
 def _parse_montant(raw_value):
@@ -120,6 +121,74 @@ def _handle_delete_groupe(request):
         messages.success(request, "Reçu retiré de la petite caisse en attente.")
     else:
         messages.error(request, "Ce reçu n'existe plus (déjà retiré ?).")
+
+
+def _handle_ajouter_photo(request, comptes_queryset):
+    """Transforme un reçu pris en photo (PetiteCaissePhotoEnAttente) en
+    ligne(s) PetiteCaisseLigne, exactement comme s'il avait ete tape a la
+    main -- une ligne de depense, plus TPS/TVQ si detectees."""
+    photo_id = (request.POST.get('photo_id') or '').strip()
+    photo = PetiteCaissePhotoEnAttente.objects.filter(pk=photo_id, traite=False).first()
+    if not photo:
+        messages.error(request, "Ce reçu photo n'existe plus (déjà ajouté ou supprimé ?).")
+        return
+
+    compte_id = (request.POST.get('compte_id') or '').strip()
+    compte = comptes_queryset.filter(pk=compte_id).first() if compte_id else None
+    if not compte:
+        messages.error(request, "Choisis un compte de dépense avant d'ajouter ce reçu.")
+        return
+
+    montant_avant_taxes = _parse_montant(photo.montant_avant_taxes_detecte)
+    if montant_avant_taxes is None:
+        montant_avant_taxes = _parse_montant(photo.montant_total_detecte)
+    if montant_avant_taxes is None or montant_avant_taxes <= 0:
+        messages.error(request, "Montant détecté invalide pour ce reçu -- ajoute-le manuellement.")
+        return
+
+    tps = _parse_montant(photo.tps_detectee) or Decimal('0')
+    tvq = _parse_montant(photo.tvq_detectee) or Decimal('0')
+
+    try:
+        date_recu = datetime.strptime((photo.date_detectee or '').strip(), '%Y-%m-%d').date()
+    except ValueError:
+        date_recu = timezone.now().date()
+
+    settings_instance = get_setting()
+    groupe = _next_groupe()
+    description = photo.fournisseur_detecte or photo.description_detectee or ''
+
+    lignes_a_creer = [PetiteCaisseLigne(
+        groupe=groupe,
+        date=date_recu,
+        description=description,
+        compte=compte,
+        montant=abs(montant_avant_taxes),
+    )]
+    if tps and settings_instance and settings_instance.compte_tps_payee:
+        lignes_a_creer.append(PetiteCaisseLigne(
+            groupe=groupe, date=date_recu, description=description,
+            compte=settings_instance.compte_tps_payee, montant=abs(tps),
+        ))
+    if tvq and settings_instance and settings_instance.compte_tvq_payee:
+        lignes_a_creer.append(PetiteCaisseLigne(
+            groupe=groupe, date=date_recu, description=description,
+            compte=settings_instance.compte_tvq_payee, montant=abs(tvq),
+        ))
+
+    PetiteCaisseLigne.objects.bulk_create(lignes_a_creer)
+    photo.traite = True
+    photo.save(update_fields=['traite'])
+    messages.success(request, "Reçu ajouté à la petite caisse en attente.")
+
+
+def _handle_supprimer_photo(request):
+    photo_id = (request.POST.get('photo_id') or '').strip()
+    nb_supprimees, _ = PetiteCaissePhotoEnAttente.objects.filter(pk=photo_id, traite=False).delete()
+    if nb_supprimees:
+        messages.success(request, "Photo supprimée.")
+    else:
+        messages.error(request, "Cette photo n'existe plus.")
 
 
 def _handle_passer_transaction(request):
@@ -237,6 +306,10 @@ def petite_caisse(request):
             _handle_add_lignes(request, comptes_queryset)
         elif action == 'delete_groupe':
             _handle_delete_groupe(request)
+        elif action == 'ajouter_photo':
+            _handle_ajouter_photo(request, comptes_queryset)
+        elif action == 'supprimer_photo':
+            _handle_supprimer_photo(request)
         elif action == 'passer_transaction':
             _handle_passer_transaction(request)
 
@@ -279,12 +352,22 @@ def petite_caisse(request):
         for compte in comptes_queryset
     ]
 
+    photos_en_attente = []
+    for photo in PetiteCaissePhotoEnAttente.objects.filter(traite=False):
+        _, compte_suggere = _trouver_fournisseur_et_compte(photo.fournisseur_detecte)
+        photos_en_attente.append({
+            'photo': photo,
+            'compte_suggere': compte_suggere,
+        })
+
     return render(request, "petite_caisse/index.html", {
         'title': "Petite caisse",
         'recus_en_attente': recus_en_attente,
         'total_en_attente': total_en_attente,
         'historique_petite_caisse': _historique_petite_caisse(),
         'all_comptes_json': json.dumps(all_comptes),
+        'all_comptes': all_comptes,
+        'photos_en_attente': photos_en_attente,
         'compte_tps_payee_id': tps_id or 0,
         'compte_tvq_payee_id': tvq_id or 0,
     })

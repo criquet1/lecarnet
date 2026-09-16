@@ -9,6 +9,73 @@
 
 <div class="card shadow-sm mb-4">
     <div class="card-body">
+        <h5 class="card-title">Photos en attente</h5>
+        <p class="text-muted">Pour ajouter un reçu par photo, utilise la page mobile : <a href="{% url 'petite_caisse_photo_rapide' %}">{{ request.scheme }}://{{ request.get_host }}{% url 'petite_caisse_photo_rapide' %}</a></p>
+
+        {% if not photos_en_attente %}
+            <p class="text-muted mb-0">Aucune photo en attente pour le moment.</p>
+        {% else %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Photo</th>
+                            <th>Fournisseur détecté</th>
+                            <th>Date</th>
+                            <th class="text-end">Total</th>
+                            <th>Compte de dépense</th>
+                            <th style="width:120px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in photos_en_attente %}
+                            <tr>
+                                <td><img src="{% url 'petite_caisse_photo_image' item.photo.pk %}" style="width:50px;height:50px;object-fit:cover;" class="rounded"></td>
+                                <td>
+                                    {{ item.photo.fournisseur_detecte|default:"?" }}
+                                    {% if item.photo.erreur_analyse %}
+                                        <br><span class="text-danger small">Analyse échouée</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ item.photo.date_detectee|default:"?" }}</td>
+                                <td class="text-end">{{ item.photo.montant_total_detecte|default:"?" }}</td>
+                                <td>
+                                    <form method="post" class="d-flex gap-1 align-items-center">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="ajouter_photo">
+                                        <input type="hidden" name="photo_id" value="{{ item.photo.pk }}">
+                                        <select name="compte_id" class="form-select form-select-sm" required>
+                                            <option value="">-- choisir --</option>
+                                            {% for compte in all_comptes %}
+                                                <option value="{{ compte.id }}" {% if item.compte_suggere and compte.id == item.compte_suggere.numero %}selected{% endif %}>{{ compte.label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit" class="btn btn-sm btn-success" title="Ajouter au tableau">
+                                            <i class="bi bi-check-lg"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                                <td class="text-center">
+                                    <form method="post" onsubmit="return confirm('Supprimer cette photo ?');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="supprimer_photo">
+                                        <input type="hidden" name="photo_id" value="{{ item.photo.pk }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer cette photo">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
         <h5 class="card-title">Reçus en attente</h5>
 
         {% if not recus_en_attente %}

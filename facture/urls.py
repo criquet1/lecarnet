@@ -5,6 +5,7 @@ from compte.views_interets import interets_page
 from facture.views_conciliation import conciliation
 from . import views
 from facture.views_facture_photo import facture_photo, facture_photo_image, facture_photo_rapide, facture_photo_traiter
+from facture.views_petite_caisse_photo import petite_caisse_photo_image, petite_caisse_photo_rapide
 
 
 urlpatterns = [
@@ -29,6 +30,8 @@ urlpatterns = [
     path('cheques/creer/', login_required(views.creer_cheque), name='creer_cheque'),
     path('cheques/', login_required(views.cheques), name='cheques'),
     path('petite-caisse/', login_required(views.petite_caisse), name='petite_caisse'),
+    path('petite-caisse/rapide/', login_required(petite_caisse_photo_rapide), name='petite_caisse_photo_rapide'),
+    path('petite-caisse/rapide/<int:pk>/image/', login_required(petite_caisse_photo_image), name='petite_caisse_photo_image'),
     path('facture-photo/', login_required(facture_photo), name='facture_photo'),
     path('facture-photo/rapide/', login_required(facture_photo_rapide), name='facture_photo_rapide'),
     path('facture-photo/<int:pk>/', login_required(facture_photo_traiter), name='facture_photo_traiter'),
