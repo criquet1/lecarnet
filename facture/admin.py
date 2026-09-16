@@ -1,5 +1,5 @@
 from django.contrib import admin
-from facture.models import Cheque, Client, Facture, Fournisseur, MessageContact, Source, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
+from facture.models import Cheque, Client, Facture, FacturePhotoEnAttente, Fournisseur, MessageContact, Source, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
 from compte.models import Setting
 from import_export.admin import ExportMixin, ImportExportModelAdmin
 
@@ -99,6 +99,13 @@ class ChequeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     search_fields = ('no_cheque', 'description')
 
 
+class FacturePhotoEnAttenteAdmin(admin.ModelAdmin):
+    list_display = ('id', 'created_at', 'fournisseur_detecte', 'date_detectee', 'montant_total_detecte', 'traite', 'tr_desc')
+    list_filter = ('traite',)
+    search_fields = ('fournisseur_detecte', 'description_detectee')
+    readonly_fields = ('created_at',)
+
+
 admin.site.register(Facture, FactureAdmin)
 admin.site.register(TransactionListe, TransactionListeAdmin)
 admin.site.register(Client)
@@ -113,6 +120,7 @@ admin.site.register(CompagnieSoldeDepart)
 admin.site.register(SoldeFin, SoldeFinAdmin)
 admin.site.register(Source)
 admin.site.register(Cheque, ChequeAdmin)
+admin.site.register(FacturePhotoEnAttente, FacturePhotoEnAttenteAdmin)
 
 
 class MessageContactAdmin(admin.ModelAdmin):
