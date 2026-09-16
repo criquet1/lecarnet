@@ -82,6 +82,14 @@
                     <button type="submit" class="btn btn-success">{% if mode_edition %}Enregistrer les modifications{% else %}Confirmer et enregistrer{% endif %}</button>
                     <a href="{% url 'facture_photo' %}" class="btn btn-link">Retour à la liste</a>
                 </form>
+
+                {% if not mode_edition %}
+                    <form method="post" action="{% url 'facture_photo_traiter' ligne.pk %}" class="mt-3" id="form-supprimer-photo">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="supprimer">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">Supprimer cette photo</button>
+                    </form>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -159,6 +167,15 @@
 
     conteneur.addEventListener('input', recalculerTotal);
     recalculerTotal();
+
+    var formSupprimer = document.getElementById('form-supprimer-photo');
+    if (formSupprimer) {
+        formSupprimer.addEventListener('submit', function (evenement) {
+            if (!window.confirm('Supprimer cette photo ? Cette action est irréversible.')) {
+                evenement.preventDefault();
+            }
+        });
+    }
 })();
 </script>
 

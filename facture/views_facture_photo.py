@@ -323,6 +323,11 @@ def facture_photo_traiter(request, pk):
     ]
 
     if request.method == 'POST':
+        if request.POST.get('action') == 'supprimer' and not ligne.traite:
+            ligne.delete()
+            messages.success(request, "Photo supprimée.")
+            return redirect('facture_photo')
+
         if mode_edition:
             fournisseur_trouve, compte_suggere = ligne.tr_desc.fournisseur, None
         else:
