@@ -20,7 +20,7 @@ from django.utils import timezone
 
 from compte.models import Compte
 from facture.helpers.dates import verifier_exercice_modifiable
-from facture.models import Cheque, PetiteCaissePhotoEnAttente, PetiteCaisseLigne, Source, Tr_desc, Tr_detail
+from facture.models import Cheque, PetiteCaissePhotoEnAttente, PetiteCaisseLigne, PetiteCaisseVue, Source, Tr_desc, Tr_detail
 from facture.utils import get_setting, no_cheques_encaisses
 from facture.views_facture_photo import _trouver_fournisseur_et_compte
 
@@ -365,6 +365,7 @@ def petite_caisse(request):
         'recus_en_attente': recus_en_attente,
         'total_en_attente': total_en_attente,
         'historique_petite_caisse': _historique_petite_caisse(),
+        'detail_petite_caisse': PetiteCaisseVue.objects.all(),
         'all_comptes_json': json.dumps(all_comptes),
         'all_comptes': all_comptes,
         'photos_en_attente': photos_en_attente,
