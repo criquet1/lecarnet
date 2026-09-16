@@ -630,6 +630,28 @@ class PetiteCaissePhotoEnAttente(models.Model):
         return f"Reçu petite caisse en attente {self.created_at:%Y-%m-%d %H:%M} - {self.fournisseur_detecte or '?'}"
 
 
+class PetiteCaisseVue(models.Model):
+    """Vue en lecture seule (petite_caisse_vue) : meme principe que Facture,
+    mais filtree sur la source 'Petite caisse' plutot que 'Facture'/'Facture
+    (photo)'. Regroupe toutes les lignes des transactions de petite caisse
+    deja passees, comme un historique detaille par compte."""
+    transaction_id = models.IntegerField(primary_key=True)
+    no_ej = models.CharField(max_length=30)
+    date = models.DateField()
+    compagnie = models.CharField(max_length=255, null=True)
+    description = models.CharField(max_length=255, null=True)
+    source = models.CharField(max_length=255, null=True)
+    compte_numero = models.IntegerField()
+    compte_libelle = models.CharField(max_length=255)
+    rapport_taxes_id = models.IntegerField(null=True)
+    debit = models.DecimalField(max_digits=12, decimal_places=2)
+    credit = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        managed = False
+        db_table = 'petite_caisse_vue'
+
+
 class MessageContact(models.Model):
     """Message laisse par un visiteur depuis le formulaire de contact de la
     page d'accueil publique. Aucune adresse courriel n'est affichee sur la

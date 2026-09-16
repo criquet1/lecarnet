@@ -1,5 +1,5 @@
 from django.contrib import admin
-from facture.models import Cheque, Client, Facture, FacturePhotoEnAttente, Fournisseur, MessageContact, PetiteCaissePhotoEnAttente, Source, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
+from facture.models import Cheque, Client, Facture, FacturePhotoEnAttente, Fournisseur, MessageContact, PetiteCaissePhotoEnAttente, PetiteCaisseVue, Source, Tr_desc, Tr_detail, Releve, RapportTaxes, CompteReleve, CompagnieSoldeDepart, SoldeFin, TransactionListe
 from compte.models import Setting
 from import_export.admin import ExportMixin, ImportExportModelAdmin
 
@@ -93,6 +93,21 @@ class FactureAdmin(ExportMixin, admin.ModelAdmin):
         return False
 
 
+class PetiteCaisseVueAdmin(ExportMixin, admin.ModelAdmin):
+    list_display = ('transaction_id', 'no_ej', 'date', 'compagnie', 'description', 'source', 'compte_numero', 'compte_libelle', 'rapport_taxes_id', 'debit', 'credit')
+    ordering = ('transaction_id',)
+    readonly_fields = ('transaction_id', 'no_ej', 'date', 'compagnie', 'description', 'source', 'compte_numero', 'compte_libelle', 'rapport_taxes_id', 'debit', 'credit')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 class ChequeAdmin(ImportExportModelAdmin, admin.ModelAdmin):
     list_display = ('no_cheque', 'date_emission', 'montant', 'client', 'fournisseur', 'annule')
     list_filter = ('annule', 'date_emission')
@@ -114,6 +129,7 @@ class PetiteCaissePhotoEnAttenteAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Facture, FactureAdmin)
+admin.site.register(PetiteCaisseVue, PetiteCaisseVueAdmin)
 admin.site.register(TransactionListe, TransactionListeAdmin)
 admin.site.register(Client)
 admin.site.register(Fournisseur)
