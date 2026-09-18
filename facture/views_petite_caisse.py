@@ -20,7 +20,7 @@ from django.utils import timezone
 
 from compte.models import Compte
 from facture.helpers.dates import verifier_exercice_modifiable
-from facture.models import Cheque, PetiteCaissePhotoEnAttente, PetiteCaisseLigne, PetiteCaisseVue, Source, Tr_desc, Tr_detail
+from facture.models import Cheque, PetiteCaissePhotoEnAttente, PetiteCaisseLigne, Source, Tr_desc, Tr_detail
 from facture.utils import get_setting, no_cheques_encaisses
 from facture.views_facture_photo import _trouver_fournisseur_et_compte
 
@@ -125,46 +125,51 @@ def _handle_delete_groupe(request):
 
 def _handle_ajouter_photo(request, comptes_queryset):
     """Transforme un reçu pris en photo (PetiteCaissePhotoEnAttente) en
-    ligne(s) PetiteCaisseLigne, exactement comme s'il avait ete tape a la
-    main -- une ligne de depense, plus TPS/TVQ si detectees."""
+    ligne(s) PetiteCaisseLigne, a partir des valeurs telles que confirmees
+    (et au besoin corrigees) dans le formulaire -- memes colonnes editables
+    que dans "Ajouter des reçus" (date, description, une ou plusieurs lignes
+    compte + montant avant taxes, TPS, TVQ), plutot que les valeurs brutes
+    detectees par l'IA."""
     photo_id = (request.POST.get('photo_id') or '').strip()
     photo = PetiteCaissePhotoEnAttente.objects.filter(pk=photo_id, traite=False).first()
     if not photo:
         messages.error(request, "Ce reçu photo n'existe plus (déjà ajouté ou supprimé ?).")
         return
 
-    compte_id = (request.POST.get('compte_id') or '').strip()
-    compte = comptes_queryset.filter(pk=compte_id).first() if compte_id else None
-    if not compte:
-        messages.error(request, "Choisis un compte de dépense avant d'ajouter ce reçu.")
-        return
+    settings_instance = get_setting()
 
-    montant_avant_taxes = _parse_montant(photo.montant_avant_taxes_detecte)
-    if montant_avant_taxes is None:
-        montant_avant_taxes = _parse_montant(photo.montant_total_detecte)
-    if montant_avant_taxes is None or montant_avant_taxes <= 0:
-        messages.error(request, "Montant détecté invalide pour ce reçu -- ajoute-le manuellement.")
-        return
-
-    tps = _parse_montant(photo.tps_detectee) or Decimal('0')
-    tvq = _parse_montant(photo.tvq_detectee) or Decimal('0')
-
+    date_brute = (request.POST.get('date') or '').strip()
     try:
-        date_recu = datetime.strptime((photo.date_detectee or '').strip(), '%Y-%m-%d').date()
+        date_recu = datetime.strptime(date_brute, '%Y-%m-%d').date()
     except ValueError:
         date_recu = timezone.now().date()
 
-    settings_instance = get_setting()
-    groupe = _next_groupe()
-    description = photo.fournisseur_detecte or photo.description_detectee or ''
+    description = (request.POST.get('description') or '').strip() or photo.fournisseur_detecte or photo.description_detectee or ''
 
-    lignes_a_creer = [PetiteCaisseLigne(
-        groupe=groupe,
-        date=date_recu,
-        description=description,
-        compte=compte,
-        montant=abs(montant_avant_taxes),
-    )]
+    tps = _parse_montant(request.POST.get('tps')) or Decimal('0')
+    tvq = _parse_montant(request.POST.get('tvq')) or Decimal('0')
+
+    groupe = _next_groupe()
+    lignes_a_creer = []
+    index = 0
+    while f'ligne-{index}-compte' in request.POST:
+        compte_id = (request.POST.get(f'ligne-{index}-compte') or '').strip()
+        montant = _parse_montant(request.POST.get(f'ligne-{index}-montant'))
+        index += 1
+        if not compte_id or montant is None or montant <= 0:
+            continue
+        compte = comptes_queryset.filter(pk=compte_id).first()
+        if not compte:
+            continue
+        lignes_a_creer.append(PetiteCaisseLigne(
+            groupe=groupe, date=date_recu, description=description,
+            compte=compte, montant=abs(montant),
+        ))
+
+    if not lignes_a_creer:
+        messages.error(request, "Choisis un compte et un montant avant taxes avant d'ajouter ce reçu.")
+        return
+
     if tps and settings_instance and settings_instance.compte_tps_payee:
         lignes_a_creer.append(PetiteCaisseLigne(
             groupe=groupe, date=date_recu, description=description,
@@ -189,6 +194,90 @@ def _handle_supprimer_photo(request):
         messages.success(request, "Photo supprimée.")
     else:
         messages.error(request, "Cette photo n'existe plus.")
+
+
+def _handle_modifier_transaction(request, comptes_queryset):
+    """Modifie une transaction de petite caisse deja passee : reconstruit
+    entierement les lignes (Tr_detail) a partir du formulaire de la modale
+    d'edition, met a jour la date/description de l'ecriture, et ajuste le
+    cheque (ou virement) lie en consequence -- meme principe que le mode
+    edition de facture_photo, applique ici a une transaction petite caisse."""
+    tr_desc_id = (request.POST.get('tr_desc_id') or '').strip()
+    tr_desc = Tr_desc.objects.filter(pk=tr_desc_id, source__nom='Petite caisse').first()
+    if not tr_desc:
+        messages.error(request, "Cette transaction de petite caisse n'existe plus.")
+        return
+
+    cheque = Cheque.objects.filter(tr_desc=tr_desc).first()
+
+    settings_instance = get_setting()
+    if not settings_instance or not settings_instance.compte_cheques:
+        messages.error(
+            request,
+            "Compte courant (compte_cheques) non configuré dans Setting. Configure-le avant de modifier cette transaction."
+        )
+        return
+
+    tax_account_ids = {
+        settings_instance.compte_tps_payee_id,
+        settings_instance.compte_tvq_payee_id,
+    } - {None}
+
+    date_brute = (request.POST.get('date') or '').strip()
+    try:
+        date_transaction = datetime.strptime(date_brute, '%Y-%m-%d').date()
+    except ValueError:
+        messages.error(request, "Date invalide.")
+        return
+
+    description = (request.POST.get('description') or '').strip()
+
+    totaux_par_compte = {}
+    index = 0
+    while f'ligne-{index}-compte' in request.POST:
+        compte_id = (request.POST.get(f'ligne-{index}-compte') or '').strip()
+        montant = _parse_montant(request.POST.get(f'ligne-{index}-montant'))
+        index += 1
+        if not compte_id or montant is None or montant == 0:
+            continue
+        if str(compte_id).isdigit() and int(compte_id) in tax_account_ids:
+            compte = Compte.objects.filter(pk=compte_id).first()
+        else:
+            compte = comptes_queryset.filter(pk=compte_id).first()
+        if not compte:
+            continue
+        totaux_par_compte[compte.pk] = totaux_par_compte.get(compte.pk, Decimal('0')) + abs(montant)
+
+    total_general = sum(totaux_par_compte.values(), Decimal('0'))
+    if total_general <= 0:
+        messages.error(request, "Ajoute au moins une ligne (compte + montant) avant d'enregistrer.")
+        return
+
+    try:
+        verifier_exercice_modifiable(date_transaction)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return
+
+    with transaction.atomic():
+        tr_desc.date = date_transaction
+        if description:
+            tr_desc.desc_ctb = description
+        tr_desc.save(update_fields=['date', 'desc_ctb'])
+
+        tr_desc.details.all().delete()
+        for compte_id, montant in totaux_par_compte.items():
+            Tr_detail.objects.create(tr_desc=tr_desc, compte_id=compte_id, montant=montant)
+        Tr_detail.objects.create(tr_desc=tr_desc, compte=settings_instance.compte_cheques, montant=-total_general)
+
+        if cheque:
+            cheque.montant = total_general
+            cheque.date_emission = date_transaction
+            if description:
+                cheque.description = description
+            cheque.save(update_fields=['montant', 'date_emission', 'description'])
+
+    messages.success(request, f"Transaction de petite caisse modifiée (no EJ {tr_desc.no_ej}).")
 
 
 def _handle_passer_transaction(request):
@@ -277,12 +366,20 @@ def _handle_passer_transaction(request):
 
 def _historique_petite_caisse():
     """Transactions de petite caisse deja passees (voir _handle_passer_transaction),
-    avec leur statut -- meme logique de rapprochement que la page Cheques."""
+    avec leur statut -- meme logique de rapprochement que la page Cheques.
+    Ajoute aussi, pour chaque transaction liee a une ecriture, ses lignes
+    (compte + montant, sans la ligne de contrepartie du compte courant) pretes
+    a etre editees dans la modale -- meme principe que _lignes_pour_edition
+    pour facture_photo."""
     deja_encaisses = no_cheques_encaisses()
+    settings_instance = get_setting()
+    compte_cheques_id = settings_instance.compte_cheques_id if settings_instance else None
 
     historique = list(
         Cheque.objects
         .filter(tr_desc__source__nom='Petite caisse')
+        .select_related('tr_desc')
+        .prefetch_related('tr_desc__details')
         .order_by('-date_emission', '-id')
     )
     for cheque in historique:
@@ -292,6 +389,14 @@ def _historique_petite_caisse():
             cheque.statut = 'encaisse'
         else:
             cheque.statut = 'en_circulation'
+
+        lignes_edition = []
+        if cheque.tr_desc_id:
+            for detail in cheque.tr_desc.details.all():
+                if compte_cheques_id and detail.compte_id == compte_cheques_id:
+                    continue
+                lignes_edition.append({'compte_id': detail.compte_id, 'montant': str(detail.montant)})
+        cheque.lignes_edition_json = json.dumps(lignes_edition)
     return historique
 
 
@@ -312,6 +417,8 @@ def petite_caisse(request):
             _handle_supprimer_photo(request)
         elif action == 'passer_transaction':
             _handle_passer_transaction(request)
+        elif action == 'modifier_transaction':
+            _handle_modifier_transaction(request, comptes_queryset)
 
         return redirect('petite_caisse')
 
@@ -352,6 +459,16 @@ def petite_caisse(request):
         for compte in comptes_queryset
     ]
 
+    # Pour la modale d'edition d'une transaction deja passee : memes comptes
+    # que ci-dessus (5000 et plus), plus les comptes de taxes (TPS/TVQ payees)
+    # au cas ou une ligne existante pointe vers l'un d'eux.
+    all_comptes_edition = list(all_comptes)
+    ids_presents = {c['id'] for c in all_comptes_edition}
+    for compte_taxe in Compte.objects.filter(pk__in=[i for i in (tps_id, tvq_id) if i]):
+        if compte_taxe.numero not in ids_presents:
+            all_comptes_edition.append({'id': compte_taxe.numero, 'label': f"{compte_taxe.numero} - {compte_taxe.libelle}"})
+            ids_presents.add(compte_taxe.numero)
+
     photos_en_attente = []
     for photo in PetiteCaissePhotoEnAttente.objects.filter(traite=False):
         _, compte_suggere = _trouver_fournisseur_et_compte(photo.fournisseur_detecte)
@@ -365,9 +482,9 @@ def petite_caisse(request):
         'recus_en_attente': recus_en_attente,
         'total_en_attente': total_en_attente,
         'historique_petite_caisse': _historique_petite_caisse(),
-        'detail_petite_caisse': PetiteCaisseVue.objects.all(),
         'all_comptes_json': json.dumps(all_comptes),
         'all_comptes': all_comptes,
+        'all_comptes_edition_json': json.dumps(all_comptes_edition),
         'photos_en_attente': photos_en_attente,
         'compte_tps_payee_id': tps_id or 0,
         'compte_tvq_payee_id': tvq_id or 0,

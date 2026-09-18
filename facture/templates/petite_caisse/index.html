@@ -15,61 +15,61 @@
         {% if not photos_en_attente %}
             <p class="text-muted mb-0">Aucune photo en attente pour le moment.</p>
         {% else %}
+            <p class="text-muted small">
+                Les valeurs ci-dessous sont celles détectées automatiquement -- vérifie-les et corrige au besoin avant de confirmer.
+            </p>
             <div class="table-responsive">
                 <table class="table table-sm align-middle">
                     <thead>
                         <tr>
-                            <th>Photo</th>
-                            <th>Fournisseur détecté</th>
-                            <th>Date</th>
-                            <th class="text-end">Total</th>
-                            <th>Compte de dépense</th>
-                            <th style="width:120px;"></th>
+                            <th style="width:60px;">Photo</th>
+                            <th style="width:130px;">Date</th>
+                            <th>Description</th>
+                            <th style="width:110px;">Total facture</th>
+                            <th style="width:80px;" class="text-center">Sans taxes</th>
+                            <th style="width:90px;">TPS</th>
+                            <th style="width:90px;">TVQ</th>
+                            <th style="width:120px;">Avant taxes</th>
+                            <th>Compte (5000 et plus)</th>
+                            <th style="width:100px;"></th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="pc-photos-body">
                         {% for item in photos_en_attente %}
-                            <tr>
-                                <td><img src="{% url 'petite_caisse_photo_image' item.photo.pk %}" style="width:50px;height:50px;object-fit:cover;" class="rounded"></td>
+                            <tr class="pc-photo-row-main" data-photo-id="{{ item.photo.pk }}" data-group-id="photo-{{ item.photo.pk }}">
                                 <td>
-                                    {{ item.photo.fournisseur_detecte|default:"?" }}
+                                    <img src="{% url 'petite_caisse_photo_image' item.photo.pk %}" style="width:50px;height:50px;object-fit:cover;" class="rounded">
                                     {% if item.photo.erreur_analyse %}
-                                        <br><span class="text-danger small">Analyse échouée</span>
+                                        <div class="text-danger small">Analyse échouée</div>
                                     {% endif %}
                                 </td>
-                                <td>{{ item.photo.date_detectee|default:"?" }}</td>
-                                <td class="text-end">{{ item.photo.montant_total_detecte|default:"?" }}</td>
+                                <td><input type="date" class="form-control form-control-sm pc-date-input" value="{{ item.photo.date_detectee|default:'' }}"></td>
+                                <td><input type="text" class="form-control form-control-sm pc-desc-input" value="{{ item.photo.fournisseur_detecte|default:item.photo.description_detectee }}"></td>
+                                <td><input type="number" step="0.01" class="form-control form-control-sm text-end pc-total-input" value="{{ item.photo.montant_total_detecte|default:'' }}"></td>
+                                <td class="text-center"><input type="checkbox" class="form-check-input pc-sans-taxes-input"></td>
+                                <td><input type="number" step="0.01" class="form-control form-control-sm text-end pc-tps-input" value="{{ item.photo.tps_detectee|default:'0' }}"></td>
+                                <td><input type="number" step="0.01" class="form-control form-control-sm text-end pc-tvq-input" value="{{ item.photo.tvq_detectee|default:'0' }}"></td>
+                                <td><input type="number" step="0.01" class="form-control form-control-sm text-end pc-avant-input" value="{{ item.photo.montant_avant_taxes_detecte|default:'' }}"></td>
                                 <td>
-                                    <form method="post" class="d-flex gap-1 align-items-center">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="action" value="ajouter_photo">
-                                        <input type="hidden" name="photo_id" value="{{ item.photo.pk }}">
-                                        <select name="compte_id" class="form-select form-select-sm" required>
-                                            <option value="">-- choisir --</option>
-                                            {% for compte in all_comptes %}
-                                                <option value="{{ compte.id }}" {% if item.compte_suggere and compte.id == item.compte_suggere.numero %}selected{% endif %}>{{ compte.label }}</option>
-                                            {% endfor %}
-                                        </select>
-                                        <button type="submit" class="btn btn-sm btn-success" title="Ajouter au tableau">
-                                            <i class="bi bi-check-lg"></i>
-                                        </button>
-                                    </form>
+                                    <select class="form-select form-select-sm pc-compte-select">
+                                        <option value="">-- choisir --</option>
+                                        {% for compte in all_comptes %}
+                                            <option value="{{ compte.id }}" {% if item.compte_suggere and compte.id == item.compte_suggere.numero %}selected{% endif %}>{{ compte.label }}</option>
+                                        {% endfor %}
+                                    </select>
                                 </td>
-                                <td class="text-center">
-                                    <form method="post" onsubmit="return confirm('Supprimer cette photo ?');">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="action" value="supprimer_photo">
-                                        <input type="hidden" name="photo_id" value="{{ item.photo.pk }}">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer cette photo">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </form>
+                                <td class="text-nowrap">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary pc-photo-add-extra me-1" title="Ajouter une ligne (autre compte)"><i class="bi bi-plus-lg"></i></button>
+                                    <button type="button" class="btn btn-sm btn-success pc-photo-confirm me-1" title="Ajouter au tableau"><i class="bi bi-check-lg"></i></button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger pc-photo-delete" title="Supprimer cette photo"><i class="bi bi-trash"></i></button>
                                 </td>
                             </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
+            <div id="pc-photo-error" class="alert alert-danger mt-2" style="display:none;"></div>
+            <form id="pc-photo-action-form" method="post" style="display:none;">{% csrf_token %}</form>
         {% endif %}
     </div>
 </div>
@@ -238,7 +238,12 @@
                     </thead>
                     <tbody>
                         {% for cheque in historique_petite_caisse %}
-                            <tr>
+                            <tr{% if cheque.tr_desc_id %} class="pc-row-modifiable" style="cursor:pointer;" title="Cliquer pour modifier"
+                                    data-tr-desc-id="{{ cheque.tr_desc_id }}"
+                                    data-no-ej="{{ cheque.tr_desc.no_ej }}"
+                                    data-date="{{ cheque.tr_desc.date|date:'Y-m-d' }}"
+                                    data-description="{{ cheque.tr_desc.desc_ctb|default:'' }}"
+                                    data-lignes='{{ cheque.lignes_edition_json }}'{% endif %}>
                                 <td>{{ cheque.date_emission|date:"Y-m-d" }}</td>
                                 <td>{{ cheque.no_cheque }}</td>
                                 <td class="text-end">{% if cheque.montant %}{{ cheque.montant|floatformat:2 }}{% endif %}</td>
@@ -256,47 +261,50 @@
                     </tbody>
                 </table>
             </div>
+            <p class="text-muted small mb-0">Clique sur une transaction pour la modifier.</p>
         {% endif %}
     </div>
 </div>
 
-<div class="card shadow-sm mt-4">
-    <div class="card-body">
-        <h5 class="card-title">Détail par compte (transactions passées)</h5>
-        <p class="text-muted">Chaque transaction de petite caisse, ventilée ligne par ligne, avec ou sans photo.</p>
+<div class="modal fade" id="modal-modifier-pc" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="post" id="form-modifier-pc">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="modifier_transaction">
+                <input type="hidden" name="tr_desc_id" id="pcm-tr-desc-id">
 
-        {% if not detail_petite_caisse %}
-            <p class="text-muted mb-0">Aucun détail disponible pour le moment.</p>
-        {% else %}
-            <div class="table-responsive">
-                <table class="table table-sm align-middle">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>No EJ</th>
-                            <th>Compte</th>
-                            <th class="text-end">Débit</th>
-                            <th class="text-end">Crédit</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for ligne in detail_petite_caisse %}
-                            <tr>
-                                <td>{{ ligne.date|date:"Y-m-d" }}</td>
-                                <td>{{ ligne.no_ej }}</td>
-                                <td>{{ ligne.compte_numero }} - {{ ligne.compte_libelle }}</td>
-                                <td class="text-end">{% if ligne.debit %}{{ ligne.debit|floatformat:2 }}{% endif %}</td>
-                                <td class="text-end">{% if ligne.credit %}{{ ligne.credit|floatformat:2 }}{% endif %}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% endif %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Modifier la transaction <span id="pcm-no-ej"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Date</label>
+                        <input type="date" name="date" id="pcm-date" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <input type="text" name="description" id="pcm-description" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Compte(s)</label>
+                        <div id="pcm-lignes-comptes"></div>
+                        <button type="button" id="pcm-ajouter-ligne" class="btn btn-sm btn-outline-secondary mt-1">+ Ajouter une ligne de compte</button>
+                        <p class="small text-muted mt-2 mb-0">Total des lignes : <span id="pcm-total-lignes">0,00</span> $</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-link" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-success">Enregistrer les modifications</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
 <input type="hidden" id="all-comptes-json" value="{{ all_comptes_json }}">
+<input type="hidden" id="all-comptes-edition-json" value="{{ all_comptes_edition_json }}">
 <input type="hidden" id="compte-tps-payee-id" value="{{ compte_tps_payee_id }}">
 <input type="hidden" id="compte-tvq-payee-id" value="{{ compte_tvq_payee_id }}">
 
@@ -739,6 +747,335 @@ document.addEventListener('DOMContentLoaded', function () {
     // Demarre avec quelques lignes vides pretes a remplir.
     for (var i = 0; i < 5; i++) { pcAddMainRow(); }
     recalcPetiteCaisse();
+
+    // --- Photos en attente : memes colonnes editables que "Ajouter des reçus" ---
+    var pcPhotosBody = document.getElementById('pc-photos-body');
+    var pcPhotoErrorBox = document.getElementById('pc-photo-error');
+    var pcPhotoActionForm = document.getElementById('pc-photo-action-form');
+
+    function pcPhotoGroupRows(groupId) {
+        return Array.prototype.slice.call(
+            pcPhotosBody.querySelectorAll('[data-group-id="' + groupId + '"]')
+        );
+    }
+
+    function pcPhotoCascadeRemainder(groupId, fromRow) {
+        var rows = pcPhotoGroupRows(groupId);
+        var idx = rows.indexOf(fromRow);
+        if (idx === -1) { return; }
+
+        var sumCents = 0;
+        for (var i = 0; i <= idx; i++) { sumCents += pcRowAvantCents(rows[i]); }
+
+        var mainRow = rows[0];
+        var originalSubtotalCents = mainRow ? (parseInt(mainRow.dataset.originalSubtotalCents || '0', 10) || 0) : 0;
+        var remainderCents = originalSubtotalCents - sumCents;
+        var nextRow = rows[idx + 1];
+
+        if (remainderCents > 0) {
+            if (nextRow && nextRow.getAttribute('data-auto-remainder') === '1') {
+                var nextInput = nextRow.querySelector('.pc-avant-input');
+                if (nextInput) { nextInput.value = fromCents(remainderCents).toFixed(2); }
+            } else if (!nextRow) {
+                var newRow = pcPhotoAddExtraRow(groupId);
+                if (newRow) {
+                    newRow.setAttribute('data-auto-remainder', '1');
+                    var newInput = newRow.querySelector('.pc-avant-input');
+                    if (newInput) { newInput.value = fromCents(remainderCents).toFixed(2); }
+                }
+            }
+        } else if (nextRow && nextRow.getAttribute('data-auto-remainder') === '1') {
+            nextRow.remove();
+        }
+    }
+
+    function pcPhotoBindAvantCascade(row, groupId) {
+        var avantInput = row ? row.querySelector('.pc-avant-input') : null;
+        if (!avantInput) { return; }
+        avantInput.addEventListener('input', function () {
+            pcPhotoCascadeRemainder(groupId, row);
+        });
+    }
+
+    function pcPhotoAddExtraRow(groupId) {
+        var tr = document.createElement('tr');
+        tr.className = 'pc-row-extra';
+        tr.setAttribute('data-group-id', groupId);
+
+        for (var col = 0; col < 7; col++) {
+            var tdBlank = document.createElement('td');
+            tdBlank.className = 'text-muted text-center';
+            tdBlank.textContent = '—';
+            tr.appendChild(tdBlank);
+        }
+
+        var tdAvant = document.createElement('td');
+        var avantInputEl = pcMakeAmountInput('pc-avant-input');
+        tdAvant.appendChild(avantInputEl);
+        tr.appendChild(tdAvant);
+
+        var tdCompte = document.createElement('td');
+        tdCompte.appendChild(pcMakeComptesSelect());
+        tr.appendChild(tdCompte);
+
+        var tdActions = document.createElement('td');
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn btn-sm btn-outline-danger';
+        removeBtn.title = 'Retirer cette ligne';
+        removeBtn.innerHTML = '<i class="bi bi-trash"></i>';
+        removeBtn.addEventListener('click', function () { tr.remove(); });
+        tdActions.appendChild(removeBtn);
+        tr.appendChild(tdActions);
+
+        var groupRows = pcPhotoGroupRows(groupId);
+        var lastRow = groupRows[groupRows.length - 1];
+        if (lastRow) {
+            lastRow.insertAdjacentElement('afterend', tr);
+        } else {
+            pcPhotosBody.appendChild(tr);
+        }
+
+        pcPhotoBindAvantCascade(tr, groupId);
+        return tr;
+    }
+
+    function pcPhotoAppendHidden(name, value) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.className = 'pcp-dynamic-field';
+        input.name = name;
+        input.value = value;
+        pcPhotoActionForm.appendChild(input);
+    }
+
+    function pcPhotoSubmit(mainRow, groupId, action) {
+        if (pcPhotoErrorBox) {
+            pcPhotoErrorBox.style.display = 'none';
+            pcPhotoErrorBox.textContent = '';
+        }
+
+        pcPhotoActionForm.querySelectorAll('.pcp-dynamic-field').forEach(function (el) { el.remove(); });
+
+        var photoId = mainRow.getAttribute('data-photo-id');
+        pcPhotoAppendHidden('action', action);
+        pcPhotoAppendHidden('photo_id', photoId);
+
+        if (action === 'ajouter_photo') {
+            var dateVal = mainRow.querySelector('.pc-date-input').value;
+            var descVal = mainRow.querySelector('.pc-desc-input').value;
+            var tpsVal = parseAmount(mainRow.querySelector('.pc-tps-input').value);
+            var tvqVal = parseAmount(mainRow.querySelector('.pc-tvq-input').value);
+
+            pcPhotoAppendHidden('date', dateVal);
+            pcPhotoAppendHidden('description', descVal);
+            pcPhotoAppendHidden('tps', roundCurrency(tpsVal).toFixed(2));
+            pcPhotoAppendHidden('tvq', roundCurrency(tvqVal).toFixed(2));
+
+            var rows = pcPhotoGroupRows(groupId);
+            var lineIndex = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var select = rows[i].querySelector('.pc-compte-select');
+                var avantInput = rows[i].querySelector('.pc-avant-input');
+                var compteId = select ? select.value : '';
+                var avantVal = parseAmount(avantInput ? avantInput.value : 0);
+                if (compteId && avantVal > 0) {
+                    pcPhotoAppendHidden('ligne-' + lineIndex + '-compte', compteId);
+                    pcPhotoAppendHidden('ligne-' + lineIndex + '-montant', roundCurrency(avantVal).toFixed(2));
+                    lineIndex++;
+                }
+            }
+
+            if (lineIndex === 0) {
+                if (pcPhotoErrorBox) {
+                    pcPhotoErrorBox.textContent = 'Choisis un compte et un montant avant taxes avant d’ajouter ce reçu.';
+                    pcPhotoErrorBox.style.display = '';
+                }
+                return;
+            }
+        }
+
+        pcPhotoActionForm.submit();
+    }
+
+    function pcPhotoInitRow(mainRow) {
+        var groupId = mainRow.getAttribute('data-group-id');
+        var totalInputEl = mainRow.querySelector('.pc-total-input');
+        var sansTaxesInputEl = mainRow.querySelector('.pc-sans-taxes-input');
+        var tpsInputEl = mainRow.querySelector('.pc-tps-input');
+        var tvqInputEl = mainRow.querySelector('.pc-tvq-input');
+        var avantInputEl = mainRow.querySelector('.pc-avant-input');
+
+        // Base de depart pour la cascade : le montant avant taxes deja rempli
+        // (detecte par l'IA), sans recalcul tant que l'utilisatrice n'a pas
+        // elle-meme touche au total ou a la case "sans taxes".
+        mainRow.dataset.originalSubtotalCents = String(toCents(Math.abs(parseAmount(avantInputEl.value))));
+
+        function pcPhotoApplyTotalSplit() {
+            var totalCents = toCents(Math.abs(parseAmount(totalInputEl.value)));
+            if (totalCents <= 0) {
+                mainRow.dataset.originalSubtotalCents = '0';
+                return;
+            }
+            var subtotalCents, tpsCents, tvqCents;
+            if (sansTaxesInputEl.checked) {
+                subtotalCents = totalCents;
+                tpsCents = 0;
+                tvqCents = 0;
+            } else {
+                subtotalCents = Math.round(totalCents / (1 + TPS_RATE + TVQ_RATE));
+                tpsCents = Math.round(subtotalCents * TPS_RATE);
+                tvqCents = totalCents - subtotalCents - tpsCents;
+            }
+            tpsInputEl.value = fromCents(tpsCents).toFixed(2);
+            tvqInputEl.value = fromCents(tvqCents).toFixed(2);
+            avantInputEl.value = fromCents(subtotalCents).toFixed(2);
+            mainRow.dataset.originalSubtotalCents = String(subtotalCents);
+            pcPhotoCascadeRemainder(groupId, mainRow);
+        }
+
+        totalInputEl.addEventListener('input', pcPhotoApplyTotalSplit);
+        sansTaxesInputEl.addEventListener('change', pcPhotoApplyTotalSplit);
+        pcPhotoBindAvantCascade(mainRow, groupId);
+
+        var addExtraBtn = mainRow.querySelector('.pc-photo-add-extra');
+        if (addExtraBtn) {
+            addExtraBtn.addEventListener('click', function () { pcPhotoAddExtraRow(groupId); });
+        }
+
+        var confirmBtn = mainRow.querySelector('.pc-photo-confirm');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', function () { pcPhotoSubmit(mainRow, groupId, 'ajouter_photo'); });
+        }
+
+        var deleteBtn = mainRow.querySelector('.pc-photo-delete');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', function () {
+                if (!window.confirm('Supprimer cette photo ?')) { return; }
+                pcPhotoSubmit(mainRow, groupId, 'supprimer_photo');
+            });
+        }
+    }
+
+    if (pcPhotosBody) {
+        pcPhotosBody.querySelectorAll('.pc-photo-row-main').forEach(function (row) {
+            pcPhotoInitRow(row);
+        });
+    }
+
+    // --- Modale d'edition d'une transaction de petite caisse deja passee ---
+    var pcmEditionComptesInput = document.getElementById('all-comptes-edition-json');
+    var pcmAllComptes = pcmEditionComptesInput && pcmEditionComptesInput.value ? JSON.parse(pcmEditionComptesInput.value) : [];
+    var pcmModalEl = document.getElementById('modal-modifier-pc');
+    var pcmForm = document.getElementById('form-modifier-pc');
+    var pcmLignesContainer = document.getElementById('pcm-lignes-comptes');
+    var pcmAjouterLigneBtn = document.getElementById('pcm-ajouter-ligne');
+    var pcmTotalAffiche = document.getElementById('pcm-total-lignes');
+    var pcmBsModal = pcmModalEl ? new bootstrap.Modal(pcmModalEl) : null;
+
+    function pcmFillCompteSelect(select, compteIdSelectionne) {
+        select.innerHTML = '<option value="">-- choisir --</option>';
+        for (var i = 0; i < pcmAllComptes.length; i++) {
+            var option = document.createElement('option');
+            option.value = pcmAllComptes[i].id;
+            option.textContent = pcmAllComptes[i].label;
+            if (String(pcmAllComptes[i].id) === String(compteIdSelectionne)) { option.selected = true; }
+            select.appendChild(option);
+        }
+    }
+
+    function pcmRecalculerTotal() {
+        var total = 0;
+        pcmLignesContainer.querySelectorAll('input[name$="-montant"]').forEach(function (champ) {
+            var valeur = parseFloat((champ.value || '0').replace(',', '.'));
+            if (!isNaN(valeur)) { total += valeur; }
+        });
+        if (pcmTotalAffiche) { pcmTotalAffiche.textContent = total.toFixed(2).replace('.', ','); }
+    }
+
+    function pcmRenumeroter() {
+        pcmLignesContainer.querySelectorAll('.ligne-compte').forEach(function (ligneEl, i) {
+            ligneEl.querySelectorAll('select, input').forEach(function (champ) {
+                champ.name = champ.name.replace(/ligne-\d+-/, 'ligne-' + i + '-');
+            });
+        });
+    }
+
+    function pcmAjouterLigne(compteId, montant) {
+        var index = pcmLignesContainer.querySelectorAll('.ligne-compte').length;
+        var ligne = document.createElement('div');
+        ligne.className = 'row g-2 mb-2 align-items-center ligne-compte';
+
+        var colCompte = document.createElement('div');
+        colCompte.className = 'col-7';
+        var select = document.createElement('select');
+        select.className = 'form-select';
+        select.name = 'ligne-' + index + '-compte';
+        select.required = true;
+        pcmFillCompteSelect(select, compteId);
+        colCompte.appendChild(select);
+
+        var colMontant = document.createElement('div');
+        colMontant.className = 'col-4';
+        var input = document.createElement('input');
+        input.type = 'number';
+        input.step = '0.01';
+        input.className = 'form-control';
+        input.placeholder = 'Montant';
+        input.name = 'ligne-' + index + '-montant';
+        input.required = true;
+        if (montant !== undefined && montant !== null) { input.value = montant; }
+        colMontant.appendChild(input);
+
+        var colRetirer = document.createElement('div');
+        colRetirer.className = 'col-1';
+        var retirerBtn = document.createElement('button');
+        retirerBtn.type = 'button';
+        retirerBtn.className = 'btn btn-sm btn-outline-danger pcm-retirer-ligne';
+        retirerBtn.title = 'Retirer cette ligne';
+        retirerBtn.textContent = '×';
+        colRetirer.appendChild(retirerBtn);
+
+        ligne.appendChild(colCompte);
+        ligne.appendChild(colMontant);
+        ligne.appendChild(colRetirer);
+        pcmLignesContainer.appendChild(ligne);
+        pcmRecalculerTotal();
+    }
+
+    if (pcmAjouterLigneBtn) {
+        pcmAjouterLigneBtn.addEventListener('click', function () { pcmAjouterLigne(); });
+    }
+    if (pcmLignesContainer) {
+        pcmLignesContainer.addEventListener('click', function (evenement) {
+            if (evenement.target.classList.contains('pcm-retirer-ligne')) {
+                var lignes = pcmLignesContainer.querySelectorAll('.ligne-compte');
+                if (lignes.length > 1) {
+                    evenement.target.closest('.ligne-compte').remove();
+                    pcmRenumeroter();
+                    pcmRecalculerTotal();
+                }
+            }
+        });
+        pcmLignesContainer.addEventListener('input', pcmRecalculerTotal);
+    }
+
+    document.querySelectorAll('.pc-row-modifiable').forEach(function (ligneTr) {
+        ligneTr.addEventListener('click', function () {
+            document.getElementById('pcm-tr-desc-id').value = ligneTr.getAttribute('data-tr-desc-id') || '';
+            document.getElementById('pcm-no-ej').textContent = ligneTr.getAttribute('data-no-ej') || '';
+            document.getElementById('pcm-date').value = ligneTr.getAttribute('data-date') || '';
+            document.getElementById('pcm-description').value = ligneTr.getAttribute('data-description') || '';
+
+            pcmLignesContainer.innerHTML = '';
+            var lignes = [];
+            try { lignes = JSON.parse(ligneTr.getAttribute('data-lignes') || '[]'); } catch (e) { lignes = []; }
+            if (lignes.length === 0) { lignes = [{}]; }
+            lignes.forEach(function (ligne) { pcmAjouterLigne(ligne.compte_id, ligne.montant); });
+
+            if (pcmBsModal) { pcmBsModal.show(); }
+        });
+    });
 });
 </script>
 {% endblock %}
