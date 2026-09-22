@@ -55,6 +55,172 @@
             window.location.replace(lien.href);
         });
     });
+
+    // Les montants (à la québécoise : espace pour les milliers, virgule
+    // pour les décimales) sont affichés formatés au repos, et simplifiés
+    // (sans espaces) pendant l'édition pour rester faciles à corriger.
+    document.addEventListener('DOMContentLoaded', function () {
+        function formatterMontant(brut) {
+            var nombre = parseFloat(String(brut).replace(/\s/g, '').replace(',', '.'));
+            if (isNaN(nombre)) {
+                return '';
+            }
+            var negatif = nombre < 0;
+            var texte = Math.abs(nombre).toFixed(2);
+            var parties = texte.split('.');
+            var entier = parties[0];
+            var groupes = [];
+            while (entier.length > 3) {
+                groupes.unshift(entier.slice(-3));
+                entier = entier.slice(0, -3);
+            }
+            groupes.unshift(entier);
+            return (negatif ? '-' : '') + groupes.join(' ') + ',' + parties[1];
+        }
+
+        function versEdition(brut) {
+            var nombre = parseFloat(String(brut).replace(/\s/g, '').replace(',', '.'));
+            if (isNaN(nombre)) {
+                return '';
+            }
+            return String(nombre).replace('.', ',');
+        }
+
+        document.querySelectorAll('.interets-montant').forEach(function (champ) {
+            if (champ.value.trim() !== '') {
+                champ.value = formatterMontant(champ.value);
+            }
+            champ.addEventListener('focus', function () {
+                champ.value = versEdition(champ.value);
+            });
+            champ.addEventListener('blur', function () {
+                if (champ.value.trim() !== '') {
+                    champ.value = formatterMontant(champ.value);
+                }
+            });
+        });
+    });
+</script>
+<script>
+    // Selection de plusieurs cases d'une meme colonne de montants (comme dans
+    // Excel), en cliquant-glissant : affiche une bulle avec la somme des
+    // cases survolees pendant le glissement. La selection se limite a une
+    // seule colonne (meme "name") et un seul tableau (un seul pretor a la
+    // fois) pour rester simple et sans ambiguite.
+    document.addEventListener('DOMContentLoaded', function () {
+        var celluleDepart = null;
+        var enSelection = false;
+        var selectionActuelle = [];
+        var badge = null;
+
+        function creerBadge() {
+            var el = document.createElement('div');
+            el.style.position = 'fixed';
+            el.style.zIndex = '2000';
+            el.style.background = '#212529';
+            el.style.color = '#fff';
+            el.style.padding = '4px 10px';
+            el.style.borderRadius = '4px';
+            el.style.fontSize = '0.85rem';
+            el.style.pointerEvents = 'none';
+            el.style.display = 'none';
+            document.body.appendChild(el);
+            return el;
+        }
+
+        function parseValeur(brut) {
+            var n = parseFloat(String(brut || '').replace(/\s/g, '').replace(',', '.'));
+            return isNaN(n) ? 0 : n;
+        }
+
+        function formatterSomme(n) {
+            var negatif = n < 0;
+            var texte = Math.abs(n).toFixed(2);
+            var parties = texte.split('.');
+            var entier = parties[0];
+            var groupes = [];
+            while (entier.length > 3) {
+                groupes.unshift(entier.slice(-3));
+                entier = entier.slice(0, -3);
+            }
+            groupes.unshift(entier);
+            return (negatif ? '-' : '') + groupes.join(' ') + ',' + parties[1];
+        }
+
+        function champsColonne(reference) {
+            var table = reference.closest('table');
+            if (!table) return [];
+            return Array.prototype.slice.call(
+                table.querySelectorAll('.interets-montant[name="' + reference.name + '"]')
+            );
+        }
+
+        function effacerSelection() {
+            selectionActuelle.forEach(function (el) { el.style.backgroundColor = ''; });
+            selectionActuelle = [];
+        }
+
+        function masquerBadge() {
+            if (badge) badge.style.display = 'none';
+        }
+
+        function majSelection(fin, evt) {
+            effacerSelection();
+            var colonne = champsColonne(celluleDepart);
+            var iDebut = colonne.indexOf(celluleDepart);
+            var iFin = colonne.indexOf(fin);
+            if (iDebut === -1 || iFin === -1) return;
+            var lo = Math.min(iDebut, iFin), hi = Math.max(iDebut, iFin);
+            var somme = 0;
+            for (var i = lo; i <= hi; i++) {
+                colonne[i].style.backgroundColor = '#cfe2ff';
+                selectionActuelle.push(colonne[i]);
+                somme += parseValeur(colonne[i].value);
+            }
+            var n = hi - lo + 1;
+            if (!badge) badge = creerBadge();
+            badge.textContent = n + ' cases — Somme : ' + formatterSomme(somme) + ' $';
+            badge.style.display = 'block';
+            if (evt) {
+                badge.style.left = (evt.clientX + 12) + 'px';
+                badge.style.top = (evt.clientY + 12) + 'px';
+            }
+        }
+
+        document.querySelectorAll('.interets-montant').forEach(function (champ) {
+            champ.addEventListener('mousedown', function () {
+                celluleDepart = champ;
+                enSelection = true;
+            });
+            champ.addEventListener('mouseover', function (evt) {
+                if (!enSelection || !celluleDepart) return;
+                if (champ.name !== celluleDepart.name) return;
+                if (champ.closest('table') !== celluleDepart.closest('table')) return;
+                majSelection(champ, evt);
+            });
+        });
+
+        document.addEventListener('selectstart', function (evt) {
+            if (enSelection) evt.preventDefault();
+        });
+
+        document.addEventListener('mouseup', function () {
+            if (enSelection && selectionActuelle.length <= 1) {
+                effacerSelection();
+                masquerBadge();
+            }
+            enSelection = false;
+        });
+
+        document.addEventListener('mousedown', function (evt) {
+            var cible = evt.target;
+            if (!(cible.classList && cible.classList.contains('interets-montant'))) {
+                effacerSelection();
+                masquerBadge();
+                celluleDepart = null;
+            }
+        });
+    });
 </script>
 
 <form method="post" class="row g-2 align-items-end mb-4" style="max-width: 420px;">
@@ -109,7 +275,7 @@
                         {% if not bloc.premiere_annee %}<span title="Reporté automatiquement de l'année précédente">🔒</span>{% endif %}
                     </label>
                     {% if bloc.premiere_annee %}
-                        <input type="number" step="0.01" name="solde_initial" value="{{ a.solde_initial|unlocalize }}" class="form-control form-control-sm" style="width: 150px;">
+                        <input type="text" inputmode="decimal" name="solde_initial" value="{{ a.solde_initial|unlocalize }}" class="form-control form-control-sm interets-montant" style="width: 150px;">
                     {% else %}
                         <input type="text" value="{{ a.solde_initial|montant }} $" class="form-control form-control-sm interets-solde-lecture" style="width: 150px;" readonly>
                     {% endif %}
@@ -120,7 +286,7 @@
                         {% if not bloc.premiere_annee %}<span title="Reporté automatiquement de l'année précédente">🔒</span>{% endif %}
                     </label>
                     {% if bloc.premiere_annee %}
-                        <input type="number" step="0.01" name="interet_reporte" value="{{ a.interet_reporte|unlocalize }}" class="form-control form-control-sm" style="width: 150px;">
+                        <input type="text" inputmode="decimal" name="interet_reporte" value="{{ a.interet_reporte|unlocalize }}" class="form-control form-control-sm interets-montant" style="width: 150px;">
                     {% else %}
                         <input type="text" value="{{ a.interet_reporte|montant }} $" class="form-control form-control-sm interets-solde-lecture" style="width: 150px;" readonly>
                     {% endif %}
@@ -160,12 +326,12 @@
                             <td class="text-muted">{{ r.ligne.date_montant|date:'Y-m-d'|default:'—' }}</td>
                             <td class="text-end text-muted">{% if r.montant_affiche is not None %}{{ r.montant_affiche|montant }} $ {% else %}—{% endif %}</td>
                             <td><input type="date" name="date_remboursement[]" value="{{ r.ligne.date_remboursement|date:'Y-m-d' }}" class="form-control form-control-sm"></td>
-                            <td class="text-end"><input type="number" step="0.01" name="remboursement[]" value="{{ r.ligne.remboursement|default_if_none:''|unlocalize }}" class="form-control form-control-sm" placeholder="—"></td>
+                            <td class="text-end"><input type="text" inputmode="decimal" name="remboursement[]" value="{{ r.ligne.remboursement|default_if_none:''|unlocalize }}" class="form-control form-control-sm interets-montant" placeholder="—"></td>
                             {% if not bloc.annee_terminee %}
                             <td class="text-end text-muted">{% if r.interet is not None %}{{ r.interet|montant }} $ {% else %}—{% endif %}</td>
                             {% endif %}
                             <td class="text-end text-muted">{% if r.interet_31dec is not None %}{{ r.interet_31dec|montant }} $ {% else %}—{% endif %}</td>
-                            <td class="text-end"><input type="number" step="0.01" name="interet_verse[]" value="{{ r.ligne.interet_verse|default_if_none:''|unlocalize }}" class="form-control form-control-sm" placeholder="—"></td>
+                            <td class="text-end"><input type="text" inputmode="decimal" name="interet_verse[]" value="{{ r.ligne.interet_verse|default_if_none:''|unlocalize }}" class="form-control form-control-sm interets-montant" placeholder="—"></td>
                             <td class="text-end text-muted">{% if r.solde is not None %}{{ r.solde|montant }} $ {% else %}—{% endif %}</td>
                             <td>
                                 <input type="hidden" name="date_montant[]" value="{{ r.ligne.date_montant|date:'Y-m-d' }}">
@@ -197,14 +363,14 @@
                         {% for r in c.rangees %}
                         <tr>
                             <td><input type="date" name="date_montant[]" value="{{ r.ligne.date_montant|date:'Y-m-d' }}" class="form-control form-control-sm"></td>
-                            <td class="text-end"><input type="number" step="0.01" name="montant[]" value="{{ r.ligne.montant|default_if_none:''|unlocalize }}" class="form-control form-control-sm"></td>
+                            <td class="text-end"><input type="text" inputmode="decimal" name="montant[]" value="{{ r.ligne.montant|default_if_none:''|unlocalize }}" class="form-control form-control-sm interets-montant"></td>
                             <td><input type="date" name="date_remboursement[]" value="{{ r.ligne.date_remboursement|date:'Y-m-d' }}" class="form-control form-control-sm"></td>
-                            <td class="text-end"><input type="number" step="0.01" name="remboursement[]" value="{{ r.ligne.remboursement|default_if_none:''|unlocalize }}" class="form-control form-control-sm"></td>
+                            <td class="text-end"><input type="text" inputmode="decimal" name="remboursement[]" value="{{ r.ligne.remboursement|default_if_none:''|unlocalize }}" class="form-control form-control-sm interets-montant"></td>
                             {% if not bloc.annee_terminee %}
                             <td class="text-end text-muted">{% if r.interet is not None %}{{ r.interet|montant }} $ {% else %}—{% endif %}</td>
                             {% endif %}
                             <td class="text-end text-muted">{% if r.interet_31dec is not None %}{{ r.interet_31dec|montant }} $ {% else %}—{% endif %}</td>
-                            <td class="text-end"><input type="number" step="0.01" name="interet_verse[]" value="{{ r.ligne.interet_verse|default_if_none:''|unlocalize }}" class="form-control form-control-sm" placeholder="—"></td>
+                            <td class="text-end"><input type="text" inputmode="decimal" name="interet_verse[]" value="{{ r.ligne.interet_verse|default_if_none:''|unlocalize }}" class="form-control form-control-sm interets-montant" placeholder="—"></td>
                             <td class="text-end">{% if r.solde is not None %}{{ r.solde|montant }} $ {% else %}—{% endif %}</td>
                             <td>
                                 <input type="hidden" name="ligne_id[]" value="{{ r.ligne.id }}">
@@ -214,14 +380,14 @@
                         {% for _ in bloc.lignes_vides %}
                         <tr>
                             <td><input type="date" name="date_montant[]" value="" class="form-control form-control-sm"></td>
-                            <td class="text-end"><input type="number" step="0.01" name="montant[]" value="" class="form-control form-control-sm" placeholder="—"></td>
+                            <td class="text-end"><input type="text" inputmode="decimal" name="montant[]" value="" class="form-control form-control-sm interets-montant" placeholder="—"></td>
                             <td><input type="date" name="date_remboursement[]" value="" class="form-control form-control-sm"></td>
-                            <td class="text-end"><input type="number" step="0.01" name="remboursement[]" value="" class="form-control form-control-sm" placeholder="—"></td>
+                            <td class="text-end"><input type="text" inputmode="decimal" name="remboursement[]" value="" class="form-control form-control-sm interets-montant" placeholder="—"></td>
                             {% if not bloc.annee_terminee %}
                             <td class="text-end text-muted">—</td>
                             {% endif %}
                             <td class="text-end text-muted">—</td>
-                            <td class="text-end"><input type="number" step="0.01" name="interet_verse[]" value="" class="form-control form-control-sm" placeholder="—"></td>
+                            <td class="text-end"><input type="text" inputmode="decimal" name="interet_verse[]" value="" class="form-control form-control-sm interets-montant" placeholder="—"></td>
                             <td class="text-end text-muted">—</td>
                             <td><input type="hidden" name="ligne_id[]" value=""></td>
                         </tr>

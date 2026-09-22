@@ -7,13 +7,14 @@ compte/models.py (Preteur, InteretAnnee, InteretLigne) pour le schéma.
 
 Principe de calcul (voir construire_tranches / interet_gagne_durant
 ci-dessous) : chaque montant prêté est une tranche indépendante, qui ne
-fusionne jamais avec les autres. Son intérêt se calcule au prorata (base 365
-jours) sur ce qu'il en reste — les remboursements réduisent d'abord la
-tranche la plus ancienne (FIFO), toutes années confondues — depuis sa propre
-date jusqu'à aujourd'hui. À chaque 31 décembre, l'intérêt couru et non versé
-d'une tranche se capitalise (s'ajoute à son propre capital), qui continue
-ensuite de porter intérêt à son tour : c'est une capitalisation annuelle,
-par tranche, indépendante des autres tranches.
+fusionne jamais avec les autres. Le remboursement d'une ligne (avec sa
+propre date) ne s'applique QU'à cette ligne-là — jamais à une autre tranche.
+Avant sa date de remboursement, une tranche porte intérêt sur son plein
+montant ; à partir de cette date, elle porte intérêt sur le solde réduit
+(valeur accumulée moins le remboursement). À chaque 31 décembre, l'intérêt
+couru et non versé d'une tranche se capitalise (s'ajoute à son propre
+capital), qui continue ensuite de porter intérêt à son tour : c'est une
+capitalisation annuelle, par tranche, indépendante des autres tranches.
 """
 
 from datetime import date
@@ -29,7 +30,7 @@ from facture.utils import interets_access_required, parse_decimal
 
 from .models import InteretAnnee, InteretLigne, Preteur
 
-NB_LIGNES_VIDES = 3  # lignes vierges toujours offertes en bas du tableau, pour ajouter des entrées
+NB_LIGNES_VIDES = 15  # lignes vierges toujours offertes en bas du tableau, pour ajouter des entrées
 
 
 def taux_lookup_pour_preteur(preteur):
@@ -104,31 +105,85 @@ def valeur_composee(montant, date_debut, taux_lookup, jusqua, interet_verse=None
     return valeur
 
 
-def valeur_tranche_au(tranche, taux_lookup, jusqua):
-    """Valeur (capital restant + intérêts capitalisés) d'une tranche, à la
-    date jusqua."""
-    montant = tranche['montant_restant']
+def valeur_brute_tranche_au(tranche, taux_lookup, jusqua):
+    """Valeur (capital + intérêts capitalisés) d'une tranche à la date
+    jusqua, SANS tenir compte de son remboursement — sert uniquement à
+    afficher le montant capitalisé "brut" d'une ligne d'année antérieure
+    (colonne "Montant prêté"), pour que le remboursement continue d'être
+    montré et déduit séparément dans la colonne "Solde à rembourser"."""
+    montant = tranche['montant']
     origine = tranche['date']
     if montant <= 0 or jusqua <= origine:
         return montant
     return valeur_composee(montant, origine, taux_lookup, jusqua, interet_verse=tranche.get('interet_verse'))
 
 
+def valeur_tranche_au(tranche, taux_lookup, jusqua):
+    """Valeur d'une tranche à la date jusqua, EN tenant compte de son propre
+    remboursement (le remboursement d'une ligne ne s'applique qu'à cette
+    ligne, jamais à une autre) : avant sa date de remboursement, la tranche
+    porte intérêt sur son plein montant ; à partir de cette date, elle porte
+    intérêt sur le solde réduit (valeur accumulée au moment du remboursement,
+    moins le remboursement). Sert au calcul des intérêts."""
+    montant = tranche['montant']
+    origine = tranche['date']
+    if montant <= 0 or jusqua <= origine:
+        return montant
+
+    date_remb = tranche.get('date_remboursement')
+    remb = tranche.get('remboursement') or Decimal('0')
+    if not date_remb or not remb or jusqua <= date_remb:
+        return valeur_composee(montant, origine, taux_lookup, jusqua, interet_verse=tranche.get('interet_verse'))
+
+    # Le remboursement tombe avant jusqua : deux segments. L'offre
+    # "interet_verse" (intérêts déjà versés pour la toute première année de
+    # la tranche) ne s'applique qu'au segment qui traverse réellement le 31
+    # décembre de cette première année.
+    meme_annee = date_remb.year == origine.year
+    interet_verse = tranche.get('interet_verse')
+    valeur_au_remb = valeur_composee(
+        montant, origine, taux_lookup, date_remb,
+        interet_verse=None if meme_annee else interet_verse,
+    )
+    valeur_apres = valeur_au_remb - remb
+    if valeur_apres < 0:
+        valeur_apres = Decimal('0')
+    return valeur_composee(
+        valeur_apres, date_remb, taux_lookup, jusqua,
+        interet_verse=interet_verse if meme_annee else None,
+    )
+
+
+def interet_periode_tranche(tranche, taux_lookup, debut, fin):
+    """Intérêt gagné par une tranche entre les dates debut et fin (compte
+    tenu de son propre remboursement, s'il y a lieu). Un remboursement fait
+    chuter la "valeur" de la tranche, mais ce n'est pas un intérêt négatif —
+    c'est juste le solde qui diminue. Si le remboursement tombe dans cet
+    intervalle, on l'additionne de nouveau pour isoler le véritable intérêt
+    gagné (sans quoi le remboursement lui-même serait soustrait des
+    intérêts)."""
+    valeur_debut = valeur_tranche_au(tranche, taux_lookup, debut)
+    valeur_fin = valeur_tranche_au(tranche, taux_lookup, fin)
+    interet = valeur_fin - valeur_debut
+    date_remb = tranche.get('date_remboursement')
+    remb = tranche.get('remboursement') or Decimal('0')
+    if date_remb and remb and debut <= date_remb < fin:
+        interet += remb
+    return interet
+
+
 def interet_gagne_durant(tranche, annee_num, taux_lookup):
-    """Intérêt gagné par une tranche (sur ce qu'il en reste après FIFO)
-    spécifiquement durant l'année civile annee_num (tient compte de la
-    capitalisation des années antérieures, mais isole la portion propre à
-    cette année-là)."""
-    montant = tranche['montant_restant']
+    """Intérêt gagné par une tranche spécifiquement durant l'année civile
+    annee_num, jusqu'à aujourd'hui (tient compte de la capitalisation des
+    années antérieures, mais isole la portion propre à cette année-là)."""
+    montant = tranche['montant']
     origine = tranche['date']
     fin_annee = date(annee_num, 12, 31)
     fin_periode = min(timezone.localdate(), fin_annee)
     if montant <= 0 or origine > fin_periode:
         return Decimal('0')
     debut_ref = max(origine, date(annee_num, 1, 1))
-    valeur_debut = valeur_tranche_au(tranche, taux_lookup, debut_ref)
-    valeur_fin = valeur_tranche_au(tranche, taux_lookup, fin_periode)
-    return valeur_fin - valeur_debut
+    return interet_periode_tranche(tranche, taux_lookup, debut_ref, fin_periode)
 
 
 def interet_annee_complete(tranche, annee_num, taux_lookup):
@@ -137,26 +192,24 @@ def interet_annee_complete(tranche, annee_num, taux_lookup):
     s'arrête à aujourd'hui pour l'année en cours, ceci calcule toujours
     jusqu'à la fin de l'année (utile pour voir d'avance l'intérêt de fin
     d'année pendant qu'elle est encore en cours)."""
-    montant = tranche['montant_restant']
+    montant = tranche['montant']
     origine = tranche['date']
     fin_annee = date(annee_num, 12, 31)
     if montant <= 0 or origine > fin_annee:
         return Decimal('0')
     debut_ref = max(origine, date(annee_num, 1, 1))
-    valeur_debut = valeur_tranche_au(tranche, taux_lookup, debut_ref)
-    valeur_fin = valeur_tranche_au(tranche, taux_lookup, fin_annee)
-    return valeur_fin - valeur_debut
+    return interet_periode_tranche(tranche, taux_lookup, debut_ref, fin_annee)
 
 
 def construire_tranches(preteur):
     """Construit, en ordre chronologique, toutes les tranches (montants
-    prêtés) de ce prêteur, toutes années confondues, avec ce qu'il en reste
-    après application FIFO de tous les remboursements (les plus anciennes
-    tranches remboursées en premier). Le solde reporté au 1er janvier de la
-    toute première année suivie (avant tout suivi ligne par ligne, s'il y a
-    lieu) compte comme une tranche à part, datée du 1er janvier de cette
-    année-là — les années suivantes n'ont plus besoin de ce report, chaque
-    ligne restant indépendante indéfiniment.
+    prêtés) de ce prêteur, toutes années confondues. Chaque tranche porte
+    son propre remboursement (date + montant), qui ne s'applique jamais à
+    une autre tranche. Le solde reporté au 1er janvier de la toute première
+    année suivie (avant tout suivi ligne par ligne, s'il y a lieu) compte
+    comme une tranche à part, datée du 1er janvier de cette année-là — les
+    années suivantes n'ont plus besoin de ce report, chaque ligne restant
+    indépendante indéfiniment.
 
     Retourne (tranches, lignes) où lignes est la liste ordonnée de toutes
     les InteretLigne de ce prêteur.
@@ -169,7 +222,8 @@ def construire_tranches(preteur):
         if ouverture:
             tranches.append({
                 'ligne': None, 'date': date(premiere.annee, 1, 1),
-                'montant_restant': ouverture, 'interet_verse': None,
+                'montant': ouverture, 'interet_verse': None,
+                'date_remboursement': None, 'remboursement': None,
             })
 
     lignes = list(
@@ -180,22 +234,11 @@ def construire_tranches(preteur):
         montant = ligne.montant or Decimal('0')
         if ligne.date_montant and montant:
             tranches.append({
-                'ligne': ligne, 'date': ligne.date_montant, 'montant_restant': montant,
+                'ligne': ligne, 'date': ligne.date_montant, 'montant': montant,
                 'interet_verse': ligne.interet_verse,
+                'date_remboursement': ligne.date_remboursement,
+                'remboursement': ligne.remboursement,
             })
-
-    for ligne in lignes:
-        remboursement = ligne.remboursement or Decimal('0')
-        if ligne.date_remboursement and remboursement:
-            a_repartir = remboursement
-            for tranche in tranches:
-                if a_repartir <= 0:
-                    break
-                if tranche['date'] > ligne.date_remboursement:
-                    continue  # une tranche pas encore avancée à cette date ne peut pas être remboursée
-                prise = min(tranche['montant_restant'], a_repartir)
-                tranche['montant_restant'] -= prise
-                a_repartir -= prise
 
     return tranches, lignes
 
@@ -222,7 +265,7 @@ def calculer_preteur_pour_annee(preteur, annee_num):
     # antérieure détaillée n'est visible, sert de point de départ.
     solde_courant = Decimal('0')
     if tranche_ouverture and not any(l.annee.annee < annee_num for l in lignes):
-        solde_courant = tranche_ouverture['montant_restant']
+        solde_courant = tranche_ouverture['montant']
 
     debut_annee_courante = date(annee_num, 1, 1)
     for ligne in lignes:
@@ -247,7 +290,7 @@ def calculer_preteur_pour_annee(preteur, annee_num):
             # 1er janvier de l'année consultée ; "Solde à rembourser" cumule
             # cette valeur-là (moins un remboursement fait sur cette même
             # ligne) à la suite des lignes précédentes.
-            montant_affiche = valeur_tranche_au(tranche, taux_lookup, debut_annee_courante) if tranche else ligne.montant
+            montant_affiche = valeur_brute_tranche_au(tranche, taux_lookup, debut_annee_courante) if tranche else ligne.montant
             solde_courant += montant_affiche or Decimal('0')
             solde_courant -= ligne.remboursement or Decimal('0')
             rangee = {'ligne': ligne, 'interet': interet, 'interet_31dec': interet_31dec, 'solde': solde_courant, 'montant_affiche': montant_affiche}
@@ -380,7 +423,7 @@ def _traiter_action(request):
         annee_obj = get_object_or_404(InteretAnnee, pk=request.POST.get('annee_id'))
         # Une case laissée vide ne modifie pas la valeur existante (évite de remettre
         # accidentellement le taux ou le solde à 0 si le champ est soumis vide).
-        nouveau_taux = parse_decimal(request.POST.get('taux'), none_if_blank=True)
+        nouveau_taux = parse_decimal(request.POST.get('taux'), none_if_blank=True, strip_spaces=True)
         if nouveau_taux is not None:
             annee_obj.taux = nouveau_taux
         premiere_annee = not annee_obj.preteur.annees.filter(annee__lt=annee_obj.annee).exists()
@@ -388,10 +431,10 @@ def _traiter_action(request):
             # Le solde de départ et les intérêts reportés ne sont modifiables à la main que pour la
             # toute première année suivie de ce prêteur (report d'ouverture, avant tout suivi ligne
             # par ligne). Les années suivantes n'en ont plus besoin.
-            nouveau_solde = parse_decimal(request.POST.get('solde_initial'), none_if_blank=True)
+            nouveau_solde = parse_decimal(request.POST.get('solde_initial'), none_if_blank=True, strip_spaces=True)
             if nouveau_solde is not None:
                 annee_obj.solde_initial = nouveau_solde
-            nouvel_interet_reporte = parse_decimal(request.POST.get('interet_reporte'), none_if_blank=True)
+            nouvel_interet_reporte = parse_decimal(request.POST.get('interet_reporte'), none_if_blank=True, strip_spaces=True)
             if nouvel_interet_reporte is not None:
                 annee_obj.interet_reporte = nouvel_interet_reporte
         annee_obj.save()
@@ -408,10 +451,10 @@ def _traiter_action(request):
         prochain_ordre = (annee_obj.lignes.aggregate(Max('ordre'))['ordre__max'] or 0) + 1
         for i in range(len(ids)):
             d1 = (dates_montant[i] or '').strip()
-            m = parse_decimal(montants[i], none_if_blank=True)
+            m = parse_decimal(montants[i], none_if_blank=True, strip_spaces=True)
             d2 = (dates_remboursement[i] or '').strip()
-            r = parse_decimal(remboursements[i], none_if_blank=True)
-            iv = parse_decimal(interets_verses[i], none_if_blank=True) if i < len(interets_verses) else None
+            r = parse_decimal(remboursements[i], none_if_blank=True, strip_spaces=True)
+            iv = parse_decimal(interets_verses[i], none_if_blank=True, strip_spaces=True) if i < len(interets_verses) else None
             vide = not d1 and m is None and not d2 and r is None and iv is None
             ligne_id = ids[i]
 
