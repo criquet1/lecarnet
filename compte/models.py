@@ -415,9 +415,19 @@ class InteretLigne(models.Model):
     date_montant/montant (avance), date_remboursement/remboursement, plus
     les intérêts à ce jour et le solde à rembourser, calculés à
     l'affichage — pas stockés ici.
+
+    numero_pret identifie UN prêt à travers les années : la toute première
+    ligne d'un prêt adopte son propre id comme numero_pret ; quand ce prêt
+    n'est pas entièrement remboursé à la fin de l'année, une nouvelle ligne
+    est créée (ou mise à jour) pour l'année suivante avec le MÊME
+    numero_pret, datée du 1er janvier — cette nouvelle ligne est ensuite
+    tout à fait indépendante (son propre remboursement, ses propres
+    intérêts versés), le numero_pret ne servant qu'à la retrouver si la
+    ligne d'origine est corrigée plus tard.
     """
     annee = models.ForeignKey(InteretAnnee, on_delete=models.CASCADE, related_name='lignes')
     ordre = models.PositiveIntegerField(default=0, help_text="Ordre chronologique d'affichage des lignes.")
+    numero_pret = models.PositiveIntegerField(null=True, blank=True, db_index=True, verbose_name="Numéro de prêt")
     date_montant = models.DateField(null=True, blank=True, verbose_name="Date (montant prêté)")
     montant = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Montant prêté")
     date_remboursement = models.DateField(null=True, blank=True, verbose_name="Date (remboursement)")
