@@ -30,7 +30,7 @@ from facture.utils import interets_access_required, parse_decimal
 
 from .models import InteretAnnee, InteretLigne, Preteur
 
-NB_LIGNES_VIDES = 15  # lignes vierges toujours offertes en bas du tableau, pour ajouter des entrées
+NB_LIGNES_VIDES = 1  # ligne vierge toujours offerte en bas du tableau ; le bouton "+ Ajouter une ligne" (JS) en ajoute d'autres au besoin
 
 
 def taux_lookup_pour_preteur(preteur):
@@ -65,14 +65,11 @@ def valeur_composee(montant, date_debut, taux_lookup, jusqua, interet_verse=None
     intérêt entièrement versé ne capitalise rien, le capital reste
     inchangé).
 
-    Note sur le compte de jours : la toute première année d'une tranche
-    exclut son jour de départ (ex. prêt le 15 janvier au 31 décembre = 350
-    jours — le jour du prêt lui-même ne porte pas encore intérêt). Mais une
-    fois qu'une tranche est déjà en cours au 1er janvier d'une année
-    suivante, ce 1er janvier compte comme un jour porteur d'intérêt à part
-    entière : une année complète (1er janvier au 31 décembre) doit donc
-    représenter 365 jours pleins (366 en année bissextile), pas 364 — sans
-    ce +1, une année complète ne rapportait que 364/365 du taux annoncé."""
+    Note sur le compte de jours : chaque jour compté inclut à la fois le
+    jour de départ et le jour de fin du segment (date fin − date début + 1),
+    comme dans le calcul de l'expert-comptable — un prêt du 15 janvier au 31
+    décembre compte donc 351 jours, et une année complète (1er janvier au 31
+    décembre) compte 365 jours pleins (366 en année bissextile)."""
     if montant <= 0 or jusqua <= date_debut:
         return montant
     valeur = montant
@@ -82,11 +79,7 @@ def valeur_composee(montant, date_debut, taux_lookup, jusqua, interet_verse=None
     while point < jusqua:
         borne_annee = date(annee, 12, 31)
         borne = min(jusqua, borne_annee)
-        jours = (borne - point).days
-        if point == date(annee, 1, 1) and annee != annee_origine and borne == borne_annee:
-            # Année complète (pas la première de la tranche) : le 1er
-            # janvier compte comme jour porteur d'intérêt.
-            jours += 1
+        jours = (borne - point).days + 1
         interet_periode = Decimal('0')
         if jours > 0:
             interet_periode = valeur * taux_lookup(annee) / Decimal('365') * Decimal(jours)

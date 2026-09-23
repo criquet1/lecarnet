@@ -90,14 +90,22 @@
             if (champ.value.trim() !== '') {
                 champ.value = formatterMontant(champ.value);
             }
-            champ.addEventListener('focus', function () {
-                champ.value = versEdition(champ.value);
-            });
-            champ.addEventListener('blur', function () {
-                if (champ.value.trim() !== '') {
-                    champ.value = formatterMontant(champ.value);
-                }
-            });
+        });
+
+        // Deleguees sur le document (plutot que sur chaque champ) pour que
+        // les lignes ajoutees dynamiquement (bouton "+ Ajouter une ligne")
+        // fonctionnent sans code de reinitialisation supplementaire.
+        document.addEventListener('focusin', function (evt) {
+            var champ = evt.target.closest && evt.target.closest('.interets-montant');
+            if (!champ) return;
+            champ.value = versEdition(champ.value);
+        });
+        document.addEventListener('focusout', function (evt) {
+            var champ = evt.target.closest && evt.target.closest('.interets-montant');
+            if (!champ) return;
+            if (champ.value.trim() !== '') {
+                champ.value = formatterMontant(champ.value);
+            }
         });
     });
 </script>
@@ -187,17 +195,28 @@
             }
         }
 
-        document.querySelectorAll('.interets-montant').forEach(function (champ) {
-            champ.addEventListener('mousedown', function () {
+        // Deleguees sur le document (plutot que sur chaque champ) pour que
+        // les lignes ajoutees dynamiquement (bouton "+ Ajouter une ligne")
+        // participent a la selection sans code de reinitialisation.
+        document.addEventListener('mousedown', function (evt) {
+            var champ = evt.target.closest && evt.target.closest('.interets-montant');
+            if (champ) {
                 celluleDepart = champ;
                 enSelection = true;
-            });
-            champ.addEventListener('mouseover', function (evt) {
-                if (!enSelection || !celluleDepart) return;
-                if (champ.name !== celluleDepart.name) return;
-                if (champ.closest('table') !== celluleDepart.closest('table')) return;
-                majSelection(champ, evt);
-            });
+            } else {
+                effacerSelection();
+                masquerBadge();
+                celluleDepart = null;
+            }
+        });
+
+        document.addEventListener('mouseover', function (evt) {
+            if (!enSelection || !celluleDepart) return;
+            var champ = evt.target.closest && evt.target.closest('.interets-montant');
+            if (!champ) return;
+            if (champ.name !== celluleDepart.name) return;
+            if (champ.closest('table') !== celluleDepart.closest('table')) return;
+            majSelection(champ, evt);
         });
 
         document.addEventListener('selectstart', function (evt) {
@@ -211,14 +230,25 @@
             }
             enSelection = false;
         });
+    });
+</script>
 
-        document.addEventListener('mousedown', function (evt) {
-            var cible = evt.target;
-            if (!(cible.classList && cible.classList.contains('interets-montant'))) {
-                effacerSelection();
-                masquerBadge();
-                celluleDepart = null;
-            }
+<script>
+    // Bouton "+ Ajouter une ligne" : clone la derniere ligne du tableau
+    // (une ligne vierge) et l'ajoute a la suite, sans recharger la page.
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.interets-ajouter-ligne').forEach(function (bouton) {
+            bouton.addEventListener('click', function () {
+                var table = bouton.closest('form').querySelector('table');
+                var tbody = table.querySelector('tbody');
+                var derniere = tbody.querySelector('tr:last-child');
+                if (!derniere) return;
+                var nouvelle = derniere.cloneNode(true);
+                nouvelle.querySelectorAll('input').forEach(function (champ) {
+                    champ.value = '';
+                });
+                tbody.appendChild(nouvelle);
+            });
         });
     });
 </script>
@@ -325,7 +355,7 @@
                         <tr class="table-light interets-ligne-passee" title="Ligne d'une année précédente — remboursement et intérêts versés modifiables ici">
                             <td class="text-muted">{{ r.ligne.date_montant|date:'Y-m-d'|default:'—' }}</td>
                             <td class="text-end text-muted">{% if r.montant_affiche is not None %}{{ r.montant_affiche|montant }} $ {% else %}—{% endif %}</td>
-                            <td><input type="date" name="date_remboursement[]" value="{{ r.ligne.date_remboursement|date:'Y-m-d' }}" class="form-control form-control-sm"></td>
+                            <td><input type="date" name="date_remboursement[]" value="{{ r.ligne.date_remboursement|date:'Y-m-d' }}" min="{{ annee_courante }}-01-01" max="{{ annee_courante }}-12-31" class="form-control form-control-sm"></td>
                             <td class="text-end"><input type="text" inputmode="decimal" name="remboursement[]" value="{{ r.ligne.remboursement|default_if_none:''|unlocalize }}" class="form-control form-control-sm interets-montant" placeholder="—"></td>
                             {% if not bloc.annee_terminee %}
                             <td class="text-end text-muted">{% if r.interet is not None %}{{ r.interet|montant }} $ {% else %}—{% endif %}</td>
@@ -362,9 +392,9 @@
                         {% endif %}
                         {% for r in c.rangees %}
                         <tr>
-                            <td><input type="date" name="date_montant[]" value="{{ r.ligne.date_montant|date:'Y-m-d' }}" class="form-control form-control-sm"></td>
+                            <td><input type="date" name="date_montant[]" value="{{ r.ligne.date_montant|date:'Y-m-d' }}" min="{{ annee_courante }}-01-01" max="{{ annee_courante }}-12-31" class="form-control form-control-sm"></td>
                             <td class="text-end"><input type="text" inputmode="decimal" name="montant[]" value="{{ r.ligne.montant|default_if_none:''|unlocalize }}" class="form-control form-control-sm interets-montant"></td>
-                            <td><input type="date" name="date_remboursement[]" value="{{ r.ligne.date_remboursement|date:'Y-m-d' }}" class="form-control form-control-sm"></td>
+                            <td><input type="date" name="date_remboursement[]" value="{{ r.ligne.date_remboursement|date:'Y-m-d' }}" min="{{ annee_courante }}-01-01" max="{{ annee_courante }}-12-31" class="form-control form-control-sm"></td>
                             <td class="text-end"><input type="text" inputmode="decimal" name="remboursement[]" value="{{ r.ligne.remboursement|default_if_none:''|unlocalize }}" class="form-control form-control-sm interets-montant"></td>
                             {% if not bloc.annee_terminee %}
                             <td class="text-end text-muted">{% if r.interet is not None %}{{ r.interet|montant }} $ {% else %}—{% endif %}</td>
@@ -379,9 +409,9 @@
                         {% endfor %}
                         {% for _ in bloc.lignes_vides %}
                         <tr>
-                            <td><input type="date" name="date_montant[]" value="" class="form-control form-control-sm"></td>
+                            <td><input type="date" name="date_montant[]" value="" min="{{ annee_courante }}-01-01" max="{{ annee_courante }}-12-31" class="form-control form-control-sm"></td>
                             <td class="text-end"><input type="text" inputmode="decimal" name="montant[]" value="" class="form-control form-control-sm interets-montant" placeholder="—"></td>
-                            <td><input type="date" name="date_remboursement[]" value="" class="form-control form-control-sm"></td>
+                            <td><input type="date" name="date_remboursement[]" value="" min="{{ annee_courante }}-01-01" max="{{ annee_courante }}-12-31" class="form-control form-control-sm"></td>
                             <td class="text-end"><input type="text" inputmode="decimal" name="remboursement[]" value="" class="form-control form-control-sm interets-montant" placeholder="—"></td>
                             {% if not bloc.annee_terminee %}
                             <td class="text-end text-muted">—</td>
@@ -414,6 +444,7 @@
                 <div class="text-muted small mb-2">
                     Une case vidée sur une ligne existante supprime cette ligne. Les intérêts au 31 déc. : {{ c.interet_31dec_final|montant }} $ — solde à rembourser au 31 déc. : {{ c.solde_final|montant }} $.
                 </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm interets-ajouter-ligne">+ Ajouter une ligne</button>
                 <button type="submit" class="btn btn-primary btn-sm">Enregistrer les lignes</button>
             </form>
 
