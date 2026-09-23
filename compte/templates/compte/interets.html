@@ -433,13 +433,14 @@
                 <summary class="small text-muted">Supprimer une ligne existante</summary>
                 <div class="d-flex flex-wrap gap-2 mt-2">
                     {% for r in c.rangees %}
-                    <form method="post" class="interets-delete-form">
+                    <form method="post" class="interets-delete-form"
+                          onsubmit="return confirm('Supprimer cette ligne ({{ r.ligne.date_montant|default:r.ligne.date_remboursement|date:'Y-m-d' }}{% if r.ligne.description %} — {{ r.ligne.description }}{% endif %} — {{ r.ligne.montant|default:0|montant }} $) ? Cette action est irréversible.');">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="supprimer_ligne">
                         <input type="hidden" name="ligne_id" value="{{ r.ligne.id }}">
                         <input type="hidden" name="annee_courante" value="{{ annee_courante }}">
                         <button type="submit" class="btn btn-outline-danger btn-sm">
-                            ✕ {{ r.ligne.date_montant|default:r.ligne.date_remboursement|date:'Y-m-d' }}
+                            ✕ {{ r.ligne.date_montant|default:r.ligne.date_remboursement|date:'Y-m-d' }}{% if r.ligne.description %} — {{ r.ligne.description }}{% endif %} — {{ r.ligne.montant|default:0|montant }} $
                         </button>
                     </form>
                     {% endfor %}
