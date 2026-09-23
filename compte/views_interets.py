@@ -22,7 +22,7 @@ de son côté (remboursement/intérêts versés propres à elle).
 """
 
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.contrib import messages
 from django.db.models import Max
@@ -35,6 +35,14 @@ from facture.utils import interets_access_required, parse_decimal
 from .models import InteretAnnee, InteretLigne, Preteur
 
 NB_LIGNES_VIDES = 1  # ligne vierge toujours offerte en bas du tableau ; le bouton "+ Ajouter une ligne" (JS) en ajoute d'autres au besoin
+
+
+def _arrondi_cent(valeur):
+    """Arrondit un montant a la cenne pres (meme convention que l'affichage,
+    ROUND_HALF_UP) - utilise pour cumuler les totaux a partir des memes
+    valeurs arrondies que celles vues a l'ecran, et eviter un ecart d'une
+    cenne entre le total et la somme des lignes affichees."""
+    return valeur.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
 def valeur_a(montant, origine, taux, date_remb, remb, jusqua):
@@ -108,7 +116,7 @@ def montant_a_reporter(montant, origine, taux, date_remb, remb, interet_verse, a
     valeur -= interet_verse or Decimal('0')
     if valeur < 0:
         valeur = Decimal('0')
-    return valeur
+    return _arrondi_cent(valeur)
 
 
 def calculer_preteur_pour_annee(preteur, annee_num):
@@ -141,12 +149,12 @@ def calculer_preteur_pour_annee(preteur, annee_num):
 
     if ouverture_montant:
         origine_ouverture = date(annee_num, 1, 1)
-        interet_final += interet_courus(ouverture_montant, origine_ouverture, taux, None, None, annee_num, aujourdhui)
-        interet_31dec_final += interet_31dec(ouverture_montant, origine_ouverture, taux, None, None, annee_num)
+        interet_final += _arrondi_cent(interet_courus(ouverture_montant, origine_ouverture, taux, None, None, annee_num, aujourdhui))
+        interet_31dec_final += _arrondi_cent(interet_31dec(ouverture_montant, origine_ouverture, taux, None, None, annee_num))
 
     for ligne in lignes:
-        interet = interet_courus(ligne.montant or Decimal('0'), ligne.date_montant, taux, ligne.date_remboursement, ligne.remboursement, annee_num, aujourdhui)
-        interet_fin = interet_31dec(ligne.montant or Decimal('0'), ligne.date_montant, taux, ligne.date_remboursement, ligne.remboursement, annee_num)
+        interet = _arrondi_cent(interet_courus(ligne.montant or Decimal('0'), ligne.date_montant, taux, ligne.date_remboursement, ligne.remboursement, annee_num, aujourdhui))
+        interet_fin = _arrondi_cent(interet_31dec(ligne.montant or Decimal('0'), ligne.date_montant, taux, ligne.date_remboursement, ligne.remboursement, annee_num))
         solde_courant += ligne.montant or Decimal('0')
         solde_courant -= ligne.remboursement or Decimal('0')
         rangees.append({'ligne': ligne, 'interet': interet, 'interet_31dec': interet_fin, 'solde': solde_courant})
