@@ -277,12 +277,14 @@ def _reporter_lignes_annee_suivante(annee_obj):
         if existante:
             existante.date_montant = date(annee_suivante_num, 1, 1)
             existante.montant = a_reporter
-            existante.save(update_fields=['date_montant', 'montant'])
+            existante.description = ligne.description
+            existante.save(update_fields=['date_montant', 'montant', 'description'])
         else:
             InteretLigne.objects.create(
                 annee=annee_suivante_obj,
                 ordre=(annee_suivante_obj.lignes.aggregate(Max('ordre'))['ordre__max'] or 0) + 1,
                 numero_pret=ligne.numero_pret,
+                description=ligne.description,
                 date_montant=date(annee_suivante_num, 1, 1),
                 montant=a_reporter,
             )
@@ -334,6 +336,7 @@ def _traiter_action(request):
     elif action == 'enregistrer_lignes':
         annee_obj = get_object_or_404(InteretAnnee, pk=request.POST.get('annee_id'))
         ids = request.POST.getlist('ligne_id[]')
+        descriptions = request.POST.getlist('description[]')
         dates_montant = request.POST.getlist('date_montant[]')
         montants = request.POST.getlist('montant[]')
         dates_remboursement = request.POST.getlist('date_remboursement[]')
@@ -342,12 +345,13 @@ def _traiter_action(request):
 
         prochain_ordre = (annee_obj.lignes.aggregate(Max('ordre'))['ordre__max'] or 0) + 1
         for i in range(len(ids)):
+            desc = (descriptions[i] or '').strip() if i < len(descriptions) else ''
             d1 = (dates_montant[i] or '').strip()
             m = parse_decimal(montants[i], none_if_blank=True, strip_spaces=True)
             d2 = (dates_remboursement[i] or '').strip()
             r = parse_decimal(remboursements[i], none_if_blank=True, strip_spaces=True)
             iv = parse_decimal(interets_verses[i], none_if_blank=True, strip_spaces=True) if i < len(interets_verses) else None
-            vide = not d1 and m is None and not d2 and r is None and iv is None
+            vide = not desc and not d1 and m is None and not d2 and r is None and iv is None
             ligne_id = ids[i]
 
             if ligne_id:
@@ -359,6 +363,7 @@ def _traiter_action(request):
                 if vide:
                     ligne.delete()
                 else:
+                    ligne.description = desc
                     ligne.date_montant = d1 or None
                     ligne.montant = m
                     ligne.date_remboursement = d2 or None
@@ -371,6 +376,7 @@ def _traiter_action(request):
             elif not vide:
                 nouvelle = InteretLigne.objects.create(
                     annee=annee_obj, ordre=prochain_ordre,
+                    description=desc,
                     date_montant=d1 or None, montant=m,
                     date_remboursement=d2 or None, remboursement=r,
                     interet_verse=iv,

@@ -336,6 +336,7 @@
                 <table class="table table-sm table-striped align-middle interets-table mb-2">
                     <thead>
                         <tr>
+                            <th>Description</th>
                             <th>Date</th>
                             <th class="text-end">Montant prêté</th>
                             <th>Date</th>
@@ -352,6 +353,7 @@
                     <tbody>
                         {% if bloc.premiere_annee %}
                         <tr class="table-light">
+                            <td class="text-muted">—</td>
                             <td class="text-muted">1er janv. {{ a.annee }}</td>
                             <td class="text-end text-muted">—</td>
                             <td class="text-muted">Solde reporté</td>
@@ -367,6 +369,7 @@
                         {% endif %}
                         {% for r in c.rangees %}
                         <tr>
+                            <td><input type="text" name="description[]" value="{{ r.ligne.description }}" class="form-control form-control-sm" placeholder="—" maxlength="100"></td>
                             <td><input type="date" name="date_montant[]" value="{{ r.ligne.date_montant|date:'Y-m-d' }}" min="{{ annee_courante }}-01-01" max="{{ annee_courante }}-12-31" class="form-control form-control-sm"></td>
                             <td class="text-end"><input type="text" inputmode="decimal" name="montant[]" value="{{ r.ligne.montant|default_if_none:''|unlocalize }}" class="form-control form-control-sm interets-montant"></td>
                             <td><input type="date" name="date_remboursement[]" value="{{ r.ligne.date_remboursement|date:'Y-m-d' }}" min="{{ annee_courante }}-01-01" max="{{ annee_courante }}-12-31" class="form-control form-control-sm"></td>
@@ -384,6 +387,7 @@
                         {% endfor %}
                         {% for _ in bloc.lignes_vides %}
                         <tr>
+                            <td><input type="text" name="description[]" value="" class="form-control form-control-sm" placeholder="—" maxlength="100"></td>
                             <td><input type="date" name="date_montant[]" value="" min="{{ annee_courante }}-01-01" max="{{ annee_courante }}-12-31" class="form-control form-control-sm"></td>
                             <td class="text-end"><input type="text" inputmode="decimal" name="montant[]" value="" class="form-control form-control-sm interets-montant" placeholder="—"></td>
                             <td><input type="date" name="date_remboursement[]" value="" min="{{ annee_courante }}-01-01" max="{{ annee_courante }}-12-31" class="form-control form-control-sm"></td>
@@ -400,6 +404,7 @@
                     </tbody>
                     <tfoot>
                         <tr class="table-dark fw-bold">
+                            <td></td>
                             <td>Total ({{ bloc.preteur.nom }})</td>
                             <td class="text-end">{{ c.total_montant|montant }} $</td>
                             <td></td>

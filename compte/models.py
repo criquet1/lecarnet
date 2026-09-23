@@ -428,6 +428,7 @@ class InteretLigne(models.Model):
     annee = models.ForeignKey(InteretAnnee, on_delete=models.CASCADE, related_name='lignes')
     ordre = models.PositiveIntegerField(default=0, help_text="Ordre chronologique d'affichage des lignes.")
     numero_pret = models.PositiveIntegerField(null=True, blank=True, db_index=True, verbose_name="Numéro de prêt")
+    description = models.CharField(max_length=100, blank=True, verbose_name="Description")
     date_montant = models.DateField(null=True, blank=True, verbose_name="Date (montant prêté)")
     montant = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Montant prêté")
     date_remboursement = models.DateField(null=True, blank=True, verbose_name="Date (remboursement)")
