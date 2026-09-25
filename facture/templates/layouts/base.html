@@ -96,6 +96,44 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
 
+    <script>
+    // Anti double envoi : désactive le bouton dès le premier clic sur un formulaire POST
+    document.addEventListener('submit', function (event) {
+        var form = event.target;
+        if (event.defaultPrevented) return;              // formulaires gérés en JavaScript (ex. modal d'édition)
+        if ((form.method || '').toLowerCase() !== 'post') return;
+        if (form.dataset.envoiEnCours === '1') {         // déjà envoyé : on bloque le 2e envoi
+            event.preventDefault();
+            return;
+        }
+        form.dataset.envoiEnCours = '1';
+        // Conserver la valeur du bouton cliqué (ex. name="action"), sinon elle n'est pas envoyée une fois le bouton désactivé
+        var bouton = event.submitter;
+        if (bouton && bouton.name) {
+            var champCache = document.createElement('input');
+            champCache.type = 'hidden';
+            champCache.name = bouton.name;
+            champCache.value = bouton.value;
+            form.appendChild(champCache);
+        }
+        form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type])').forEach(function (btn) {
+            btn.dataset.texteOriginal = btn.innerHTML;
+            btn.disabled = true;
+            if (btn.tagName === 'BUTTON') btn.innerHTML = 'Enregistrement en cours…';
+        });
+    });
+    // Si on revient en arrière avec le navigateur, on réactive les boutons
+    window.addEventListener('pageshow', function () {
+        document.querySelectorAll('form[data-envoi-en-cours="1"]').forEach(function (form) {
+            delete form.dataset.envoiEnCours;
+            form.querySelectorAll('[data-texte-original]').forEach(function (btn) {
+                btn.disabled = false;
+                btn.innerHTML = btn.dataset.texteOriginal;
+            });
+        });
+    });
+    </script>
+    
     {% block scripts %}
     {% endblock %}
 
