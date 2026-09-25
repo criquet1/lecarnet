@@ -40,6 +40,7 @@
         <form method="post" enctype="multipart/form-data" id="company-form">
             {% csrf_token %}
                 <input type="hidden" name="company_id" id="company-id" value="{{ editing_company_id }}">
+                <input type="hidden" name="original_company_type" id="company-original-type" value="{{ editing_company_type }}">
 
                     <div class="mb-3">
                         <label for="company_type" class="form-label">Type</label>
@@ -284,6 +285,7 @@
             var companyForm = document.getElementById('company-form');
             var companyModalLabel = document.getElementById('exampleModalLabel');
             var companyIdInput = document.getElementById('company-id');
+            var companyOriginalTypeInput = document.getElementById('company-original-type');
             var companySubmit = document.getElementById('company-submit');
             var companyNameInput = document.getElementById('id_company-nom');
             var companyLogoInput = document.getElementById('id_company-logo');
@@ -301,6 +303,11 @@
                 }
 
                 companyIdInput.value = isEdit ? trigger.getAttribute('data-company-id') || '' : '';
+                // Type d'origine (client/fournisseur) : indispensable, car Client et
+                // Fournisseur sont deux tables separees et peuvent avoir le meme numero.
+                if (companyOriginalTypeInput) {
+                    companyOriginalTypeInput.value = isEdit ? (trigger.getAttribute('data-company-type') || '') : '';
+                }
                 companyModalLabel.textContent = isEdit ? 'Modifier la compagnie' : 'Ajouter une compagnie';
                 companySubmit.value = isEdit ? 'edit_company' : 'add_company';
                 companySubmit.textContent = isEdit ? 'Enregistrer les modifications' : 'Ajouter une compagnie';

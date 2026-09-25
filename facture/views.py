@@ -518,6 +518,7 @@ def facture(request):
     open_company_modal = False
     company_modal_action = 'add_company'
     editing_company_id = ''
+    editing_company_type = ''
     open_tr_modal = False
     selected_company_id = ''
     selected_company_name = ''
@@ -541,12 +542,21 @@ def facture(request):
 
         elif action == 'edit_company':
             company_id = (request.POST.get('company_id') or '').strip()
-            existing_client = Client.objects.filter(pk=company_id).first()
-            existing_fournisseur = Fournisseur.objects.filter(pk=company_id).first()
-            current_company = existing_client or existing_fournisseur
-            current_type = 'client' if existing_client else ('fournisseur' if existing_fournisseur else '')
+            # Client et Fournisseur sont deux tables separees : un client et un
+            # fournisseur peuvent avoir le meme numero (pk). On cherche donc la
+            # compagnie SEULEMENT dans la table de son type d'origine, envoye par
+            # le formulaire. Sans ce type, on refuse plutot que de deviner (sinon
+            # on risquerait de "convertir" et supprimer la mauvaise compagnie).
+            original_type = (request.POST.get('original_company_type') or '').strip().lower()
+            current_company = None
+            if original_type == 'client':
+                current_company = Client.objects.filter(pk=company_id).first()
+            elif original_type == 'fournisseur':
+                current_company = Fournisseur.objects.filter(pk=company_id).first()
+            current_type = original_type if current_company else ''
             company_modal_action = 'edit_company'
             editing_company_id = company_id
+            editing_company_type = original_type
             type_is_changing = bool(current_company) and current_type != company_type
 
             if not current_company:
@@ -821,6 +831,7 @@ def facture(request):
         'company_modal_action': company_modal_action,
         'gestion_compagnies': gestion_compagnies,
         'editing_company_id': editing_company_id,
+        'editing_company_type': editing_company_type,
         'comptes_count': comptes_count,
         'clients': clients,
         'fournisseurs': fournisseurs,
