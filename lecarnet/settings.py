@@ -162,6 +162,11 @@ if tenant_databases_json:
 elif isinstance(_oneclick_tenants, dict) and _oneclick_tenants:
     DATABASES.update(_oneclick_tenants)
 
+# Réutiliser les connexions PostgreSQL pendant 60 secondes au lieu d'en ouvrir une nouvelle à chaque requête
+for _db_config in DATABASES.values():
+    _db_config.setdefault('CONN_MAX_AGE', 60)
+    _db_config.setdefault('CONN_HEALTH_CHECKS', True)
+
 
 DATABASE_ROUTERS = [
     'tenancy.db_router.TenantDatabaseRouter',
