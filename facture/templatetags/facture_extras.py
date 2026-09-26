@@ -1,6 +1,7 @@
 from decimal import Decimal, ROUND_HALF_UP
 
 from django import template
+from django.utils.safestring import mark_safe
 
 register = template.Library()
 
@@ -76,3 +77,35 @@ def accounting_amount(value):
     if value < 0:
         return f'({formatted})'
     return formatted
+
+
+def _montant_html(value, comptable):
+    """Construit le HTML d'un montant decoupe en deux <span> (partie entiere /
+    partie decimale) pour permettre l'alignement de la virgule en CSS (grid),
+    peu importe le nombre de chiffres ou la presence de parentheses."""
+    if value is None or value == '':
+        return ''
+    signe, entier, decimales = _decouper_montant(value)
+    negatif = comptable and value < 0
+    partie_entiere = f'({entier}' if negatif else f'{signe}{entier}'
+    partie_decimale = f'{decimales})' if negatif else decimales
+    return mark_safe(
+        '<span class="montant-cell">'
+        f'<span class="mnt-int">{partie_entiere}</span>'
+        f'<span class="mnt-dec">,{partie_decimale}</span>'
+        '</span>'
+    )
+
+
+@register.filter
+def montant_aligne(value):
+    """Comme `montant`, mais rend deux <span> (mnt-int / mnt-dec) pour que la
+    virgule s'aligne verticalement via la classe CSS .montant-cell."""
+    return _montant_html(value, comptable=False)
+
+
+@register.filter
+def accounting_amount_aligne(value):
+    """Comme `accounting_amount`, mais rend deux <span> (mnt-int / mnt-dec)
+    pour que la virgule s'aligne verticalement via la classe CSS .montant-cell."""
+    return _montant_html(value, comptable=True)

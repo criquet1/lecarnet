@@ -34,6 +34,24 @@
     .cheque-compagnie-trigger {
         cursor: context-menu;
     }
+
+    /* Alignement de la virgule des montants : voir grand_livre.html pour
+       la meme technique (grid a deux colonnes par cellule). */
+    .montant-cell {
+        display: grid;
+        grid-template-columns: 1fr 4ch;
+        width: 100%;
+    }
+
+    .montant-cell .mnt-int {
+        text-align: right;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .montant-cell .mnt-dec {
+        text-align: left;
+    }
 </style>
 {% endblock %}
 
@@ -99,9 +117,9 @@
                                     <td class="text-nowrap">{{ row.date|date:"Y-m-d" }}</td>
                                     <td>{% if row.source %}{{ row.source.nom }}{% endif %}</td>
                                     <td class="text-wrap" style="word-break: break-word;">{{ row.description }}</td>
-                                    <td class="text-end text-nowrap font-monospace">{% if row.debit %}{{ row.debit|accounting_amount }}{% endif %}</td>
-                                    <td class="text-end text-nowrap font-monospace">{% if row.credit %}{{ row.credit|accounting_amount }}{% endif %}</td>
-                                    <td class="text-end text-nowrap font-monospace">{{ row.solde|accounting_amount }}</td>
+                                    <td class="text-nowrap font-monospace">{% if row.debit %}{{ row.debit|accounting_amount_aligne }}{% endif %}</td>
+                                    <td class="text-nowrap font-monospace">{% if row.credit %}{{ row.credit|accounting_amount_aligne }}{% endif %}</td>
+                                    <td class="text-nowrap font-monospace">{{ row.solde|accounting_amount_aligne }}</td>
                                 </tr>
                             {% empty %}
                                 <tr>
@@ -130,7 +148,7 @@
                     <tbody>
                         <tr>
                             <th colspan="5" class="text-end">Total des soldes</th>
-                            <th class="text-end text-nowrap font-monospace">{{ total_des_soldes|accounting_amount }}</th>
+                            <th class="text-nowrap font-monospace">{{ total_des_soldes|accounting_amount_aligne }}</th>
                         </tr>
                     </tbody>
                 </table>
