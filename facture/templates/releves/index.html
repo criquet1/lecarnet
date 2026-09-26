@@ -143,7 +143,7 @@
                                         data-similaire-desc-ctb="{{ r.similaire_desc_ctb|default:''|escape }}"
                                         data-similaire-compagnie-id="{{ r.similaire_compagnie_id|default:'' }}"
                                         data-similaire-details="{{ r.similaire_details_json|default:'[]'|escape }}">
-                                        <td>{{ r.date }}</td>
+                                        <td>{{ r.date|date:"j F" }}</td>
                                         <td>{{ r.no_ligne }}</td>
                                         <td>
                                             {{ r.desc_releve }}
