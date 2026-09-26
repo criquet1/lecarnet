@@ -199,8 +199,16 @@ def _description_alias_score(description, aliases):
     return score
 
 
+TOLERANCE_DATE_CONTREPARTIE_JOURS = 7
+
+
 def _find_releve_counterpart(current_releve, compte_cible, montant_cible):
-    """Trouve une ligne de releve contrepartie (montant oppose, meme date) sur le compte cible."""
+    """Trouve une ligne de releve contrepartie (montant identique, date proche) sur le compte cible.
+
+    Le montant reste le critere strict (aucune tolerance) ; c'est lui qui evite les faux
+    positifs. La date, elle, tolere un ecart (TOLERANCE_DATE_CONTREPARTIE_JOURS jours de part
+    et d'autre) car les deux comptes ne posent pas toujours la meme transaction a la meme date
+    (ex: prelevement preautorise vs date de depot reel, delai autour d'une fin de semaine)."""
     if not current_releve or not compte_cible or montant_cible is None:
         return None
 
@@ -213,9 +221,16 @@ def _find_releve_counterpart(current_releve, compte_cible, montant_cible):
     if depot_present == retrait_present:
         return None
 
+    if not current_releve.date:
+        return None
+    ecart = timedelta(days=TOLERANCE_DATE_CONTREPARTIE_JOURS)
+    date_min = current_releve.date - ecart
+    date_max = current_releve.date + ecart
+
     base_qs = Releve.objects.filter(
         compte_releve__in=comptes_releves_cibles,
-        date=current_releve.date,
+        date__gte=date_min,
+        date__lte=date_max,
     ).exclude(pk=current_releve.pk).select_related('compte_releve')
 
     if depot_present:
