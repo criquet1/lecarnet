@@ -6,7 +6,7 @@ from django.forms import formset_factory
 from .constants import MONTH_CHOICES_FR
 from .models import Cheque, MessageContact, Tr_desc, Client, Fournisseur
 from compte.models import Setting
-from .utils import get_available_logos, is_expert
+from .utils import get_available_logos, is_expert, TAX_AUTHORITY_COMPANY_NAMES
 
 
 class MessageContactForm(forms.ModelForm):
@@ -67,7 +67,11 @@ class ClientForm(forms.ModelForm):
         # Le choix de compte(s) n'est obligatoire que pour un utilisateur expert :
         # un non-expert peut creer la compagnie sans le remplir, l'expert le
         # completera lors de sa verification (voir le jaune sur la carte).
-        self.fields['comptes'].required = bool(user and is_expert(user))
+        # Exception : Revenu Canada TPS / Revenu Quebec TVQ n'ont jamais besoin
+        # d'un compte de grand livre associe directement (le compte de taxes
+        # cible est gere via Setting, pas via ce champ).
+        is_tax_authority = bool(self.instance and self.instance.pk and self.instance.nom in TAX_AUTHORITY_COMPANY_NAMES)
+        self.fields['comptes'].required = bool(user and is_expert(user)) and not is_tax_authority
 
     def clean_logo(self):
         return self.cleaned_data.get('logo') or 'images.png'
@@ -125,7 +129,11 @@ class FournisseurForm(forms.ModelForm):
         # Le choix de compte(s) n'est obligatoire que pour un utilisateur expert :
         # un non-expert peut creer la compagnie sans le remplir, l'expert le
         # completera lors de sa verification (voir le jaune sur la carte).
-        self.fields['comptes'].required = bool(user and is_expert(user))
+        # Exception : Revenu Canada TPS / Revenu Quebec TVQ n'ont jamais besoin
+        # d'un compte de grand livre associe directement (le compte de taxes
+        # cible est gere via Setting, pas via ce champ).
+        is_tax_authority = bool(self.instance and self.instance.pk and self.instance.nom in TAX_AUTHORITY_COMPANY_NAMES)
+        self.fields['comptes'].required = bool(user and is_expert(user)) and not is_tax_authority
 
     def clean_logo(self):
         return self.cleaned_data.get('logo') or 'images.png'

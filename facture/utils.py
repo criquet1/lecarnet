@@ -183,11 +183,19 @@ def ensure_tax_authority_companies(settings_instance=None):
 
 	model_class = Fournisseur if target_mode == MODE_CAP else Client
 
+	tax_authority_logos = {
+		TAX_AUTHORITY_COMPANY_TPS: 'drapeau_canada.png',
+		TAX_AUTHORITY_COMPANY_TVQ: 'drapeau_quebec.png',
+	}
+
 	tax_entities = {}
 	for company_name in TAX_AUTHORITY_COMPANY_NAMES:
 		entity, _created = model_class.objects.get_or_create(
 			nom=company_name,
-			defaults={'logo': 'images.png', 'afficher_card': False},
+			defaults={
+				'logo': tax_authority_logos.get(company_name, 'images.png'),
+				'afficher_card': False,
+			},
 		)
 		tax_entities[company_name] = entity
 

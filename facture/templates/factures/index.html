@@ -72,16 +72,18 @@
             {% with compagnie=item.obj %}
             <div class="col-md-3">
                 <div class="card h-100{% if compagnie.created_by_non_expert %} border-warning border-2{% endif %}" role="button" data-bs-toggle="modal" data-bs-target="#invoiceModal" data-company-id="{{ compagnie.id }}" data-company-type="{{ item.type }}" data-company-name="{{ compagnie.nom|escape }}" data-company-mode="{% if item.type == 'fournisseur' %}CAP{% else %}CAR{% endif %}" data-company-created-by-non-expert="{{ compagnie.created_by_non_expert|yesno:'1,0' }}" data-company-active="{{ compagnie.active|yesno:'1,0' }}" data-company-logo="{{ compagnie.logo_display_url }}" data-company-logo-name="{{ compagnie.logo|escape }}" data-company-accounts="{% for compte in compagnie.comptes.all %}{{ compte.pk }}{% if not forloop.last %},{% endif %}{% endfor %}">
-                    {% if compagnie.logo and compagnie.active %}
-                        <img src="{{ compagnie.logo_display_url }}" class="company-logo" alt="Logo de {{ compagnie.nom }}" style="width:100px;height:100px;object-fit:contain;display:block;margin:0 auto 1rem;">
-                    {% endif %}
-                    <div class="card-body">
-                        <h5 class="card-title">
-                            <span class="company-check me-2" data-company-id="{{ compagnie.id }}" data-company-type="{{ item.type }}" style="display:none;"><i class="bi bi-check-circle-fill fs-4"></i></span>{% if compagnie.created_by_non_expert %}<i class="bi bi-exclamation-triangle-fill text-warning me-1" title="Compagnie ajoutée sans l'aide d'un comptable : à faire vérifier." data-bs-toggle="tooltip"></i>{% endif %}{{ compagnie.nom }}
-                        </h5>
-                        {% if compagnie.created_by_non_expert %}
-                            <span class="badge bg-warning text-dark">À faire vérifier</span>
+                    <div class="card-body d-flex align-items-center">
+                        {% if compagnie.logo and compagnie.active %}
+                            <img src="{{ compagnie.logo_display_url }}" class="company-logo me-2" alt="Logo de {{ compagnie.nom }}" style="width:48px;height:48px;object-fit:contain;flex-shrink:0;">
                         {% endif %}
+                        <div>
+                            <h5 class="card-title mb-1">
+                                <span class="company-check me-2" data-company-id="{{ compagnie.id }}" data-company-type="{{ item.type }}" style="display:none;"><i class="bi bi-check-circle-fill fs-4"></i></span>{% if compagnie.created_by_non_expert %}<i class="bi bi-exclamation-triangle-fill text-warning me-1" title="Compagnie ajoutée sans l'aide d'un comptable : à faire vérifier." data-bs-toggle="tooltip"></i>{% endif %}{{ compagnie.nom }}
+                            </h5>
+                            {% if compagnie.created_by_non_expert %}
+                                <span class="badge bg-warning text-dark">À faire vérifier</span>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -285,6 +287,8 @@
             var companyNameInput = document.getElementById('id_company-nom');
             var companyLogoInput = document.getElementById('id_company-logo');
             var companyAccountsInput = document.getElementById('id_company-comptes');
+            var companyAccountsOriginalRequired = companyAccountsInput ? companyAccountsInput.required : false;
+            var TAX_AUTHORITY_COMPANY_NAMES = ['Revenu Canada TPS', 'Revenu Quebec TVQ'];
             var companyModeInput = document.getElementById('id_company-cap_ou_car');
             var companyActiveInput = document.getElementById('id_company-active');
             var companyTypeSelect = document.getElementById('company_type');
@@ -320,6 +324,10 @@
                     companyTypeSelect.value = isEdit ? (trigger.getAttribute('data-company-type') || 'client') : '';
                 }
                 if (companyAccountsInput) {
+                    var companyNameForRequired = isEdit ? (trigger.getAttribute('data-company-name') || '') : '';
+                    var isTaxAuthorityCompany = TAX_AUTHORITY_COMPANY_NAMES.indexOf(companyNameForRequired) !== -1;
+                    companyAccountsInput.required = companyAccountsOriginalRequired && !isTaxAuthorityCompany;
+
                     var selectedAccountIds = isEdit
                         ? (trigger.getAttribute('data-company-accounts') || '').split(',')
                         : [];
