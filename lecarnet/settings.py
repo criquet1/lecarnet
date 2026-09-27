@@ -261,6 +261,12 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
+# Session longue duree : pour les clients qui n'utilisent l'appli
+# "facture par photo" (icone sur l'ecran d'accueil) qu'a l'occasion,
+# afin qu'ils n'aient pas a se reconnecter a chaque fois.
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 365  # 1 an
+SESSION_SAVE_EVERY_REQUEST = True  # chaque visite repousse l'expiration d'un an
+
 from django.contrib.messages import constants as messages_constants
 
 MESSAGE_TAGS = {
