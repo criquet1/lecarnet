@@ -468,11 +468,8 @@ class PaieForm(forms.ModelForm):
     @classmethod
     def _build_candidates_with_projection(cls, employe, frequence, exclude_employe=True):
         """
-        Retourne les périodes disponibles pour cet employé.
-
-        Stratégie DB-first : requête directe sur PeriodePaie pré-remplie.
-        Fallback vers projection si aucune période n'est trouvée en base
-        (nouveau tenant dont prefill_periodes_annee n'a pas encore été exécuté).
+        Retourne les périodes disponibles (existantes en base ou projetées),
+        avec ou sans les periodes deja utilisees par l'employe.
 
         exclude_employe=True retire les periodes ou une paie existe deja pour
         cet employe (utilise pour calculer la suggestion par defaut).
@@ -481,30 +478,16 @@ class PaieForm(forms.ModelForm):
         du select, afin qu'un doublon volontaire et rare reste selectionnable
         - la confirmation est alors geree dans clean()).
         """
-        settings_instance = cls._paie_settings()
-        payday_weekday = payday_weekday_from_anchor(
-            settings_instance.date_premier_paiement_paie_annee if settings_instance else None
-        )
-        annee = date_type.today().year
-        db_qs = PeriodePaie.objects.filter(frequence_paie=frequence, date_fin__year=annee, fermee=False)
-        if exclude_employe:
-            db_qs = db_qs.exclude(paies__employe=employe)
-        db_candidates = list(db_qs.order_by('date_fin', 'id'))
-
-        if db_candidates:
-            return [
-                {
-                    'mode': 'existing',
-                    'periode': p,
-                    'date_debut': p.date_debut,
-                    'date_fin': p.date_fin,
-                    'date_paie': p.date_paie or next_payday_after(p.date_fin, payday_weekday),
-                    'frequence': frequence,
-                }
-                for p in db_candidates
-            ]
-
-        # Fallback : projection (table non encore pré-remplie)
+        # On delegue toujours a la projection (cls._build_candidates_projected) :
+        # elle reconcilie deja les periodes existantes en base avec celles
+        # generees par projection pour les dates qui n'y sont pas encore.
+        # Un raccourci "si des periodes existent deja en base, on s'arrete
+        # la" a longtemps ete utilise ici pour aller plus vite quand
+        # prefill_periodes_annee avait ete execute a l'avance - mais les
+        # periodes sont en realite creees au fil de l'eau (a chaque paie
+        # enregistree, voir PaieForm.save()), donc ce raccourci coupait la
+        # liste juste apres la derniere periode deja utilisee, sans jamais
+        # montrer les periodes futures pas encore saisies.
         return cls._build_candidates_projected(employe, frequence, exclude_employe=exclude_employe)
 
     @classmethod
@@ -620,8 +603,16 @@ class PaieForm(forms.ModelForm):
             return [], None, 'Aucune frequence de paie configuree pour cet employe ni dans les parametres.'
 
         candidates = cls._build_candidates_with_projection(employe, frequence, exclude_employe=exclude_employe)
-        annee = date_type.today().year
-        year_candidates = [c for c in candidates if c['date_fin'] and c['date_fin'].year == annee]
+        today = date_type.today()
+        annee = today.year
+        horizon = today + timedelta(days=90)
+        # Toute l'annee civile en cours, plus les periodes des ~3 prochains
+        # mois meme si elles debordent sur l'annee suivante (ex.: preparer
+        # des paies de janvier a l'avance, fin decembre, avant des vacances).
+        year_candidates = [
+            c for c in candidates
+            if c['date_fin'] and (c['date_fin'].year == annee or today <= c['date_fin'] <= horizon)
+        ]
         if not year_candidates:
             return [], None, 'Aucune fin de periode disponible pour l annee en cours.'
 
