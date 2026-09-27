@@ -18,7 +18,7 @@ from facture.utils import get_setting
 from facture.working_period import get_working_period
 
 from .forms import EmployeForm, PaieForm, ParametresTauxPaieForm
-from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie
+from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie
 from django.http import HttpResponse
 from weasyprint import HTML
 from .models import FeuilletFiscalAnnuel
@@ -156,6 +156,27 @@ def prochaine_periode_employe_api(request):
 	selected = next((o for o in options_payload if o['value'] == default_value), None)
 	vacances_cumulees = employe.solde_vacances()
 
+	# Verification live du doublon employe/periode (voir la case a cocher
+	# "confirmer et enregistrer quand meme" dans le formulaire) : permet
+	# d'avertir des la selection de l'employe, sans attendre la soumission.
+	paie_deja_existante = False
+	periode_date_fin_param = request.GET.get('periode_date_fin')
+	if periode_date_fin_param:
+		frequence = PaieForm._frequence_employe_ou_setting(employe)
+		if frequence:
+			try:
+				selected_date = date_type.fromisoformat(periode_date_fin_param)
+			except ValueError:
+				selected_date = None
+			if selected_date:
+				periode_existante = PeriodePaie.objects.filter(
+					frequence_paie=frequence, date_fin=selected_date,
+				).first()
+				if periode_existante:
+					paie_deja_existante = Paie.objects.filter(
+						employe=employe, periode=periode_existante,
+					).exists()
+
 	return JsonResponse({
 		'ok': True,
 		'date_fin': selected['value'] if selected else '',
@@ -165,6 +186,7 @@ def prochaine_periode_employe_api(request):
 		'vacances_cumulees': str(vacances_cumulees),
 		'taux_vacances': str(employe.taux_vacances or Decimal('0.00000')),
 		'taux_horaire': str(employe.taux_horaire_defaut),
+		'paie_deja_existante': paie_deja_existante,
 	})
 
 

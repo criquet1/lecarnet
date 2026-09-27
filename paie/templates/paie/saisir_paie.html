@@ -38,17 +38,20 @@ Saisie des heures de travail d'un employé pour produire une paie.
     {{ form.deduction_tp1015_j }}
     {{ form.deduction_tp1016_j1 }}
 
-    {% if form.confirmer_doublon.errors %}
-    <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-3">
-        <span>{{ form.confirmer_doublon.errors.0 }}</span>
+    <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-3{% if not form.confirmer_doublon.errors %} d-none{% endif %}"
+         id="doublon-warning">
+        <span id="doublon-warning-text">
+            {% if form.confirmer_doublon.errors %}
+                {{ form.confirmer_doublon.errors.0 }}
+            {% else %}
+                Une paie existe déjà pour cet employé et cette période.
+            {% endif %}
+        </span>
         <label class="form-check-label d-flex align-items-center gap-2 mb-0">
             {{ form.confirmer_doublon }}
             Confirmer et enregistrer quand même
         </label>
     </div>
-    {% else %}
-        <div class="d-none">{{ form.confirmer_doublon }}</div>
-    {% endif %}
 
     <!-- ========================= -->
     <!-- Période (commune)         -->
@@ -271,6 +274,26 @@ Saisie des heures de travail d'un employé pour produire une paie.
         const heuresSuppInput = document.getElementById('{{ form.heures_supp.id_for_label }}');
         const vacancesPayeesInput = document.getElementById('{{ form.vacances_payees.id_for_label }}');
         const salaireBrutEstime = document.getElementById('salaire-brut-estime');
+        const doublonWarning = document.getElementById('doublon-warning');
+        const doublonWarningText = document.getElementById('doublon-warning-text');
+        const confirmerDoublonInput = document.getElementById('{{ form.confirmer_doublon.id_for_label }}');
+
+        function updateDoublonWarning(existeDeja) {
+            if (!doublonWarning) {
+                return;
+            }
+            if (existeDeja) {
+                if (doublonWarningText) {
+                    doublonWarningText.textContent = 'Une paie existe déjà pour cet employé et cette période.';
+                }
+                doublonWarning.classList.remove('d-none');
+            } else {
+                doublonWarning.classList.add('d-none');
+                if (confirmerDoublonInput) {
+                    confirmerDoublonInput.checked = false;
+                }
+            }
+        }
 
         function refreshSalaireBrut() {
             if (!salaireBrutEstime) {
@@ -306,8 +329,10 @@ Saisie des heures de travail d'un employé pour produire une paie.
         async function refreshPeriodeEmploye() {
             // Ne touche plus a "Fin de periode" / "Date de paiement" : la
             // periode est choisie independamment de l'employe (voir barre
-            // du haut). Cette fonction met seulement a jour le taux horaire
-            // et le solde de vacances affiches pour l'employe choisi.
+            // du haut). Cette fonction met a jour le taux horaire et le
+            // solde de vacances affiches pour l'employe choisi, ainsi que
+            // l'avertissement de doublon employe/periode (des que les deux
+            // sont choisis, sans attendre la soumission du formulaire).
             if (!form || !employeInput) {
                 return;
             }
@@ -317,10 +342,14 @@ Saisie des heures de travail d'un employé pour produire une paie.
                     vacancesSoldeDisplay.textContent = '0.00';
                 }
                 updateTauxHoraire('0');
+                updateDoublonWarning(false);
                 return;
             }
 
-            const url = form.dataset.prochainePeriodeUrl + '?employe_id=' + encodeURIComponent(employeInput.value);
+            let url = form.dataset.prochainePeriodeUrl + '?employe_id=' + encodeURIComponent(employeInput.value);
+            if (dateFinInput && dateFinInput.value) {
+                url += '&periode_date_fin=' + encodeURIComponent(dateFinInput.value);
+            }
             try {
                 const response = await fetch(url, {
                     headers: {'X-Requested-With': 'XMLHttpRequest'}
@@ -331,6 +360,7 @@ Saisie des heures de travail d'un employé pour produire une paie.
                         vacancesSoldeDisplay.textContent = '0.00';
                     }
                     updateTauxHoraire('0');
+                    updateDoublonWarning(false);
                     return;
                 }
 
@@ -338,11 +368,13 @@ Saisie des heures de travail d'un employé pour produire une paie.
                     vacancesSoldeDisplay.textContent = payload.vacances_cumulees || '0.00';
                 }
                 updateTauxHoraire(payload.taux_horaire);
+                updateDoublonWarning(!!payload.paie_deja_existante);
             } catch (error) {
                 if (vacancesSoldeDisplay) {
                     vacancesSoldeDisplay.textContent = '0.00';
                 }
                 updateTauxHoraire('0');
+                updateDoublonWarning(false);
             }
         }
 
@@ -350,7 +382,10 @@ Saisie des heures de travail d'un employé pour produire une paie.
             employeInput.addEventListener('change', refreshPeriodeEmploye);
         }
         if (dateFinInput) {
-            dateFinInput.addEventListener('change', updateDatePaieFromSelect);
+            dateFinInput.addEventListener('change', () => {
+                updateDatePaieFromSelect();
+                refreshPeriodeEmploye();
+            });
         }
         [heuresRegulieresInput, heuresSuppInput, vacancesPayeesInput].filter(Boolean).forEach((input) => {
             input.addEventListener('input', refreshSalaireBrut);
