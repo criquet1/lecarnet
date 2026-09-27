@@ -118,19 +118,15 @@ body{
     align-items:center;
     justify-content:center;
 
-    background:linear-gradient(
-        135deg,
-        #3b82f6,
-        #6366f1
-    );
+    background:#8c68cd;
 
     color:#fff;
 
-    font-size:2rem;
+    font-size:2.6rem;
 
     box-shadow:
 
-        0 12px 30px rgba(59,130,246,.28);
+        0 12px 30px rgba(140,104,205,.28);
 
 }
 
@@ -160,7 +156,7 @@ body{
 
     text-decoration:none;
 
-    color:#fff;
+    color:#000;
 
     font-weight:700;
 
@@ -168,21 +164,23 @@ body{
 
         linear-gradient(
             135deg,
-            #ff4d94,
-            #ff1977
+            #ecf1fe,
+            #dbe4fd
         );
+
+    border:1px solid rgba(37,99,235,.15);
 
     transition:.25s;
 
     box-shadow:
 
-        0 14px 30px rgba(255,50,140,.28);
+        0 14px 30px rgba(37,99,235,.15);
 
 }
 
 .login-btn:hover{
 
-    color:#fff;
+    color:#000;
 
     transform:translateY(-3px);
 

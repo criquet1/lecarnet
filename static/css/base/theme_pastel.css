@@ -1,0 +1,131 @@
+/* ==========================================================
+   Mon carnet comptable
+   Thème pastel — remplace les couleurs par défaut de Bootstrap
+   (bleu primaire, jaune warning, vert success, cyan info)
+   par une palette assortie au violet/rose déjà utilisé
+   sur la page d'accueil.
+   ========================================================== */
+
+:root {
+
+    /* Primaire : violet (remplace le bleu Bootstrap) */
+    --bs-primary: #6f42c1;
+    --bs-primary-rgb: 111, 66, 193;
+    --bs-primary-text-emphasis: #3d2569;
+    --bs-primary-bg-subtle: #ece3f8;
+    --bs-primary-border-subtle: #cbb3ea;
+
+    /* Succès : vert sauge doux (remplace le vert vif) */
+    --bs-success: #4f7a68;
+    --bs-success-rgb: 79, 122, 104;
+    --bs-success-text-emphasis: #24392f;
+    --bs-success-bg-subtle: #e3ede8;
+    --bs-success-border-subtle: #b9d0c5;
+
+    /* Attention : ambre doux (remplace le jaune vif) */
+    --bs-warning: #e0ac6b;
+    --bs-warning-rgb: 224, 172, 107;
+    --bs-warning-text-emphasis: #6b4a1e;
+    --bs-warning-bg-subtle: #faf0dd;
+    --bs-warning-border-subtle: #ecd4a8;
+
+    /* Info : rose pâle (remplace le cyan) */
+    --bs-info: #f2b8d0;
+    --bs-info-rgb: 242, 184, 208;
+    --bs-info-text-emphasis: #7a2f4c;
+    --bs-info-bg-subtle: #fdecf3;
+    --bs-info-border-subtle: #f6cddc;
+
+}
+
+/* ==========================================================
+   Boutons pleins
+   (les couleurs de .btn-* sont figées par Bootstrap et ne
+   suivent pas les variables --bs-primary ci-dessus, donc on
+   les redéfinit explicitement)
+   ========================================================== */
+
+.btn-primary{
+    --bs-btn-color:#fff;
+    --bs-btn-bg:#6f42c1;
+    --bs-btn-border-color:#6f42c1;
+    --bs-btn-hover-color:#fff;
+    --bs-btn-hover-bg:#5f38a6;
+    --bs-btn-hover-border-color:#58339b;
+    --bs-btn-focus-shadow-rgb:111,66,193;
+    --bs-btn-active-color:#fff;
+    --bs-btn-active-bg:#58339b;
+    --bs-btn-active-border-color:#532f8f;
+    --bs-btn-disabled-color:#fff;
+    --bs-btn-disabled-bg:#6f42c1;
+    --bs-btn-disabled-border-color:#6f42c1;
+}
+
+.btn-success{
+    --bs-btn-color:#fff;
+    --bs-btn-bg:#4f7a68;
+    --bs-btn-border-color:#4f7a68;
+    --bs-btn-hover-color:#fff;
+    --bs-btn-hover-bg:#446a5a;
+    --bs-btn-hover-border-color:#3f6353;
+    --bs-btn-focus-shadow-rgb:79,122,104;
+    --bs-btn-active-color:#fff;
+    --bs-btn-active-bg:#3f6353;
+    --bs-btn-active-border-color:#3a5c4e;
+    --bs-btn-disabled-color:#fff;
+    --bs-btn-disabled-bg:#4f7a68;
+    --bs-btn-disabled-border-color:#4f7a68;
+}
+
+.btn-warning{
+    --bs-btn-color:#000;
+    --bs-btn-bg:#e0ac6b;
+    --bs-btn-border-color:#e0ac6b;
+    --bs-btn-hover-color:#000;
+    --bs-btn-hover-bg:#e4b87d;
+    --bs-btn-hover-border-color:#e2b374;
+    --bs-btn-focus-shadow-rgb:224,172,107;
+    --bs-btn-active-color:#000;
+    --bs-btn-active-bg:#e6bd88;
+    --bs-btn-active-border-color:#e2b374;
+    --bs-btn-disabled-color:#000;
+    --bs-btn-disabled-bg:#e0ac6b;
+    --bs-btn-disabled-border-color:#e0ac6b;
+}
+
+.btn-info{
+    --bs-btn-color:#000;
+    --bs-btn-bg:#f2b8d0;
+    --bs-btn-border-color:#f2b8d0;
+    --bs-btn-hover-color:#000;
+    --bs-btn-hover-bg:#f5c6da;
+    --bs-btn-hover-border-color:#f4c1d6;
+    --bs-btn-focus-shadow-rgb:242,184,208;
+    --bs-btn-active-color:#000;
+    --bs-btn-active-bg:#f6cbdf;
+    --bs-btn-active-border-color:#f4c1d6;
+    --bs-btn-disabled-color:#000;
+    --bs-btn-disabled-bg:#f2b8d0;
+    --bs-btn-disabled-border-color:#f2b8d0;
+}
+
+/* ==========================================================
+   Champs de formulaire : halo bleu au focus, cases à cocher
+   ========================================================== */
+
+.form-control:focus,
+.form-select:focus{
+    border-color:#b79ee0;
+    box-shadow:0 0 0 .25rem rgba(111,66,193,.25);
+}
+
+.form-check-input:focus{
+    border-color:#b79ee0;
+    box-shadow:0 0 0 .25rem rgba(111,66,193,.25);
+}
+
+.form-check-input:checked,
+.form-check-input[type=checkbox]:indeterminate{
+    background-color:#6f42c1;
+    border-color:#6f42c1;
+}

@@ -1,4 +1,5 @@
 {% extends "layouts/app_base.html" %}
+{% load static %}
 
 {% block title %}{{ title }}{% endblock %}
 
@@ -9,6 +10,10 @@
 
 {% block page_subtitle %}
 Saisie des heures de travail d'un employé pour produire une paie.
+{% endblock %}
+
+{% block page_css %}
+<link rel="stylesheet" href="{% static 'css/pages/saisir_paie.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -32,175 +37,123 @@ Saisie des heures de travail d'un employé pour produire une paie.
     {{ form.deduction_code_f }}
     {{ form.deduction_tp1015_j }}
     {{ form.deduction_tp1016_j1 }}
-    <div class="row g-4">
 
-        <!-- ========================= -->
-        <!-- Employé                   -->
-        <!-- ========================= -->
+    {% if form.confirmer_doublon.errors %}
+    <div class="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <span>{{ form.confirmer_doublon.errors.0 }}</span>
+        <label class="form-check-label d-flex align-items-center gap-2 mb-0">
+            {{ form.confirmer_doublon }}
+            Confirmer et enregistrer quand même
+        </label>
+    </div>
+    {% else %}
+        <div class="d-none">{{ form.confirmer_doublon }}</div>
+    {% endif %}
 
-        <div class="col-lg-5">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-header bg-primary text-white">
-                    <i class="bi bi-person-circle me-2"></i>
-                    Employé
-                </div>
+    <!-- ========================= -->
+    <!-- Période (commune)         -->
+    <!-- ========================= -->
 
-                <div class="card-body">
-                    <label class="form-label fw-semibold"
-                           for="{{ form.employe.id_for_label }}">
-                        Employé
-                    </label>
-                    {{ form.employe }}
-                    {{ form.employe.errors }}
+    <div class="paie-periode-bar">
 
-                    <div class="row g-3 mt-1">
-                        <div class="col-md-7">
-                            <label class="form-label fw-semibold" for="{{ form.periode_date_fin.id_for_label }}">
-                                Fin de période
-                            </label>
-                            {{ form.periode_date_fin }}
-                            {{ form.periode_date_fin.errors }}
-                        </div>
-                        <div class="col-md-5">
-                            <label class="form-label fw-semibold" for="{{ form.periode_date_paie.id_for_label }}">
-                                Date de paiement
-                            </label>
-                            {{ form.periode_date_paie }}
-                            {{ form.periode_date_paie.errors }}
-                        </div>
-                    </div>
-
-                    <hr>
-                    <div class="d-flex justify-content-between">
-                        <span class="text-muted">
-                            Taux horaire
-                        </span>
-
-                        <span class="badge bg-info text-dark fs-6">
-                            <span id="taux-horaire-display">
-                                0.00
-                            </span>
-                            $ / h
-                        </span>
-                    </div>
-
-                    <div class="d-flex justify-content-between mt-3">
-                        <span class="text-muted">
-                            Vacances disponibles
-                        </span>
-
-                        <span class="badge bg-info text-dark fs-6">
-                            <span id="vacances-solde-display">
-                                0.00
-                            </span>
-                            $
-                        </span>
-                    </div>
-                </div>
-            </div>
+        <div class="paie-field">
+            <span class="paie-field-label">Fin de période</span>
+            {{ form.periode_date_fin }}
+            {{ form.periode_date_fin.errors }}
         </div>
 
-        <!-- ========================= -->
-        <!-- Heures                    -->
-        <!-- ========================= -->
-
-        <div class="col-lg-7">
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-primary text-white">
-                    <i class="bi bi-clock-history me-2"></i>
-                    Heures de travail
-                </div>
-
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">
-                                Heures régulières
-                            </label>
-                            {{ form.heures_travaillees }}
-                            {{ form.heures_travaillees.errors }}
-                        </div>
-
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">
-                                Heures supplémentaires
-                            </label>
-                            {{ form.heures_supp }}
-                            {{ form.heures_supp.errors }}
-                        </div>
-
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold">
-                                Vacances payées
-                            </label>
-                            {{ form.vacances_payees }}
-                            {{ form.vacances_payees.errors }}
-                        </div>
-                    </div>
-                    <div class="text-end mt-3">
-                        <span class="text-muted">Brut estimé :</span>
-                        <strong><span id="salaire-brut-estime">0.00</span> $</strong>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card shadow-sm border-0 mt-4">
-                <div class="card-header bg-warning">
-                    <i class="bi bi-receipt me-2"></i>
-                    Déductions exceptionnelles
-                </div>
-
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <label class="form-label">
-                                Retenue suppl. QC
-                            </label>
-                            {{ form.retenue_supplementaire_qc }}
-                        </div>
-
-                        <div class="col-md-4">
-                            <label class="form-label">
-                                CSA RRQ
-                            </label>
-                            {{ form.cotisation_supplementaire_rrq_csa }}
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">
-                                Code F
-                            </label>
-
-                            <div>
-                                <button
-                                    type="button"
-                                    class="btn btn-outline-secondary w-100"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#codeFModal">
-                                    <i class="bi bi-calculator me-2"></i>
-                                    Modifier
-                                </button>
-                            </div>
-
-                            <div class="small text-center mt-2">
-                                Total :
-                                <strong>
-                                    <span id="code-f-total-display">
-                                        0.00
-                                    </span>
-                                    $
-                                </strong>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="paie-field">
+            <span class="paie-field-label">Date de paiement</span>
+            {{ form.periode_date_paie }}
+            {{ form.periode_date_paie.errors }}
         </div>
+
+    </div>
+
+    <!-- ========================= -->
+    <!-- Tableau de saisie         -->
+    <!-- ========================= -->
+
+    <div class="paie-entry-table">
+
+        <div class="paie-entry-row paie-entry-header">
+            <div>Employé</div>
+            <div>Heures régulières</div>
+            <div>Heures supplémentaires</div>
+            <div>Vacances payées</div>
+            <div>Déductions</div>
+        </div>
+
+        <div class="paie-entry-row">
+
+            <div class="paie-cell">
+                {{ form.employe }}
+                {{ form.employe.errors }}
+
+                <div class="paie-cell-hint">
+                    <span>Taux horaire : <span class="value"><span id="taux-horaire-display">0.00</span> $/h</span></span>
+                    <span>Vacances disponibles : <span class="value"><span id="vacances-solde-display">0.00</span> $</span></span>
+                </div>
+            </div>
+
+            <div class="paie-cell">
+                {{ form.heures_travaillees }}
+                {{ form.heures_travaillees.errors }}
+            </div>
+
+            <div class="paie-cell">
+                {{ form.heures_supp }}
+                {{ form.heures_supp.errors }}
+            </div>
+
+            <div class="paie-cell">
+                {{ form.vacances_payees }}
+                {{ form.vacances_payees.errors }}
+            </div>
+
+            <div class="paie-cell paie-cell-deductions">
+
+                <div class="paie-deduction-group">
+                    <label>Retenue suppl. QC</label>
+                    {{ form.retenue_supplementaire_qc }}
+                </div>
+
+                <div class="paie-deduction-group">
+                    <label>CSA RRQ</label>
+                    {{ form.cotisation_supplementaire_rrq_csa }}
+                </div>
+
+                <div class="paie-deduction-group">
+                    <label>Code F</label>
+                    <button
+                        type="button"
+                        class="btn btn-outline-secondary btn-sm w-100"
+                        data-bs-toggle="modal"
+                        data-bs-target="#codeFModal">
+                        <i class="bi bi-calculator me-2"></i>
+                        Modifier
+                    </button>
+                </div>
+
+                <div class="code-f-total">
+                    Total : <strong><span id="code-f-total-display">0.00</span> $</strong>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="text-end mt-3">
+        <span class="text-muted">Brut estimé :</span>
+        <strong><span id="salaire-brut-estime">0.00</span> $</strong>
     </div>
 
     <div class="text-end mt-4">
         <button
             type="submit"
-            class="btn btn-success btn-lg px-5">
+            class="btn btn-primary btn-lg px-5">
             <i class="bi bi-check-circle me-2"></i>
             Calculer et enregistrer la paie
         </button>
@@ -351,14 +304,15 @@ Saisie des heures de travail d'un employé pour produire une paie.
         }
 
         async function refreshPeriodeEmploye() {
-            if (!form || !employeInput || !dateFinInput || !datePaieInput) {
+            // Ne touche plus a "Fin de periode" / "Date de paiement" : la
+            // periode est choisie independamment de l'employe (voir barre
+            // du haut). Cette fonction met seulement a jour le taux horaire
+            // et le solde de vacances affiches pour l'employe choisi.
+            if (!form || !employeInput) {
                 return;
             }
 
             if (!employeInput.value) {
-                dateFinInput.innerHTML = '<option value="">---</option>';
-                dateFinInput.value = '';
-                datePaieInput.value = '';
                 if (vacancesSoldeDisplay) {
                     vacancesSoldeDisplay.textContent = '0.00';
                 }
@@ -373,9 +327,6 @@ Saisie des heures de travail d'un employé pour produire une paie.
                 });
                 const payload = await response.json();
                 if (!response.ok || !payload.ok) {
-                    dateFinInput.innerHTML = '<option value="">---</option>';
-                    dateFinInput.value = '';
-                    datePaieInput.value = '';
                     if (vacancesSoldeDisplay) {
                         vacancesSoldeDisplay.textContent = '0.00';
                     }
@@ -383,40 +334,11 @@ Saisie des heures de travail d'un employé pour produire une paie.
                     return;
                 }
 
-                const options = payload.options || [];
-                const defaultValue = payload.default_value || '';
-                dateFinInput.innerHTML = '';
-                if (!options.length) {
-                    dateFinInput.innerHTML = '<option value="">---</option>';
-                    datePaieInput.value = '';
-                    if (vacancesSoldeDisplay) {
-                        vacancesSoldeDisplay.textContent = payload.vacances_cumulees || '0.00';
-                    }
-                    return;
-                }
-
-                options.forEach((opt) => {
-                    const option = document.createElement('option');
-                    option.value = opt.value;
-                    option.textContent = opt.label;
-                    option.dataset.datePaie = opt.date_paie || '';
-                    if (defaultValue && opt.value === defaultValue) {
-                        option.selected = true;
-                    }
-                    dateFinInput.appendChild(option);
-                });
-                if (!dateFinInput.value && options[0]) {
-                    dateFinInput.value = options[0].value;
-                }
-                updateDatePaieFromSelect();
                 if (vacancesSoldeDisplay) {
                     vacancesSoldeDisplay.textContent = payload.vacances_cumulees || '0.00';
                 }
                 updateTauxHoraire(payload.taux_horaire);
             } catch (error) {
-                dateFinInput.innerHTML = '<option value="">---</option>';
-                dateFinInput.value = '';
-                datePaieInput.value = '';
                 if (vacancesSoldeDisplay) {
                     vacancesSoldeDisplay.textContent = '0.00';
                 }
@@ -498,6 +420,7 @@ Saisie des heures de travail d'un employé pour produire une paie.
 
         refreshTotal();
         refreshSalaireBrut();
+        updateDatePaieFromSelect();
         refreshPeriodeEmploye();
     })();
 </script>

@@ -16,6 +16,23 @@ from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePai
 from .services.periodes import DEFAULT_PAYDAY_WEEKDAY, next_payday_after, payday_weekday_from_anchor
 
 
+class PeriodeFinSelect(forms.Select):
+    """Select personnalise qui porte la date de paiement de chaque periode
+    (attribut data-date-paie) pour que le JS puisse la reprendre sans
+    requete supplementaire."""
+
+    def __init__(self, *args, date_paie_map=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.date_paie_map = date_paie_map or {}
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex=subindex, attrs=attrs)
+        date_paie = self.date_paie_map.get(str(value))
+        if date_paie:
+            option['attrs']['data-date-paie'] = date_paie
+        return option
+
+
 class EmployeForm(forms.ModelForm):
     taux_vacances = forms.CharField(required=False)
 
@@ -159,6 +176,21 @@ class PaieForm(forms.ModelForm):
     ]
 
     @staticmethod
+    def _dernier_periode_saisie():
+        """Date de fin de la derniere paie enregistree, tous employes
+        confondus. Sert a preselectionner la periode dans le formulaire
+        pour eviter de la rechoisir a chaque employe d'un meme lot."""
+        dernier = (
+            Paie.objects
+            .select_related('periode')
+            .order_by('-cree_le', '-id')
+            .first()
+        )
+        if dernier and dernier.periode_id and dernier.periode.date_fin:
+            return dernier.periode.date_fin
+        return None
+
+    @staticmethod
     def _decimal_or_zero(value):
         if value in (None, ''):
             return Decimal('0.00')
@@ -177,6 +209,11 @@ class PaieForm(forms.ModelForm):
         required=False,
         widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date', 'readonly': 'readonly'}),
         label='Date de paiement',
+    )
+    confirmer_doublon = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        label='Confirmer et enregistrer quand meme',
     )
     code_f_rpa = forms.DecimalField(required=False, max_digits=10, decimal_places=2, widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}), label='Cotisation a un RPA')
     code_f_reer = forms.DecimalField(required=False, max_digits=10, decimal_places=2, widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}), label='Cotisation a un REER')
@@ -244,19 +281,44 @@ class PaieForm(forms.ModelForm):
         self.fields['heures_supp'].required = False
         self.fields['vacances_payees'].required = False
 
+        # La liste des fins de periode est construite des l'affichage du
+        # formulaire (meme sans employe choisi), a partir de la frequence de
+        # paie par defaut si aucun employe n'est encore selectionne. Elle
+        # n'est jamais ecrasee une fois choisie : selectionner un employe
+        # ne l'ecrase plus (seul le taux horaire / solde de vacances affiche
+        # est mis a jour, en JS).
+        employe = None
         if self.is_bound:
             employe_id = self.data.get('employe')
             if employe_id:
                 try:
                     employe = Employe.objects.select_related('frequence_paie').get(pk=employe_id, actif=True)
-                    options_payload, default_value, _ = self.options_fin_periode_annee_courante(employe)
-                    self.fields['periode_date_fin'].choices = [('', '---')] + [
-                        (o['value'], o['label']) for o in options_payload
-                    ]
-                    if not self.data.get('periode_date_fin') and default_value:
-                        self.initial['periode_date_fin'] = default_value
                 except Employe.DoesNotExist:
-                    pass
+                    employe = None
+
+        options_payload, default_value, _ = self.options_fin_periode_annee_courante(employe, exclude_employe=False)
+        periode_choices = [('', '---')] + [
+            (o['value'], o['label']) for o in options_payload
+        ]
+
+        # Preselectionne la derniere periode saisie (tous employes confondus)
+        # si elle fait toujours partie des choix valides, pour eviter de la
+        # rechoisir a chaque employe d'un meme lot de paies.
+        valid_values = {o['value'] for o in options_payload}
+        dernier_date_fin = self._dernier_periode_saisie()
+        if dernier_date_fin:
+            dernier_value = dernier_date_fin.isoformat()
+            if dernier_value in valid_values:
+                default_value = dernier_value
+
+        date_paie_map = {o['value']: o['date_paie'] for o in options_payload}
+        existing_attrs = self.fields['periode_date_fin'].widget.attrs
+        self.fields['periode_date_fin'].widget = PeriodeFinSelect(
+            attrs=existing_attrs, choices=periode_choices, date_paie_map=date_paie_map,
+        )
+        self.fields['periode_date_fin'].choices = periode_choices
+        if not self.data.get('periode_date_fin') and default_value:
+            self.initial['periode_date_fin'] = default_value
         optional_decimal_fields = [
             'montant_personnel_federal_td1',
             'montant_personnel_quebec_tp1015',
@@ -404,25 +466,30 @@ class PaieForm(forms.ModelForm):
         }
 
     @classmethod
-    def _build_candidates_with_projection(cls, employe, frequence):
+    def _build_candidates_with_projection(cls, employe, frequence, exclude_employe=True):
         """
         Retourne les périodes disponibles pour cet employé.
 
         Stratégie DB-first : requête directe sur PeriodePaie pré-remplie.
         Fallback vers projection si aucune période n'est trouvée en base
         (nouveau tenant dont prefill_periodes_annee n'a pas encore été exécuté).
+
+        exclude_employe=True retire les periodes ou une paie existe deja pour
+        cet employe (utilise pour calculer la suggestion par defaut).
+        exclude_employe=False renvoie toutes les periodes de l'annee, meme
+        celles deja utilisees par l'employe (utilise pour la liste complete
+        du select, afin qu'un doublon volontaire et rare reste selectionnable
+        - la confirmation est alors geree dans clean()).
         """
         settings_instance = cls._paie_settings()
         payday_weekday = payday_weekday_from_anchor(
             settings_instance.date_premier_paiement_paie_annee if settings_instance else None
         )
         annee = date_type.today().year
-        db_candidates = list(
-            PeriodePaie.objects
-            .filter(frequence_paie=frequence, date_fin__year=annee, fermee=False)
-            .exclude(paies__employe=employe)
-            .order_by('date_fin', 'id')
-        )
+        db_qs = PeriodePaie.objects.filter(frequence_paie=frequence, date_fin__year=annee, fermee=False)
+        if exclude_employe:
+            db_qs = db_qs.exclude(paies__employe=employe)
+        db_candidates = list(db_qs.order_by('date_fin', 'id'))
 
         if db_candidates:
             return [
@@ -438,10 +505,10 @@ class PaieForm(forms.ModelForm):
             ]
 
         # Fallback : projection (table non encore pré-remplie)
-        return cls._build_candidates_projected(employe, frequence)
+        return cls._build_candidates_projected(employe, frequence, exclude_employe=exclude_employe)
 
     @classmethod
-    def _build_candidates_projected(cls, employe, frequence):
+    def _build_candidates_projected(cls, employe, frequence, exclude_employe=True):
         """Fallback : génère les candidats par projection (sans pré-remplissage en base)."""
         settings_instance = cls._paie_settings()
         date_debut_anchor = settings_instance.date_debut_periode_paie_annee if settings_instance else None
@@ -471,7 +538,7 @@ class PaieForm(forms.ModelForm):
             existing = existing_map.get((date_debut, date_fin))
             if existing and existing.fermee:
                 continue
-            if existing and Paie.objects.filter(employe=employe, periode=existing).exists():
+            if exclude_employe and existing and Paie.objects.filter(employe=employe, periode=existing).exists():
                 continue
 
             if existing:
@@ -547,12 +614,12 @@ class PaieForm(forms.ModelForm):
         return next_candidate, near_today_candidate, None
 
     @classmethod
-    def options_fin_periode_annee_courante(cls, employe):
+    def options_fin_periode_annee_courante(cls, employe, exclude_employe=False):
         frequence = cls._frequence_employe_ou_setting(employe)
         if not frequence:
             return [], None, 'Aucune frequence de paie configuree pour cet employe ni dans les parametres.'
 
-        candidates = cls._build_candidates_with_projection(employe, frequence)
+        candidates = cls._build_candidates_with_projection(employe, frequence, exclude_employe=exclude_employe)
         annee = date_type.today().year
         year_candidates = [c for c in candidates if c['date_fin'] and c['date_fin'].year == annee]
         if not year_candidates:
@@ -662,11 +729,18 @@ class PaieForm(forms.ModelForm):
             self.add_error('periode_date_fin', 'Cette periode est fermee.')
             return cleaned_data
         if existing and Paie.objects.filter(employe=employe, periode=existing).exists():
-            self.add_error('periode_date_fin', 'Une paie existe deja pour cet employe et cette periode.')
-            return cleaned_data
+            if not cleaned_data.get('confirmer_doublon'):
+                self.add_error(
+                    'confirmer_doublon',
+                    'Une paie existe deja pour cet employe et cette periode. '
+                    'Cochez la case pour confirmer et l\'enregistrer quand meme.',
+                )
+                return cleaned_data
+            # Doublon confirme volontairement (cas rare, ex.: correction ou
+            # paie supplementaire) : on laisse passer.
 
         # Retrouver le candidat complet pour date_debut/date_paie.
-        frequence_candidates = self._build_candidates_with_projection(employe, frequence)
+        frequence_candidates = self._build_candidates_with_projection(employe, frequence, exclude_employe=False)
         selected_candidate = next((c for c in frequence_candidates if c['date_fin'] == selected_date), None)
         if not selected_candidate:
             self.add_error('periode_date_fin', 'Impossible de determiner la periode correspondante.')

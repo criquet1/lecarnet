@@ -343,7 +343,9 @@
 
 .pink{
 
-    background:#ff4b97;
+    background:linear-gradient(135deg,#ffe1ec,#ffd0e0);
+
+    color:#7a1f4a;
 
 }
 
@@ -509,13 +511,13 @@
 
     padding:14px 32px;
 
-    border:none;
+    border:1px solid rgba(37,99,235,.15);
 
     border-radius:15px;
 
-    background:linear-gradient(135deg,#ff4b97,#ff2f86);
+    background:linear-gradient(135deg,#ecf1fe,#dbe4fd);
 
-    color:#fff;
+    color:#000;
 
     font-weight:700;
 
