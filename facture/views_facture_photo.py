@@ -19,17 +19,18 @@ from decimal import Decimal, InvalidOperation
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+import fitz  # PyMuPDF -- pour convertir un PDF en image
 from PIL import Image
 
 from compte.models import Compte
 from facture.helpers.dates import verifier_exercice_modifiable
-from facture.models import FacturePhotoEnAttente, Fournisseur, Source, Tr_desc, Tr_detail
+from facture.models import FacturePhotoEnAttente, Fournisseur, Releve, Source, Tr_desc, Tr_detail
 from facture.utils import get_setting
 
 load_dotenv()
@@ -42,8 +43,24 @@ def _compresser_image(image_bytes):
     """Redimensionne (largeur max ~1200px) et recompresse en JPEG pour
     limiter la place prise en base de donnees. Les photos sont conservees
     en permanence (voir FacturePhotoEnAttente.traite), donc chaque octet
-    compte sur le plan Render limite a 1 Go."""
+    compte sur le plan Render limite a 1 Go.
+
+    Si le fichier recu est un PDF (choisi via le selecteur de fichier plutot
+    que pris en photo), on en rend d'abord la premiere page en image -- un
+    PDF ne peut pas s'afficher dans une balise <img>, contrairement a une
+    vraie photo."""
     try:
+        if image_bytes[:5] == b'%PDF-':
+            document = fitz.open(stream=image_bytes, filetype='pdf')
+            try:
+                page = document.load_page(0)
+                # Rendu a x2 pour rester lisible une fois redimensionne
+                # ci-dessous a LARGEUR_MAX_PHOTO.
+                pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                image_bytes = pixmap.tobytes('png')
+            finally:
+                document.close()
+
         image = Image.open(io.BytesIO(image_bytes))
         image = image.convert('RGB')
         if image.width > LARGEUR_MAX_PHOTO:
@@ -53,8 +70,8 @@ def _compresser_image(image_bytes):
         image.save(tampon, format='JPEG', quality=QUALITE_JPEG, optimize=True)
         return tampon.getvalue(), 'image/jpeg'
     except Exception:
-        # En cas de probleme (format inattendu, etc.), on garde la photo
-        # originale plutot que de perdre la facture.
+        # En cas de probleme (format inattendu, etc.), on garde le fichier
+        # original plutot que de perdre la facture.
         return image_bytes, None
 
 PROMPT_EXTRACTION = """Analyse cette facture et réponds uniquement en JSON avec les champs suivants :
@@ -132,11 +149,21 @@ def _trouver_fournisseur_et_compte(nom_detecte):
 @login_required
 def facture_photo_rapide(request):
     """Page minimaliste pour telephone : prend la photo, l'analyse tout de
-    suite, et met le resultat de cote dans la file d'attente."""
+    suite, et met le resultat de cote dans la file d'attente.
+
+    L'envoi se fait en AJAX (voir rapide.html) pour que plusieurs photos
+    envoyees de suite ne s'empilent pas dans l'historique du navigateur --
+    sinon la fleche "retour" doit etre cliquee une fois par photo envoyee.
+    Un navigateur sans JavaScript retombe sur un vrai POST/rendu de page,
+    exactement comme avant."""
     if request.method == 'POST':
+        est_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         photo = request.FILES.get('photo')
         if not photo:
-            return render(request, "facture_photo/rapide.html", {'erreur': "Choisis une photo avant d'envoyer."})
+            erreur = "Choisis une photo avant d'envoyer."
+            if est_ajax:
+                return JsonResponse({'ok': False, 'erreur': erreur}, status=400)
+            return render(request, "facture_photo/rapide.html", {'erreur': erreur})
 
         photo_bytes = photo.read()
         mime_type = photo.content_type or 'image/jpeg'
@@ -162,6 +189,8 @@ def facture_photo_rapide(request):
 
         ligne.save()
 
+        if est_ajax:
+            return JsonResponse({'ok': True})
         return render(request, "facture_photo/rapide.html", {'envoye': True})
 
     return render(request, "facture_photo/rapide.html", {})
@@ -323,10 +352,50 @@ def facture_photo_traiter(request, pk):
     ]
 
     if request.method == 'POST':
-        if request.POST.get('action') == 'supprimer' and not ligne.traite:
-            ligne.delete()
-            messages.success(request, "Photo supprimée.")
-            return redirect('facture_photo')
+        if request.POST.get('action') == 'supprimer':
+            if not ligne.traite:
+                ligne.delete()
+                messages.success(request, "Photo supprimée.")
+                return redirect('facture_photo')
+
+            # Facture deja traitee : on supprime aussi l'ecriture comptable
+            # liee (meme verification que pour une facture normale -- voir
+            # l'action 'delete_tr_desc' dans facture/views.py).
+            tr_desc_a_supprimer = ligne.tr_desc
+            if tr_desc_a_supprimer and Tr_detail.objects.filter(
+                tr_desc=tr_desc_a_supprimer,
+                rapport_taxes__transmis_le__isnull=False,
+            ).exists():
+                messages.error(
+                    request,
+                    "Cette facture contient des lignes de taxes déjà transmises. Elle ne peut pas être supprimée."
+                )
+            else:
+                with transaction.atomic():
+                    if tr_desc_a_supprimer:
+                        Releve.objects.filter(ecriture_tr_desc=tr_desc_a_supprimer).update(ecriture_creee=False)
+                        tr_desc_a_supprimer.delete()
+                    ligne.delete()
+                messages.success(request, "Facture supprimée.")
+                return redirect('facture_photo')
+
+            settings_instance = get_setting()
+            lignes_initiales, tps_montant, tvq_montant = _lignes_pour_edition(ligne.tr_desc, settings_instance)
+            return render(request, "facture_photo/traiter.html", {
+                'title': "Facture par photo",
+                'ligne': ligne,
+                'all_comptes': all_comptes,
+                'fournisseur_trouve': ligne.tr_desc.fournisseur,
+                'compte_suggere': None,
+                'extraction': {
+                    'date': ligne.tr_desc.date.isoformat(),
+                    'description': ligne.tr_desc.desc_ctb,
+                    'tps': str(tps_montant),
+                    'tvq': str(tvq_montant),
+                },
+                'lignes_initiales': lignes_initiales,
+                'mode_edition': True,
+            })
 
         if mode_edition:
             fournisseur_trouve, compte_suggere = ligne.tr_desc.fournisseur, None
