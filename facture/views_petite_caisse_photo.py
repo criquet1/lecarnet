@@ -11,7 +11,7 @@ partagees avec facture/views_facture_photo.py plutot que dupliquees.
 """
 
 from django.contrib.auth.decorators import login_required
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 
 from facture.models import PetiteCaissePhotoEnAttente
@@ -22,11 +22,21 @@ from facture.views_facture_photo import _analyser_photo, _compresser_image, _val
 def petite_caisse_photo_rapide(request):
     """Page minimaliste pour telephone : prend la photo d'un petit reçu,
     l'analyse tout de suite, et met le resultat de cote dans la file
-    d'attente."""
+    d'attente.
+
+    L'envoi se fait en AJAX (voir rapide.html) pour que plusieurs photos
+    envoyees de suite ne s'empilent pas dans l'historique du navigateur --
+    meme principe que facture_photo_rapide dans views_facture_photo.py. Un
+    navigateur sans JavaScript retombe sur un vrai POST/rendu de page,
+    exactement comme avant."""
     if request.method == 'POST':
+        est_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         photo = request.FILES.get('photo')
         if not photo:
-            return render(request, "petite_caisse/rapide.html", {'erreur': "Choisis une photo avant d'envoyer."})
+            erreur = "Choisis une photo avant d'envoyer."
+            if est_ajax:
+                return JsonResponse({'ok': False, 'erreur': erreur}, status=400)
+            return render(request, "petite_caisse/rapide.html", {'erreur': erreur})
 
         photo_bytes = photo.read()
         mime_type = photo.content_type or 'image/jpeg'
@@ -52,6 +62,8 @@ def petite_caisse_photo_rapide(request):
 
         ligne.save()
 
+        if est_ajax:
+            return JsonResponse({'ok': True})
         return render(request, "petite_caisse/rapide.html", {'envoye': True})
 
     return render(request, "petite_caisse/rapide.html", {})

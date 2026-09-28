@@ -1077,5 +1077,16 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 });
+
+// Si on revient sur cette page avec le bouton "retour" du navigateur apres
+// avoir envoye des photos depuis la page mobile "Petite caisse (photo)", le
+// navigateur restaure parfois l'etat fige d'avant (sans les nouvelles
+// photos) au lieu de recharger depuis le serveur -- on force un
+// rechargement dans ce cas.
+window.addEventListener('pageshow', function (event) {
+    if (event.persisted) {
+        window.location.reload();
+    }
+});
 </script>
 {% endblock %}
