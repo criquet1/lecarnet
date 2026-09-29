@@ -94,6 +94,53 @@ def _serialize_ecriture_salaire(tr_desc, already_existed, matches=True, updated=
 	}
 
 
+def _numero_periode_ecriture(periode):
+	"""Numero chronologique de la periode (le meme "#" affiche dans le
+	journal des paies) : le rang de cette periode parmi celles de meme
+	frequence et de meme annee (annee de la date de paie, ou de la date
+	de fin si absente) qui ont au moins une paie enregistree.
+
+	Utilise pour construire la description des NOUVELLES ecritures de
+	salaire. Les ecritures deja creees gardent leur ancienne description
+	(voir desc_ctb_legacy dans _calculer_lignes_ecriture_salaire) : on ne
+	renomme jamais une ecriture existante.
+	"""
+	date_ref = periode.date_paie or periode.date_fin
+	if date_ref is None:
+		return periode.id
+	annee = date_ref.year
+
+	# Meme approche que _build_total_period_rows (le tableau "Toutes") :
+	# on parcourt les Paie une a une et on deduplique les periodes dans un
+	# dict Python, plutot qu'une jointure + distinct() cote base de
+	# donnees -- qui, avec plusieurs employes partageant une meme
+	# periode, ne dedoublonnait pas correctement et gonflait le compte.
+	lignes = (
+		Paie.objects
+		.filter(periode__frequence_paie_id=periode.frequence_paie_id)
+		.select_related('periode')
+		.only('id', 'periode__id', 'periode__date_fin', 'periode__date_paie')
+	)
+
+	periodes_vues = {}
+	for paie in lignes:
+		p = paie.periode
+		p_date_ref = p.date_paie or p.date_fin
+		if p_date_ref is None or p_date_ref.year != annee:
+			continue
+		periodes_vues[p.id] = (p_date_ref, p.date_fin)
+
+	groupes = sorted(periodes_vues.items(), key=lambda item: (item[1][0], item[1][1]))
+	for index, (pid, _) in enumerate(groupes, start=1):
+		if pid == periode.id:
+			return index
+
+	# Ne devrait pas arriver (la periode elle-meme a forcement une paie
+	# puisqu'on est appele apres avoir trouve des paies pour elle) --
+	# repli prudent sur l'ancien numero.
+	return periode.id
+
+
 def _calculer_lignes_ecriture_salaire(periode, settings_instance=None, source_salaire=None):
 	"""Calcule (source, date, desc_ctb, lignes) pour l'ecriture de salaire d'une periode.
 
@@ -158,7 +205,14 @@ def _calculer_lignes_ecriture_salaire(periode, settings_instance=None, source_sa
 	if source_salaire is None:
 		source_salaire, _ = Source.objects.get_or_create(nom='Salaire')
 	entry_date = periode.date_paie or periode.date_fin
-	desc_ctb = f"Paie P{periode.id} {periode.date_fin:%Y-%m-%d}"[:40]
+	# desc_ctb : nouveau format, avec le numero chronologique correct
+	# (celui affiche dans le journal des paies), utilise pour toute
+	# NOUVELLE ecriture. desc_ctb_legacy : ancien format (numero interne
+	# de la periode en base), conserve uniquement pour retrouver les
+	# ecritures deja creees avant cette correction -- on ne les renomme
+	# jamais.
+	desc_ctb = f"Paie P{_numero_periode_ecriture(periode)} {periode.date_fin:%Y-%m-%d}"[:40]
+	desc_ctb_legacy = f"Paie P{periode.id} {periode.date_fin:%Y-%m-%d}"[:40]
 
 	total_brut = _money(sum((p.salaire_brut_periode or Decimal('0.00') for p in paies), Decimal('0.00')))
 	total_vacances_payees = _money(sum((p.vacances_payees or Decimal('0.00') for p in paies), Decimal('0.00')))
@@ -212,7 +266,7 @@ def _calculer_lignes_ecriture_salaire(periode, settings_instance=None, source_sa
 		(getattr(settings_instance, 'compte_das_provinciales'), -credit_das_prov),
 	]
 
-	return source_salaire, entry_date, desc_ctb, detail_rows
+	return source_salaire, entry_date, desc_ctb, detail_rows, desc_ctb_legacy
 
 
 def _ecriture_salaire_correspond(tr_desc, detail_rows):
@@ -235,7 +289,7 @@ def _ecriture_salaire_correspond(tr_desc, detail_rows):
 def _statut_transmission_ecriture_salaire(periode, settings_instance=None, source_salaire=None):
 	"""Retourne 'vert' (transmise et à jour), 'jaune' (transmise mais montants différents) ou 'blanc' (non transmise)."""
 	try:
-		source_salaire, entry_date, desc_ctb, detail_rows = _calculer_lignes_ecriture_salaire(
+		source_salaire, entry_date, desc_ctb, detail_rows, desc_ctb_legacy = _calculer_lignes_ecriture_salaire(
 			periode,
 			settings_instance=settings_instance,
 			source_salaire=source_salaire,
@@ -243,11 +297,10 @@ def _statut_transmission_ecriture_salaire(periode, settings_instance=None, sourc
 	except ValueError:
 		return 'blanc'
 
-	existing = Tr_desc.objects.filter(
-		source=source_salaire,
-		desc_ctb=desc_ctb,
-		date=entry_date,
-	).first()
+	existing = (
+		Tr_desc.objects.filter(source=source_salaire, desc_ctb=desc_ctb, date=entry_date).first()
+		or Tr_desc.objects.filter(source=source_salaire, desc_ctb=desc_ctb_legacy, date=entry_date).first()
+	)
 	if not existing:
 		return 'blanc'
 
@@ -262,15 +315,14 @@ def creer_ecriture_salaire(request, periode_id):
 	periode = get_object_or_404(PeriodePaie, pk=periode_id)
 
 	try:
-		source_salaire, entry_date, desc_ctb, detail_rows = _calculer_lignes_ecriture_salaire(periode)
+		source_salaire, entry_date, desc_ctb, detail_rows, desc_ctb_legacy = _calculer_lignes_ecriture_salaire(periode)
 	except ValueError as exc:
 		return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
 
-	existing = Tr_desc.objects.filter(
-		source=source_salaire,
-		desc_ctb=desc_ctb,
-		date=entry_date,
-	).first()
+	existing = (
+		Tr_desc.objects.filter(source=source_salaire, desc_ctb=desc_ctb, date=entry_date).first()
+		or Tr_desc.objects.filter(source=source_salaire, desc_ctb=desc_ctb_legacy, date=entry_date).first()
+	)
 	if existing:
 		matches = _ecriture_salaire_correspond(existing, detail_rows)
 		update_url = None if matches else reverse('paie:paie_mettre_a_jour_ecriture_salaire', args=[periode.id])
@@ -304,15 +356,14 @@ def mettre_a_jour_ecriture_salaire(request, periode_id):
 	periode = get_object_or_404(PeriodePaie, pk=periode_id)
 
 	try:
-		source_salaire, entry_date, desc_ctb, detail_rows = _calculer_lignes_ecriture_salaire(periode)
+		source_salaire, entry_date, desc_ctb, detail_rows, desc_ctb_legacy = _calculer_lignes_ecriture_salaire(periode)
 	except ValueError as exc:
 		return JsonResponse({'ok': False, 'error': str(exc)}, status=400)
 
-	existing = Tr_desc.objects.filter(
-		source=source_salaire,
-		desc_ctb=desc_ctb,
-		date=entry_date,
-	).first()
+	existing = (
+		Tr_desc.objects.filter(source=source_salaire, desc_ctb=desc_ctb, date=entry_date).first()
+		or Tr_desc.objects.filter(source=source_salaire, desc_ctb=desc_ctb_legacy, date=entry_date).first()
+	)
 	if not existing:
 		return JsonResponse({'ok': False, 'error': "Aucune écriture existante à mettre à jour pour cette période."}, status=400)
 
