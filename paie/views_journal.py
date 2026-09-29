@@ -450,6 +450,24 @@ def journal_paies_page(request):
 		total_brut_local = Decimal('0.00')
 		total_net_local = Decimal('0.00')
 		total_charge_employeur_local = Decimal('0.00')
+		grand_totals = {
+			'heures': Decimal('0.00'),
+			'vacances_payees': Decimal('0.00'),
+			'brut': Decimal('0.00'),
+			'vacances': Decimal('0.00'),
+			'rrq': Decimal('0.00'),
+			'rrq_employeur': Decimal('0.00'),
+			'rqap': Decimal('0.00'),
+			'rqap_employeur': Decimal('0.00'),
+			'ae': Decimal('0.00'),
+			'ae_employeur': Decimal('0.00'),
+			'fss_employeur': Decimal('0.00'),
+			'cnesst_employeur': Decimal('0.00'),
+			'charge_employeur': Decimal('0.00'),
+			'impot_federal': Decimal('0.00'),
+			'impot_provincial': Decimal('0.00'),
+			'net': Decimal('0.00'),
+		}
 
 		for entry in paie_entries_list:
 			paie = entry['paie']
@@ -514,6 +532,23 @@ def journal_paies_page(request):
 			total_net_local += _d(paie.salaire_net)
 			total_charge_employeur_local += employer['charge_employeur']
 
+			grand_totals['heures'] += _d(paie.heures_travaillees) + _d(paie.heures_supp)
+			grand_totals['vacances_payees'] += _d(paie.vacances_payees)
+			grand_totals['brut'] += _d(paie.salaire_brut_periode)
+			grand_totals['vacances'] += _d(paie.vacances)
+			grand_totals['rrq'] += _d(paie.rrq)
+			grand_totals['rrq_employeur'] += employer['rrq_employeur']
+			grand_totals['rqap'] += _d(paie.rqap)
+			grand_totals['rqap_employeur'] += employer['rqap_employeur']
+			grand_totals['ae'] += _d(paie.ae)
+			grand_totals['ae_employeur'] += employer['ae_employeur']
+			grand_totals['fss_employeur'] += employer['fss_employeur']
+			grand_totals['cnesst_employeur'] += employer['cnesst_employeur']
+			grand_totals['charge_employeur'] += employer['charge_employeur']
+			grand_totals['impot_federal'] += _d(paie.impot_federal)
+			grand_totals['impot_provincial'] += _d(paie.impot_provincial)
+			grand_totals['net'] += _d(paie.salaire_net)
+
 		if current_month_key is not None:
 			journal_rows.append({
 				'type': 'subtotal',
@@ -521,7 +556,7 @@ def journal_paies_page(request):
 				'totals': month_totals.copy(),
 			})
 
-		return journal_rows, total_brut_local, total_net_local, total_charge_employeur_local
+		return journal_rows, total_brut_local, total_net_local, total_charge_employeur_local, grand_totals
 
 	def _build_total_period_rows(paie_entries_list, compute_statut=False, statut_settings_instance=None, statut_source_salaire=None):
 		period_groups = {}
@@ -729,7 +764,7 @@ def journal_paies_page(request):
 
 		return total_rows, grand_totals
 
-	journal_rows, total_brut, total_net, total_charge_employeur = _build_journal_rows(paie_entries)
+	journal_rows, total_brut, total_net, total_charge_employeur, _ = _build_journal_rows(paie_entries)
 	can_create_salary_entry = is_expert(request.user)
 	statut_settings_instance = None
 	statut_source_salaire = None
@@ -764,7 +799,7 @@ def journal_paies_page(request):
 
 	employe_tabs = []
 	for _, payload in sorted(by_employe.items(), key=lambda item: (item[1]['employe'].nom, item[1]['employe'].prenom, item[1]['employe'].id)):
-		rows, brut, net, charge_employeur = _build_journal_rows(payload['paies'])
+		rows, brut, net, charge_employeur, grand_totals = _build_journal_rows(payload['paies'])
 		employe_tabs.append({
 			'employe': payload['employe'],
 			'tab_id': f"emp-{payload['employe'].id}",
@@ -772,6 +807,7 @@ def journal_paies_page(request):
 			'total_brut': brut,
 			'total_net': net,
 			'total_charge_employeur': charge_employeur,
+			'total_row': grand_totals,
 		})
 
 	active_employe_tab_id = None

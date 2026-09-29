@@ -290,6 +290,21 @@
                                 {% empty %}
                                     <tr><td colspan="11" class="text-muted">Aucune paie enregistrée.</td></tr>
                                 {% endfor %}
+                                {% if tab.total_row %}
+                                    <tr class="table-secondary fw-bold">
+                                        <td>Grand total</td>
+                                        <td class="text-end">{{ tab.total_row.heures|floatformat:2 }}</td>
+                                        <td class="text-end">{{ tab.total_row.vacances_payees|floatformat:2 }}</td>
+                                        <td class="text-end">{{ tab.total_row.brut|floatformat:2 }}</td>
+                                        <td class="text-end">{{ tab.total_row.net|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-left: 6px solid #495057;">{{ tab.total_row.rrq|floatformat:2 }}</td>
+                                        <td class="text-end">{{ tab.total_row.rqap|floatformat:2 }}</td>
+                                        <td class="text-end">{{ tab.total_row.impot_provincial|floatformat:2 }}</td>
+                                        <td class="text-end" style="border-left: 6px solid #495057;">{{ tab.total_row.ae|floatformat:2 }}</td>
+                                        <td class="text-end">{{ tab.total_row.impot_federal|floatformat:2 }}</td>
+                                        <td class="text-end">{{ tab.total_row.vacances|floatformat:2 }}</td>
+                                    </tr>
+                                {% endif %}
                             </tbody>
                         </table>
                     </div>
