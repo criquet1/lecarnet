@@ -407,12 +407,15 @@ def releve_ecriture_similaire(request, releve_id):
 
 
 def _import_releve_csv(csv_file):
+    """Importe le CSV. Retourne (messages, types_onglets_touches) -- ce second element
+    liste les type_onglet (banque/carte_credit/marge_credit/autre) des comptes qui ont
+    reçu des lignes, pour permettre d'activer automatiquement le bon onglet a l'affichage."""
     errors = []
 
     file_name = csv_file.name
     if Releve.objects.filter(fichier_source=file_name).exists():
         errors.append(f"⚠ Le fichier « {file_name} » a déjà été importé. Aucune ligne n'a été ajoutée.")
-        return errors
+        return errors, []
 
     raw_data = csv_file.file.read(5000)
     csv_file.file.seek(0)
@@ -510,6 +513,8 @@ def _import_releve_csv(csv_file):
             errors.append(f"Ligne {row_num}: Erreur lors du parsing ({str(exc)})")
             continue
 
+    types_onglets_touches = []
+
     if errors:
         errors.insert(0, "Le fichier est invalide. Aucune ligne n'a été ajoutée.")
     elif releves:
@@ -518,12 +523,17 @@ def _import_releve_csv(csv_file):
                 for data in releves:
                     Releve.objects.create(**data)
             errors.insert(0, f"✓ {len(releves)} ligne(s) ajoutée(s) à la base de données avec succès!")
+            types_onglets_touches = sorted({
+                compte_releve.type_onglet
+                for compte_releve in compte_releve_cache.values()
+                if compte_releve and compte_releve.type_onglet
+            })
         except Exception as exc:
             errors.append(f"Erreur lors de l'insertion: {str(exc)}")
     else:
         errors.append("Le fichier ne contient aucune ligne de relevé valide.")
 
-    return errors
+    return errors, types_onglets_touches
 
 
 def releve_bancaire(request):
@@ -531,6 +541,7 @@ def releve_bancaire(request):
     errors = []
     open_releve_modal = False
     modal_releve_id = ''
+    force_active_onglet = ''
     selected_compagnie_id = ''
     comptes_queryset = Compte.objects.all().order_by('numero')
     compagnies = sorted(
@@ -771,12 +782,23 @@ def releve_bancaire(request):
 
             try:
                 with transaction.atomic():
-                    import_messages = _import_releve_csv(csv_file)
+                    import_messages, types_onglets_importes = _import_releve_csv(csv_file)
                     if any(not message.startswith("✓") for message in import_messages):
                         transaction.set_rollback(True)
+                        types_onglets_importes = []
                     errors.extend(import_messages)
             except Exception as e:
                 errors.append(f"Erreur lors de la lecture du fichier: {str(e)}")
+                types_onglets_importes = []
+
+            # Priorite d'affichage identique a l'ordre des 4 onglets fixes (voir plus bas):
+            # s'il n'y a qu'un seul type d'onglet touche par l'import (cas normal), c'est
+            # celui-la qu'on active automatiquement.
+            ordre_onglets = ['banque', 'carte_credit', 'marge_credit', 'autre']
+            for type_val in ordre_onglets:
+                if type_val in types_onglets_importes:
+                    force_active_onglet = type_val
+                    break
 
     _relink_releves_compte_type_mismatch()
 
@@ -933,6 +955,7 @@ def releve_bancaire(request):
         'unlinked_comptes_with_lines': unlinked_comptes_with_lines,
         'open_releve_modal': open_releve_modal,
         'modal_releve_id': modal_releve_id,
+        'force_active_onglet': force_active_onglet,
         'selected_compagnie_id': selected_compagnie_id,
         # 'compagnies': compagnies,
         'compte_cap_id': settings_instance.cap_id if settings_instance else '',

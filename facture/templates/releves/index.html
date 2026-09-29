@@ -359,6 +359,8 @@
         var similarResultsDiv = document.getElementById('similar-results');
         var createEcritureForm = document.getElementById('create-ecriture-form');
         var returnPositionKey = 'releve-return-position:' + window.location.pathname;
+        var activeTabKey = 'releve-active-tab:' + window.location.pathname;
+        var releveTabsContainer = document.getElementById('releveTabs');
         // Gabarit d'URL: on remplace l'id 0 par le vrai releve_id au moment de l'appel.
         var similarUrlTemplate = "{% url 'releve_ecriture_similaire' releve_id=0 %}";
 
@@ -427,6 +429,37 @@
 
         if (createEcritureForm) {
             createEcritureForm.addEventListener('submit', saveReturnPosition);
+        }
+
+        // Retient l'onglet actif (Banque / Carte de crédit / Marge de crédit / Autre) d'un
+        // chargement de page à l'autre, pour qu'un changement de période (rechargement complet
+        // de la page) ne revienne pas toujours au premier onglet.
+        if (releveTabsContainer) {
+            releveTabsContainer.addEventListener('shown.bs.tab', function (event) {
+                try {
+                    sessionStorage.setItem(activeTabKey, event.target.id);
+                } catch (error) {
+                    // Pas grave si le stockage navigateur est indisponible.
+                }
+            });
+        }
+
+        function restoreActiveTab() {
+            var savedTabId = null;
+            try {
+                savedTabId = sessionStorage.getItem(activeTabKey);
+            } catch (error) {
+                savedTabId = null;
+            }
+
+            if (!savedTabId) {
+                return;
+            }
+
+            var tabButton = document.getElementById(savedTabId);
+            if (tabButton && !tabButton.classList.contains('active')) {
+                bootstrap.Tab.getOrCreateInstance(tabButton).show();
+            }
         }
 
         function getField(id) {
@@ -915,6 +948,18 @@
             });
         }
 
+        // Si l'ajout d'un relevé vient de toucher un onglet precis, on force cet onglet
+        // (et on l'enregistre comme onglet actif courant) avant la restauration normale.
+        var forceActiveOnglet = '{{ force_active_onglet|default:"" }}';
+        if (forceActiveOnglet) {
+            try {
+                sessionStorage.setItem(activeTabKey, 'tab-' + forceActiveOnglet);
+            } catch (error) {
+                // Pas grave si le stockage navigateur est indisponible.
+            }
+        }
+
+        restoreActiveTab();
         restoreReturnPosition();
 
         var shouldReopen = modalElement.dataset.openReleveModal === '1';
