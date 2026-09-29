@@ -128,11 +128,19 @@ class PetiteCaissePhotoEnAttenteAdmin(admin.ModelAdmin):
     readonly_fields = ('created_at',)
 
 
+class ClientAdmin(admin.ModelAdmin):
+    readonly_fields = ('logo_prive', 'logo_prive_type')
+
+
+class FournisseurAdmin(admin.ModelAdmin):
+    readonly_fields = ('logo_prive', 'logo_prive_type')
+
+
 admin.site.register(Facture, FactureAdmin)
 admin.site.register(PetiteCaisseVue, PetiteCaisseVueAdmin)
 admin.site.register(TransactionListe, TransactionListeAdmin)
-admin.site.register(Client)
-admin.site.register(Fournisseur)
+admin.site.register(Client, ClientAdmin)
+admin.site.register(Fournisseur, FournisseurAdmin)
 admin.site.register(Setting, SettingAdmin)
 admin.site.register(Tr_desc, TrDescAdmin)
 admin.site.register(Tr_detail, TrDetailAdmin)
