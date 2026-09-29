@@ -17,7 +17,7 @@ from holidays import country_holidays
 from facture.utils import get_setting
 from facture.working_period import get_working_period
 
-from .forms import EmployeForm, PaieForm, ParametresTauxPaieForm
+from .forms import EmployeForm, PaieForm, PaieModifierForm, ParametresTauxPaieForm
 from .models import Employe, FrequencePaie, Paie, ParametresTauxPaie, PeriodePaie
 from django.http import HttpResponse
 from weasyprint import HTML
@@ -135,6 +135,31 @@ def saisir_paie_page(request):
 	return render(request, 'paie/saisir_paie.html', {
 		'title': 'Saisir une paie',
 		'form': form,
+	})
+
+
+@login_required
+@xframe_options_sameorigin
+def paie_modifier_page(request, paie_id):
+	paie = get_object_or_404(Paie.objects.select_related('employe', 'periode'), pk=paie_id)
+
+	if request.method == 'POST':
+		form = PaieModifierForm(request.POST, instance=paie)
+		if form.is_valid():
+			form.save()
+			messages.success(request, f'Paie corrigee pour {paie.employe} ({paie.periode.date_fin}).')
+			journal_params = {'employe': paie.employe_id}
+			if request.GET.get('embed') == '1':
+				journal_params['embed'] = '1'
+			journal_url = f"{reverse('paie:paie_journal')}?{urlencode(journal_params)}"
+			return redirect(journal_url)
+	else:
+		form = PaieModifierForm(instance=paie)
+
+	return render(request, 'paie/modifier_paie.html', {
+		'title': 'Corriger une paie',
+		'form': form,
+		'paie': paie,
 	})
 
 

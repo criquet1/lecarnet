@@ -12,6 +12,7 @@ urlpatterns = [
 	path('remises-mensuelles/', views.remises_mensuelles_page, name='paie_remises_mensuelles'),
 	path('parametres-taux/', views.parametres_taux_page, name='paie_parametres_taux'),
 	path('saisir/', views.saisir_paie_page, name='paie_saisir'),
+	path('modifier/<int:paie_id>/', views.paie_modifier_page, name='paie_modifier'),
 	path('api/prochaine-periode/', views.prochaine_periode_employe_api, name='paie_api_prochaine_periode'),
 	path('journal/', views.journal_paies_page, name='paie_journal'),
 	path('journal/creer-ecriture/<int:periode_id>/', views.creer_ecriture_salaire, name='paie_creer_ecriture_salaire'),

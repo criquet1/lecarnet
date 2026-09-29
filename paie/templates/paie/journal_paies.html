@@ -53,6 +53,13 @@
     .statut-transmission.statut-blanc {
         background-color: #fff;
     }
+
+    .js-modifier-paie {
+        cursor: pointer;
+    }
+    .js-modifier-paie:hover {
+        background-color: rgba(13, 110, 253, 0.08);
+    }
 </style>
 {% endblock %}
 
@@ -248,7 +255,7 @@
                             <tbody>
                                 {% for row in tab.journal_rows %}
                                     {% if row.type == 'paie' %}
-                                        <tr>
+                                        <tr class="js-modifier-paie" data-url="{% url 'paie:paie_modifier' row.paie.id %}?employe={{ row.paie.employe_id }}" role="button" tabindex="0" title="Cliquer pour corriger cette paie">
                                             <td>{{ row.paie.periode.date_fin|date:"Y-m-d" }}</td>
                                             <td class="text-end">{{ row.paie.heures_travaillees|add:row.paie.heures_supp|floatformat:2 }}</td>
                                             <td class="text-end">{{ row.paie.vacances_payees|floatformat:2 }}</td>
@@ -424,4 +431,24 @@
         }
     })();
 </script>
+
+<script>
+    (function () {
+        // Rend chaque ligne de paie (fiche employe) cliquable pour ouvrir
+        // le petit formulaire de correction (heures, vacances payees).
+        document.querySelectorAll('.js-modifier-paie').forEach(function (row) {
+            function ouvrir() {
+                window.location.href = row.dataset.url;
+            }
+            row.addEventListener('click', ouvrir);
+            row.addEventListener('keydown', function (evenement) {
+                if (evenement.key === 'Enter' || evenement.key === ' ') {
+                    evenement.preventDefault();
+                    ouvrir();
+                }
+            });
+        });
+    })();
+</script>
+
 {% endblock %}

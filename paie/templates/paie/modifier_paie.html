@@ -1,0 +1,66 @@
+{% extends "layouts/app_base.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block page_title %}
+<i class="bi bi-pencil-square me-2 text-success"></i>
+{{ title }}
+{% endblock %}
+
+{% block page_subtitle %}
+Correction des heures et des vacances payées pour {{ paie.employe }} — période se terminant le {{ paie.periode.date_fin|date:"Y-m-d" }}.
+{% endblock %}
+
+{% block content %}
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }}">
+            {{ message }}
+        </div>
+    {% endfor %}
+{% endif %}
+
+<div class="card shadow-sm" style="max-width: 500px;">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            {{ form.non_field_errors }}
+
+            <div class="mb-3">
+                <label class="form-label" for="{{ form.heures_travaillees.id_for_label }}">Heures régulières</label>
+                {{ form.heures_travaillees }}
+                {{ form.heures_travaillees.errors }}
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="{{ form.heures_supp.id_for_label }}">Heures supplémentaires</label>
+                {{ form.heures_supp }}
+                {{ form.heures_supp.errors }}
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="{{ form.vacances_payees.id_for_label }}">Vacances payées</label>
+                {{ form.vacances_payees }}
+                {{ form.vacances_payees.errors }}
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="{{ form.vacances.id_for_label }}">Vacances accumulées</label>
+                {{ form.vacances }}
+                {{ form.vacances.errors }}
+            </div>
+
+            <div class="text-end mt-4">
+                <a href="{% url 'paie:paie_journal' %}?employe={{ paie.employe_id }}" class="btn btn-outline-secondary me-2">Annuler</a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-circle me-2"></i>
+                    Enregistrer la correction
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

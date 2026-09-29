@@ -151,6 +151,29 @@ class EmployeForm(forms.ModelForm):
         return (value_percent / Decimal('100')).quantize(Decimal('0.00001'), rounding=ROUND_HALF_UP)
 
 
+class PaieModifierForm(forms.ModelForm):
+    """Formulaire simplifie pour corriger une paie deja enregistree
+    (heures, heures supplementaires, vacances payees, vacances
+    accumulees), sans toucher a l'employe ni a la periode. Les montants
+    (brut, net, DAS, etc.) sont recalcules automatiquement par
+    Paie.save() lorsque ces champs changent."""
+
+    class Meta:
+        model = Paie
+        fields = [
+            'heures_travaillees',
+            'heures_supp',
+            'vacances_payees',
+            'vacances',
+        ]
+        widgets = {
+            'heures_travaillees': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'heures_supp': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
+            'vacances_payees': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'vacances': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+        }
+
+
 class PaieForm(forms.ModelForm):
     CODE_F_COMPONENT_FIELDS = [
         'code_f_rpa',
