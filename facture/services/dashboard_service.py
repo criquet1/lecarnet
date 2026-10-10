@@ -2,6 +2,8 @@ import calendar
 from decimal import Decimal
 from facture.models import Client, Facture, Fournisseur, Releve, CompteReleve
 from facture.working_period import get_working_period
+from django.db.models import Q
+from paie.models import Employe, Paie, PeriodePaie
 
 
 def compute_dashboard_data(request):
@@ -58,6 +60,36 @@ def compute_dashboard_data(request):
         reminder_releves = f"{releves_manquants} relevés sont toujours attendus."
         badge_releves = "status-warning"
 
+    nb_employes = Employe.objects.filter(actif=True).count()
+    paies_mois = Paie.objects.filter(
+        Q(periode__date_paie__month=mois, periode__date_paie__year=annee)
+        | Q(periode__date_paie__isnull=True, periode__date_fin__month=mois, periode__date_fin__year=annee)
+    )
+    nb_paies = paies_mois.count()
+    nb_periodes_paie = PeriodePaie.objects.filter(
+        Q(date_paie__month=mois, date_paie__year=annee)
+        | Q(date_paie__isnull=True, date_fin__month=mois, date_fin__year=annee)
+    ).count()
+    paies_attendues = nb_employes * nb_periodes_paie
+    paies_actifs = paies_mois.filter(employe__actif=True).values("employe", "periode").distinct().count()
+    paies_manquantes = max(paies_attendues - paies_actifs, 0)
+
+    if nb_employes == 0:
+        reminder_paie = "Aucun employé actif."
+        badge_paie = "badge-neutral"
+    elif nb_periodes_paie == 0:
+        reminder_paie = "Aucune période de paie n'est définie pour ce mois-ci."
+        badge_paie = "status-warning"
+    elif paies_manquantes == 0:
+        reminder_paie = f"Toutes les paies du mois sont produites ({paies_actifs} sur {paies_attendues})."
+        badge_paie = "status-success"
+    elif paies_manquantes == 1:
+        reminder_paie = f"1 paie reste à produire ce mois-ci ({paies_actifs} sur {paies_attendues})."
+        badge_paie = "status-warning"
+    else:
+        reminder_paie = f"{paies_manquantes} paies restent à produire ce mois-ci ({paies_actifs} sur {paies_attendues})."
+        badge_paie = "status-warning"
+
     return {
         "nb_compagnies": nb_compagnies,
         "nb_factures": nb_factures,
@@ -76,8 +108,9 @@ def compute_dashboard_data(request):
         "releves_manquants": releves_manquants,
         "reminder_releves": reminder_releves,
         "badge_releves": badge_releves,
-        "nb_employes": 0,
-        "nb_paies": 0,
-        "badge_paie": "badge-neutral",
-        "reminder_paie": "Le module Paie sera disponible prochainement.",
+        "nb_employes": nb_employes,
+        "nb_paies": nb_paies,
+        "nb_periodes_paie": nb_periodes_paie,
+        "badge_paie": badge_paie,
+        "reminder_paie": reminder_paie,
     }
